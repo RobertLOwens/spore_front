@@ -177,7 +177,7 @@ namespace Sporefront.Visual
                 foreach (var r in resources)
                 {
                     Vector2 offset = buildings.Count > 0
-                        ? new Vector2(0f, -0.25f)
+                        ? new Vector2(0f, -0.25f * HexMetrics.IsometricYScale)
                         : Vector2.zero;
                     CreateEntityVisual(r, tileCenter, offset);
                 }
@@ -186,7 +186,7 @@ namespace Sporefront.Visual
                 for (int i = 0; i < armies.Count; i++)
                 {
                     float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
-                    float yOff = 0.3f;
+                    float yOff = 0.3f * HexMetrics.IsometricYScale;
                     CreateEntityVisual(armies[i], tileCenter, new Vector2(xOff, yOff));
                 }
 
@@ -194,7 +194,7 @@ namespace Sporefront.Visual
                 for (int i = 0; i < villagers.Count; i++)
                 {
                     float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
-                    float yOff = -0.3f;
+                    float yOff = -0.3f * HexMetrics.IsometricYScale;
                     CreateEntityVisual(villagers[i], tileCenter, new Vector2(xOff, yOff));
                 }
             }
@@ -288,13 +288,14 @@ namespace Sporefront.Visual
             var mesh = new Mesh();
             mesh.name = "Diamond";
 
-            // Rotated square (diamond shape)
+            // Rotated square (diamond shape), Y scaled for isometric
+            float ySize = size * HexMetrics.IsometricYScale;
             mesh.vertices = new Vector3[]
             {
-                new Vector3(0f, size, 0f),       // top
-                new Vector3(size, 0f, 0f),        // right
-                new Vector3(0f, -size, 0f),       // bottom
-                new Vector3(-size, 0f, 0f)        // left
+                new Vector3(0f, ySize, 0f),       // top
+                new Vector3(size, 0f, 0f),         // right
+                new Vector3(0f, -ySize, 0f),       // bottom
+                new Vector3(-size, 0f, 0f)         // left
             };
 
             mesh.triangles = new int[]
@@ -323,7 +324,7 @@ namespace Sporefront.Visual
                 float angle = (360f / segments) * i * Mathf.Deg2Rad;
                 vertices[i + 1] = new Vector3(
                     Mathf.Cos(angle) * radius,
-                    Mathf.Sin(angle) * radius,
+                    Mathf.Sin(angle) * radius * HexMetrics.IsometricYScale,
                     0f);
 
                 int nextIdx = (i + 1) % segments + 1;
@@ -343,11 +344,12 @@ namespace Sporefront.Visual
             var mesh = new Mesh();
             mesh.name = "Triangle";
 
+            float yScale = HexMetrics.IsometricYScale;
             mesh.vertices = new Vector3[]
             {
-                new Vector3(0f, size, 0f),            // top
-                new Vector3(size * 0.866f, -size * 0.5f, 0f),  // bottom-right
-                new Vector3(-size * 0.866f, -size * 0.5f, 0f)  // bottom-left
+                new Vector3(0f, size * yScale, 0f),                        // top
+                new Vector3(size * 0.866f, -size * 0.5f * yScale, 0f),    // bottom-right
+                new Vector3(-size * 0.866f, -size * 0.5f * yScale, 0f)    // bottom-left
             };
 
             mesh.triangles = new int[] { 0, 1, 2 };
