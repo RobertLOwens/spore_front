@@ -27,10 +27,22 @@ namespace Sporefront.Visual
         private Guid? currentBuildingID;
         private Guid localPlayerID;
 
-        // Cached references for refresh
+        // Cached references for incremental refresh
         private Image hpFill;
         private Text hpLabel;
         private Text queueLabel;
+        private Text villagerQueueLabel;
+        private Image constructionProgressFill;
+        private Image upgradeProgressFill;
+
+        // Structural fingerprint — only full-rebuild when these change
+        private BuildingState cachedState;
+        private int cachedLevel;
+        private int cachedTrainingQueueCount;
+        private int cachedVillagerQueueCount;
+        private int cachedGarrisonTotal;
+        private bool cachedCanUpgrade;
+        private bool hasCachedFingerprint;
 
         // ================================================================
         // Initialization
@@ -86,6 +98,7 @@ namespace Sporefront.Visual
         public void Show(Guid buildingID, GameState gameState)
         {
             currentBuildingID = buildingID;
+            hasCachedFingerprint = false;
             Rebuild(gameState);
             backdrop.SetActive(true);
         }
@@ -93,16 +106,107 @@ namespace Sporefront.Visual
         public void Close()
         {
             currentBuildingID = null;
+            hasCachedFingerprint = false;
+            constructionProgressFill = null;
+            upgradeProgressFill = null;
             backdrop.SetActive(false);
         }
 
         public void Refresh(GameState gameState)
         {
             if (!currentBuildingID.HasValue || !backdrop.activeSelf) return;
+
+            var building = gameState.GetBuilding(currentBuildingID.Value);
+            if (building == null) { Close(); return; }
+
+            // Check if structural fingerprint matches — if so, only update dynamic values
+            if (hasCachedFingerprint && FingerprintMatches(building))
+            {
+                IncrementalUpdate(building);
+                return;
+            }
+
             Rebuild(gameState);
         }
 
+        // ================================================================
+        // Fingerprint & Incremental Update
+        // ================================================================
+
+        private bool FingerprintMatches(BuildingData building)
+        {
+            int trainingCount = building.trainingQueue != null ? building.trainingQueue.Count : 0;
+            int villagerCount = building.villagerTrainingQueue != null ? building.villagerTrainingQueue.Count : 0;
+            int garrisonTotal = building.GetTotalGarrisonCount();
+
+            return building.state == cachedState
+                && building.level == cachedLevel
+                && trainingCount == cachedTrainingQueueCount
+                && villagerCount == cachedVillagerQueueCount
+                && garrisonTotal == cachedGarrisonTotal
+                && building.CanUpgrade == cachedCanUpgrade;
+        }
+
+        private void CacheFingerprint(BuildingData building)
+        {
+            cachedState = building.state;
+            cachedLevel = building.level;
+            cachedTrainingQueueCount = building.trainingQueue != null ? building.trainingQueue.Count : 0;
+            cachedVillagerQueueCount = building.villagerTrainingQueue != null ? building.villagerTrainingQueue.Count : 0;
+            cachedGarrisonTotal = building.GetTotalGarrisonCount();
+            cachedCanUpgrade = building.CanUpgrade;
+            hasCachedFingerprint = true;
+        }
+
+        private void IncrementalUpdate(BuildingData building)
+        {
+            // Update HP bar
+            if (hpFill != null && building.maxHealth > 0)
+            {
+                float pct = (float)(building.health / building.maxHealth);
+                var fillRT = hpFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
+            }
+            if (hpLabel != null && building.maxHealth > 0)
+            {
+                hpLabel.text = $"HP: {(int)building.health}/{(int)building.maxHealth}";
+            }
+
+            // Update construction progress bar
+            if (constructionProgressFill != null && building.state == BuildingState.Constructing)
+            {
+                var fillRT = constructionProgressFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.constructionProgress), 1);
+            }
+
+            // Update upgrade progress bar
+            if (upgradeProgressFill != null && building.state == BuildingState.Upgrading)
+            {
+                var fillRT = upgradeProgressFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
+            }
+
+            // Update queue labels
+            if (queueLabel != null && building.trainingQueue != null)
+            {
+                queueLabel.text = $"Queue: {building.trainingQueue.Count} item(s)";
+            }
+            if (villagerQueueLabel != null && building.villagerTrainingQueue != null)
+            {
+                villagerQueueLabel.text = $"Villager queue: {building.villagerTrainingQueue.Count} item(s)";
+            }
+        }
+
+        /// <summary>
+        /// Returns cached progress fill Image references for per-frame interpolation.
+        /// </summary>
+        public (Image constructionFill, Image upgradeFill) GetProgressFillRefs()
+        {
+            return (constructionProgressFill, upgradeProgressFill);
+        }
+
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+        public Guid? CurrentBuildingID => currentBuildingID;
 
         // ================================================================
         // Rebuild Content
@@ -121,6 +225,9 @@ namespace Sporefront.Visual
             hpFill = null;
             hpLabel = null;
             queueLabel = null;
+            villagerQueueLabel = null;
+            constructionProgressFill = null;
+            upgradeProgressFill = null;
 
             var player = gameState.GetPlayer(localPlayerID);
 
@@ -153,6 +260,12 @@ namespace Sporefront.Visual
                     fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)progress), 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
                     barLE.preferredHeight = 14;
+
+                    // Cache fill reference for incremental updates
+                    if (building.state == BuildingState.Constructing)
+                        constructionProgressFill = fill;
+                    else
+                        upgradeProgressFill = fill;
                 }
             }
 
@@ -198,6 +311,9 @@ namespace Sporefront.Visual
                 // Upgrade section
                 BuildUpgradeSection(building, player);
             }
+
+            // Cache fingerprint for incremental refresh
+            CacheFingerprint(building);
         }
 
         // ================================================================
@@ -301,10 +417,10 @@ namespace Sporefront.Visual
 
             if (building.villagerTrainingQueue != null && building.villagerTrainingQueue.Count > 0)
             {
-                var vtLabel = UIHelper.CreateLabel(contentRT,
+                villagerQueueLabel = UIHelper.CreateLabel(contentRT,
                     $"Villager queue: {building.villagerTrainingQueue.Count} item(s)", 11,
                     SporefrontColors.InkLight);
-                var vtLE = vtLabel.gameObject.AddComponent<LayoutElement>();
+                var vtLE = villagerQueueLabel.gameObject.AddComponent<LayoutElement>();
                 vtLE.preferredHeight = 20;
             }
         }
@@ -443,6 +559,7 @@ namespace Sporefront.Visual
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
                 barLE.preferredHeight = 14;
+                upgradeProgressFill = fill;
             }
         }
 

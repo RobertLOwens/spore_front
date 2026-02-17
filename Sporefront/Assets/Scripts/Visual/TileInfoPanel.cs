@@ -39,6 +39,18 @@ namespace Sporefront.Visual
         private bool showingMoveSelection;
         private GameState cachedGameState;
 
+        // Cached references for incremental updates
+        private Image buildingHPFill;
+
+        // Structural fingerprint
+        private bool hasCachedFingerprint;
+        private int cachedBuildingCount; // 0 or 1
+        private BuildingState cachedBuildingState;
+        private int cachedBuildingLevel;
+        private int cachedArmyCount;
+        private int cachedVillagerCount;
+        private bool cachedHasResource;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -71,6 +83,7 @@ namespace Sporefront.Visual
             currentCoord = coord;
             localPlayerID = playerID;
             showingMoveSelection = false;
+            hasCachedFingerprint = false;
             Rebuild(gameState);
             panel.SetActive(true);
         }
@@ -85,6 +98,14 @@ namespace Sporefront.Visual
         public void Refresh(GameState gameState)
         {
             if (!currentCoord.HasValue || !panel.activeSelf) return;
+
+            // Skip full rebuild if structure hasn't changed
+            if (hasCachedFingerprint && !showingMoveSelection && TileFingerprintMatches(gameState))
+            {
+                IncrementalTileUpdate(gameState);
+                return;
+            }
+
             Rebuild(gameState);
         }
 
@@ -103,6 +124,8 @@ namespace Sporefront.Visual
             // Clear existing content
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
+
+            buildingHPFill = null;
 
             // Move selection view — show entity list instead of normal content
             if (showingMoveSelection)
@@ -171,6 +194,70 @@ namespace Sporefront.Visual
                 () => { showingMoveSelection = true; Rebuild(cachedGameState); });
             var moveHereBtnLE = moveHereBtn.gameObject.AddComponent<LayoutElement>();
             moveHereBtnLE.preferredHeight = 32;
+
+            // Cache fingerprint for incremental refresh
+            CacheTileFingerprint(gameState);
+        }
+
+        // ================================================================
+        // Fingerprint & Incremental Update
+        // ================================================================
+
+        private bool TileFingerprintMatches(GameState gameState)
+        {
+            var coord = currentCoord.Value;
+            var building = gameState.GetBuilding(coord);
+            int buildingCount = building != null ? 1 : 0;
+            var armies = gameState.GetArmies(coord);
+            int armyCount = armies != null ? armies.Count : 0;
+            var villagers = gameState.GetVillagerGroups(coord);
+            int villagerCount = villagers != null ? villagers.Count : 0;
+            var rp = gameState.GetResourcePoint(coord);
+            bool hasResource = rp != null && !rp.IsDepleted();
+
+            if (buildingCount != cachedBuildingCount) return false;
+            if (armyCount != cachedArmyCount) return false;
+            if (villagerCount != cachedVillagerCount) return false;
+            if (hasResource != cachedHasResource) return false;
+
+            if (building != null)
+            {
+                if (building.state != cachedBuildingState) return false;
+                if (building.level != cachedBuildingLevel) return false;
+            }
+
+            return true;
+        }
+
+        private void CacheTileFingerprint(GameState gameState)
+        {
+            var coord = currentCoord.Value;
+            var building = gameState.GetBuilding(coord);
+            cachedBuildingCount = building != null ? 1 : 0;
+            cachedBuildingState = building != null ? building.state : BuildingState.Planning;
+            cachedBuildingLevel = building != null ? building.level : 0;
+            var armies = gameState.GetArmies(coord);
+            cachedArmyCount = armies != null ? armies.Count : 0;
+            var villagers = gameState.GetVillagerGroups(coord);
+            cachedVillagerCount = villagers != null ? villagers.Count : 0;
+            var rp = gameState.GetResourcePoint(coord);
+            cachedHasResource = rp != null && !rp.IsDepleted();
+            hasCachedFingerprint = true;
+        }
+
+        private void IncrementalTileUpdate(GameState gameState)
+        {
+            var coord = currentCoord.Value;
+            cachedGameState = gameState;
+
+            // Only update building HP bar
+            var building = gameState.GetBuilding(coord);
+            if (building != null && building.maxHealth > 0 && buildingHPFill != null)
+            {
+                float hpPct = (float)(building.health / building.maxHealth);
+                var fillRT = buildingHPFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
+            }
         }
 
         // ================================================================
@@ -203,6 +290,7 @@ namespace Sporefront.Visual
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
                 barLE.preferredHeight = 12;
+                buildingHPFill = fill;
             }
 
             // Details button (owned buildings only)

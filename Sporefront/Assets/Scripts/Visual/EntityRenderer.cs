@@ -1,7 +1,8 @@
 // ============================================================================
 // FILE: Visual/EntityRenderer.cs
 // PURPOSE: Renders buildings, armies, and villager groups on the hex map
-//          as colored programmatic shapes with type labels
+//          as colored programmatic shapes with type labels.
+//          Uses differential updates to avoid destroy/recreate flicker.
 // ============================================================================
 
 using System;
@@ -19,6 +20,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         private Dictionary<Guid, GameObject> entityVisuals = new Dictionary<Guid, GameObject>();
+        private Dictionary<Guid, EntityRenderState> currentStates = new Dictionary<Guid, EntityRenderState>();
 
         // Shared meshes (created once)
         private Mesh diamondMesh;   // buildings
@@ -33,6 +35,12 @@ namespace Sporefront.Visual
         private const float VillagerSize = 0.15f;   // ~15%
         private const float ResourceSize = 0.18f;   // ~18%
         private const float ZPosition = -0.05f;     // in front of tiles/borders/selection/paths
+
+        // Reusable collections to reduce GC
+        private Dictionary<HexCoordinate, List<EntityPlacement>> entitiesPerTile =
+            new Dictionary<HexCoordinate, List<EntityPlacement>>();
+        private Dictionary<Guid, EntityRenderState> desiredStates = new Dictionary<Guid, EntityRenderState>();
+        private List<Guid> toRemove = new List<Guid>();
 
         // ================================================================
         // Initialization
@@ -50,15 +58,98 @@ namespace Sporefront.Visual
 
         public void UpdateEntities(GameState gameState)
         {
-            // Clear all existing visuals
-            foreach (var kvp in entityVisuals)
-            {
-                if (kvp.Value != null) Destroy(kvp.Value);
-            }
-            entityVisuals.Clear();
+            // Compute what we want to show
+            ComputeDesiredStates(gameState);
 
-            // Track entities per tile for offset logic
-            var entitiesPerTile = new Dictionary<HexCoordinate, List<EntityPlacement>>();
+            // Remove entities that no longer exist
+            toRemove.Clear();
+            foreach (var kvp in currentStates)
+            {
+                if (!desiredStates.ContainsKey(kvp.Key))
+                    toRemove.Add(kvp.Key);
+            }
+            foreach (var id in toRemove)
+            {
+                if (entityVisuals.TryGetValue(id, out var go) && go != null)
+                    Destroy(go);
+                entityVisuals.Remove(id);
+                currentStates.Remove(id);
+            }
+
+            // Update existing or create new
+            foreach (var kvp in desiredStates)
+            {
+                var id = kvp.Key;
+                var desired = kvp.Value;
+
+                if (currentStates.TryGetValue(id, out var current))
+                {
+                    // Entity already exists — check if anything changed
+                    if (!entityVisuals.TryGetValue(id, out var go) || go == null)
+                    {
+                        // GameObject was destroyed externally; recreate
+                        entityVisuals.Remove(id);
+                        currentStates.Remove(id);
+                        CreateEntityVisual(desired);
+                        continue;
+                    }
+
+                    bool changed = false;
+
+                    // Update position if moved
+                    if (current.worldPosition != desired.worldPosition)
+                    {
+                        go.transform.position = desired.worldPosition;
+                        changed = true;
+                    }
+
+                    // Update color if changed
+                    if (current.color != desired.color)
+                    {
+                        var meshRenderer = go.GetComponent<MeshRenderer>();
+                        if (meshRenderer != null)
+                        {
+                            var mpb = new MaterialPropertyBlock();
+                            mpb.SetColor("_Color", desired.color);
+                            meshRenderer.SetPropertyBlock(mpb);
+                        }
+
+                        // Update label color too
+                        var labelTF = go.transform.Find("Label");
+                        if (labelTF != null)
+                        {
+                            var textMesh = labelTF.GetComponent<TextMesh>();
+                            if (textMesh != null)
+                            {
+                                float luminance = desired.color.r * 0.299f +
+                                    desired.color.g * 0.587f + desired.color.b * 0.114f;
+                                textMesh.color = luminance > 0.5f
+                                    ? SporefrontColors.InkBlack : SporefrontColors.ParchmentLight;
+                            }
+                        }
+                        changed = true;
+                    }
+
+                    if (changed)
+                        currentStates[id] = desired;
+                }
+                else
+                {
+                    // New entity — create visual
+                    CreateEntityVisual(desired);
+                }
+            }
+        }
+
+        // ================================================================
+        // Desired State Computation
+        // ================================================================
+
+        private void ComputeDesiredStates(GameState gameState)
+        {
+            // Clear reusable collections
+            entitiesPerTile.Clear();
+            desiredStates.Clear();
 
             // Collect buildings
             foreach (var kvp in gameState.buildings)
@@ -143,7 +234,7 @@ namespace Sporefront.Visual
                 });
             }
 
-            // Create visuals with offset logic
+            // Compute world positions with offset logic, populate desiredStates
             foreach (var kvp in entitiesPerTile)
             {
                 var coord = kvp.Key;
@@ -170,7 +261,7 @@ namespace Sporefront.Visual
                 // Building at center
                 foreach (var b in buildings)
                 {
-                    CreateEntityVisual(b, tileCenter, Vector2.zero);
+                    AddDesiredState(b, tileCenter, Vector2.zero);
                 }
 
                 // Resources at center when no building, offset lower-center when building present
@@ -179,7 +270,7 @@ namespace Sporefront.Visual
                     Vector2 offset = buildings.Count > 0
                         ? new Vector2(0f, -0.25f * HexMetrics.IsometricYScale)
                         : Vector2.zero;
-                    CreateEntityVisual(r, tileCenter, offset);
+                    AddDesiredState(r, tileCenter, offset);
                 }
 
                 // Armies offset upper-left / upper-right
@@ -187,7 +278,7 @@ namespace Sporefront.Visual
                 {
                     float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
                     float yOff = 0.3f * HexMetrics.IsometricYScale;
-                    CreateEntityVisual(armies[i], tileCenter, new Vector2(xOff, yOff));
+                    AddDesiredState(armies[i], tileCenter, new Vector2(xOff, yOff));
                 }
 
                 // Villagers offset lower-left / lower-right
@@ -195,29 +286,41 @@ namespace Sporefront.Visual
                 {
                     float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
                     float yOff = -0.3f * HexMetrics.IsometricYScale;
-                    CreateEntityVisual(villagers[i], tileCenter, new Vector2(xOff, yOff));
+                    AddDesiredState(villagers[i], tileCenter, new Vector2(xOff, yOff));
                 }
             }
+        }
+
+        private void AddDesiredState(EntityPlacement placement, Vector3 tileCenter, Vector2 offset)
+        {
+            desiredStates[placement.id] = new EntityRenderState
+            {
+                id = placement.id,
+                type = placement.type,
+                color = placement.color,
+                label = placement.label,
+                worldPosition = new Vector3(
+                    tileCenter.x + offset.x,
+                    tileCenter.y + offset.y,
+                    ZPosition)
+            };
         }
 
         // ================================================================
         // Visual Creation
         // ================================================================
 
-        private void CreateEntityVisual(EntityPlacement placement, Vector3 tileCenter, Vector2 offset)
+        private void CreateEntityVisual(EntityRenderState state)
         {
-            var go = new GameObject($"Entity_{placement.type}_{placement.id.ToString().Substring(0, 8)}");
+            var go = new GameObject($"Entity_{state.type}_{state.id.ToString().Substring(0, 8)}");
             go.transform.SetParent(transform, false);
-            go.transform.position = new Vector3(
-                tileCenter.x + offset.x,
-                tileCenter.y + offset.y,
-                ZPosition);
+            go.transform.position = state.worldPosition;
 
             // Mesh
             var meshFilter = go.AddComponent<MeshFilter>();
             var meshRenderer = go.AddComponent<MeshRenderer>();
 
-            switch (placement.type)
+            switch (state.type)
             {
                 case EntityVisualType.Building:
                     meshFilter.sharedMesh = diamondMesh;
@@ -238,16 +341,17 @@ namespace Sporefront.Visual
 
             // Per-instance color via MaterialPropertyBlock
             var mpb = new MaterialPropertyBlock();
-            mpb.SetColor("_Color", placement.color);
+            mpb.SetColor("_Color", state.color);
             meshRenderer.SetPropertyBlock(mpb);
 
-            // Label for buildings
-            if (placement.label != null)
+            // Label for buildings and resources
+            if (state.label != null)
             {
-                CreateLabel(go.transform, placement.label, placement.color);
+                CreateLabel(go.transform, state.label, state.color);
             }
 
-            entityVisuals[placement.id] = go;
+            entityVisuals[state.id] = go;
+            currentStates[state.id] = state;
         }
 
         private void CreateLabel(Transform parent, string text, Color entityColor)
@@ -423,6 +527,7 @@ namespace Sporefront.Visual
                 if (kvp.Value != null) Destroy(kvp.Value);
             }
             entityVisuals.Clear();
+            currentStates.Clear();
         }
 
         // ================================================================
@@ -443,6 +548,15 @@ namespace Sporefront.Visual
             public EntityVisualType type;
             public Color color;
             public string label;
+        }
+
+        private struct EntityRenderState
+        {
+            public Guid id;
+            public EntityVisualType type;
+            public Color color;
+            public string label;
+            public Vector3 worldPosition;
         }
     }
 }

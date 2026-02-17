@@ -772,6 +772,45 @@ namespace Sporefront.Visual
         public void UpdateUI()
         {
             notifications.UpdateNotifications();
+            InterpolateProgressBars();
+        }
+
+        // ================================================================
+        // Per-Frame Progress Bar Interpolation
+        // ================================================================
+
+        private void InterpolateProgressBars()
+        {
+            if (!buildingDetail.IsVisible || gameState == null) return;
+
+            var (constructionFill, upgradeFill) = buildingDetail.GetProgressFillRefs();
+
+            if (constructionFill != null && buildingDetail.CurrentBuildingID.HasValue)
+            {
+                var building = gameState.GetBuilding(buildingDetail.CurrentBuildingID.Value);
+                if (building != null && building.state == BuildingState.Constructing)
+                {
+                    float target = Mathf.Clamp01((float)building.constructionProgress);
+                    var fillRT = constructionFill.GetComponent<RectTransform>();
+                    float current = fillRT.anchorMax.x;
+                    float smoothed = Mathf.Lerp(current, target, Time.deltaTime * 10f);
+                    fillRT.anchorMax = new Vector2(smoothed, 1);
+                }
+            }
+
+            if (upgradeFill != null && buildingDetail.CurrentBuildingID.HasValue)
+            {
+                var building = gameState.GetBuilding(buildingDetail.CurrentBuildingID.Value);
+                if (building != null && building.state == BuildingState.Upgrading)
+                {
+                    float target = Mathf.Clamp01((float)building.upgradeProgress);
+                    var fillRT = upgradeFill.GetComponent<RectTransform>();
+                    float current = fillRT.anchorMax.x;
+                    float smoothed = Mathf.Lerp(current, target, Time.deltaTime * 10f);
+                    fillRT.anchorMax = new Vector2(smoothed, 1);
+                }
+            }
         }
     }
 }
+
