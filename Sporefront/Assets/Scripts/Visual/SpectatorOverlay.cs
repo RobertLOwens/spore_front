@@ -90,7 +90,7 @@ namespace Sporefront.Visual
         /// <summary>
         /// Update player stats and game time display.
         /// </summary>
-        public void Update(
+        public void UpdateDisplay(
             string player1Name, int player1Food, int player1Wood, int player1Stone, int player1Armies, int player1Buildings,
             string player2Name, int player2Food, int player2Wood, int player2Stone, int player2Armies, int player2Buildings,
             float gameTime)

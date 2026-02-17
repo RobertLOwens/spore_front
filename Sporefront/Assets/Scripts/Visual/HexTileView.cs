@@ -30,6 +30,7 @@ namespace Sporefront.Visual
         private Color baseColor;
 
         private static readonly int ColorProperty = Shader.PropertyToID("_Color");
+        private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
 
         // ================================================================
         // Initialization
@@ -117,6 +118,7 @@ namespace Sporefront.Visual
         private void ApplyColor(Color color)
         {
             fillRenderer.GetPropertyBlock(fillBlock);
+            fillBlock.SetColor(BaseColorProperty, color);
             fillBlock.SetColor(ColorProperty, color);
             fillRenderer.SetPropertyBlock(fillBlock);
         }

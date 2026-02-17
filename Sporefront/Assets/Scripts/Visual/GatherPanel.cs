@@ -81,6 +81,11 @@ namespace Sporefront.Visual
             panel.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================

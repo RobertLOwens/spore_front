@@ -105,7 +105,7 @@ namespace Sporefront.Engine
 
     /// <summary>
     /// Arabia-style map generator for 1v1 competitive play.
-    /// Creates a 35x35 hex grid with balanced starting positions and resources.
+    /// Creates a hex grid with balanced starting positions and resources.
     /// </summary>
     public class ArabiaMapGenerator : MapGeneratorBase
     {
@@ -113,10 +113,13 @@ namespace Sporefront.Engine
         // Properties
         // ================================================================
 
-        public override int Width => 35;
-        public override int Height => 35;
+        private readonly int _width;
+        private readonly int _height;
 
-        private readonly int startPadding = 8;
+        public override int Width => _width;
+        public override int Height => _height;
+
+        private readonly int startPadding;
         private readonly int startingResourceRadius = 5;
         private readonly int neutralResourceExclusionRadius = 10;
 
@@ -127,8 +130,11 @@ namespace Sporefront.Engine
         // Initialization
         // ================================================================
 
-        public ArabiaMapGenerator(ulong? seed = null, ArabiaMapConfig config = null)
+        public ArabiaMapGenerator(int width = 35, int height = 35, ulong? seed = null, ArabiaMapConfig config = null)
         {
+            _width = width;
+            _height = height;
+            startPadding = Math.Max(4, width / 5);
             Seed = seed;
             this.config = config ?? new ArabiaMapConfig();
             rng = new SeededRandom(seed ?? (ulong)DateTime.UtcNow.Ticks);

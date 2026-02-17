@@ -20,10 +20,17 @@ namespace Sporefront.Visual
     public class UIManager : MonoBehaviour
     {
         // ================================================================
+        // Events
+        // ================================================================
+
+        public event Action<GameSetupConfig> OnStartNewGame;
+
+        // ================================================================
         // Core HUD Panels
         // ================================================================
 
         private ResourceBarPanel resourceBar;
+        private MenuBarPanel menuBar;
         private TileInfoPanel tileInfo;
         private EntityListPanel entityList;
         private BuildingDetailPanel buildingDetail;
@@ -32,6 +39,7 @@ namespace Sporefront.Visual
         private NotificationPanel notifications;
         private SelectionRenderer selectionRenderer;
         private PathRenderer pathRenderer;
+        private EntityRenderer entityRenderer;
 
         // ================================================================
         // Navigation & Flow Panels
@@ -96,6 +104,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameState gameState;
+        private HexGridRenderer gridRenderer;
         private CameraController cameraController;
         private Canvas canvas;
         private Guid localPlayerID;
@@ -105,10 +114,11 @@ namespace Sporefront.Visual
         // Initialization
         // ================================================================
 
-        public void Initialize(GameState state, HexGridRenderer gridRenderer,
+        public void Initialize(GameState state, HexGridRenderer hexGridRenderer,
             CameraController camController)
         {
             gameState = state;
+            gridRenderer = hexGridRenderer;
             cameraController = camController;
             localPlayerID = state.localPlayerID ?? Guid.Empty;
 
@@ -117,7 +127,7 @@ namespace Sporefront.Visual
             CreatePanels();
             WireEvents();
 
-            // Create renderers
+            // Create renderers (under grid renderer transform)
             var selGO = new GameObject("SelectionRenderer");
             selGO.transform.SetParent(gridRenderer.transform, false);
             selectionRenderer = selGO.AddComponent<SelectionRenderer>();
@@ -125,6 +135,10 @@ namespace Sporefront.Visual
             var pathGO = new GameObject("PathRenderer");
             pathGO.transform.SetParent(gridRenderer.transform, false);
             pathRenderer = pathGO.AddComponent<PathRenderer>();
+
+            var entityGO = new GameObject("EntityRenderer");
+            entityGO.transform.SetParent(gridRenderer.transform, false);
+            entityRenderer = entityGO.AddComponent<EntityRenderer>();
         }
 
         // ================================================================
@@ -164,108 +178,123 @@ namespace Sporefront.Visual
             // ---- Core HUD ----
 
             resourceBar = CreatePanelComponent<ResourceBarPanel>("ResourceBar");
-            resourceBar.Initialize(ct);
+            InitPanel("ResourceBar", () => resourceBar.Initialize(ct));
+
+            menuBar = CreatePanelComponent<MenuBarPanel>("MenuBar");
+            InitPanel("MenuBar", () => menuBar.Initialize(ct));
 
             notifications = CreatePanelComponent<NotificationPanel>("Notifications");
-            notifications.Initialize(ct);
+            InitPanel("Notifications", () => notifications.Initialize(ct));
 
             tileInfo = CreatePanelComponent<TileInfoPanel>("TileInfo");
-            tileInfo.Initialize(ct);
+            InitPanel("TileInfo", () => tileInfo.Initialize(ct));
 
             entityList = CreatePanelComponent<EntityListPanel>("EntityList");
-            entityList.Initialize(ct);
+            InitPanel("EntityList", () => entityList.Initialize(ct));
 
             buildingDetail = CreatePanelComponent<BuildingDetailPanel>("BuildingDetail");
-            buildingDetail.Initialize(ct, localPlayerID);
+            InitPanel("BuildingDetail", () => buildingDetail.Initialize(ct, localPlayerID));
 
             armyDetail = CreatePanelComponent<ArmyDetailPanel>("ArmyDetail");
-            armyDetail.Initialize(ct, localPlayerID);
+            InitPanel("ArmyDetail", () => armyDetail.Initialize(ct, localPlayerID));
 
             actionPanel = CreatePanelComponent<ActionPanel>("ActionPanel");
-            actionPanel.Initialize(ct, localPlayerID);
-
-            // ---- Navigation & Flow ----
-
-            mainMenu = CreatePanelComponent<MainMenuPanel>("MainMenu");
-            mainMenu.Initialize(ct);
-
-            gameSetup = CreatePanelComponent<GameSetupPanel>("GameSetup");
-            gameSetup.Initialize(ct);
-
-            gameOver = CreatePanelComponent<GameOverPanel>("GameOver");
-            gameOver.Initialize(ct);
-
-            about = CreatePanelComponent<AboutPanel>("About");
-            about.Initialize(ct);
+            InitPanel("ActionPanel", () => actionPanel.Initialize(ct, localPlayerID));
 
             // ---- Overviews ----
 
             buildingsOverview = CreatePanelComponent<BuildingsOverviewPanel>("BuildingsOverview");
-            buildingsOverview.Initialize(ct, localPlayerID);
+            InitPanel("BuildingsOverview", () => buildingsOverview.Initialize(ct, localPlayerID));
 
             entitiesOverview = CreatePanelComponent<EntitiesOverviewPanel>("EntitiesOverview");
-            entitiesOverview.Initialize(ct, localPlayerID);
+            InitPanel("EntitiesOverview", () => entitiesOverview.Initialize(ct, localPlayerID));
 
             militaryOverview = CreatePanelComponent<MilitaryOverviewPanel>("MilitaryOverview");
-            militaryOverview.Initialize(ct, localPlayerID);
+            InitPanel("MilitaryOverview", () => militaryOverview.Initialize(ct, localPlayerID));
 
             resourceOverview = CreatePanelComponent<ResourceOverviewPanel>("ResourceOverview");
-            resourceOverview.Initialize(ct, localPlayerID);
+            InitPanel("ResourceOverview", () => resourceOverview.Initialize(ct, localPlayerID));
 
             trainingOverview = CreatePanelComponent<TrainingOverviewPanel>("TrainingOverview");
-            trainingOverview.Initialize(ct, localPlayerID);
+            InitPanel("TrainingOverview", () => trainingOverview.Initialize(ct, localPlayerID));
 
             // ---- Commander & Research ----
 
             commander = CreatePanelComponent<CommanderPanel>("Commander");
-            commander.Initialize(ct, localPlayerID);
+            InitPanel("Commander", () => commander.Initialize(ct, localPlayerID));
 
             researchTree = CreatePanelComponent<ResearchTreePanel>("ResearchTree");
-            researchTree.Initialize(ct, localPlayerID);
+            InitPanel("ResearchTree", () => researchTree.Initialize(ct, localPlayerID));
 
             // ---- Combat ----
 
             liveCombat = CreatePanelComponent<LiveCombatPanel>("LiveCombat");
-            liveCombat.Initialize(ct, localPlayerID);
+            InitPanel("LiveCombat", () => liveCombat.Initialize(ct, localPlayerID));
 
             combatHistory = CreatePanelComponent<CombatHistoryPanel>("CombatHistory");
-            combatHistory.Initialize(ct, localPlayerID);
+            InitPanel("CombatHistory", () => combatHistory.Initialize(ct, localPlayerID));
 
             combatDetail = CreatePanelComponent<CombatDetailPanel>("CombatDetail");
-            combatDetail.Initialize(ct, localPlayerID);
+            InitPanel("CombatDetail", () => combatDetail.Initialize(ct, localPlayerID));
 
             // ---- Action Panels ----
 
             gatherPanel = CreatePanelComponent<GatherPanel>("GatherPanel");
-            gatherPanel.Initialize(ct, localPlayerID);
+            InitPanel("GatherPanel", () => gatherPanel.Initialize(ct, localPlayerID));
 
             reinforcePanel = CreatePanelComponent<ReinforcePanel>("ReinforcePanel");
-            reinforcePanel.Initialize(ct, localPlayerID);
+            InitPanel("ReinforcePanel", () => reinforcePanel.Initialize(ct, localPlayerID));
 
             villagerDeploy = CreatePanelComponent<VillagerDeployPanel>("VillagerDeploy");
-            villagerDeploy.Initialize(ct, localPlayerID);
+            InitPanel("VillagerDeploy", () => villagerDeploy.Initialize(ct, localPlayerID));
 
             // ---- Settings & Notifications ----
 
             settings = CreatePanelComponent<SettingsPanel>("Settings");
-            settings.Initialize(ct, localPlayerID);
+            InitPanel("Settings", () => settings.Initialize(ct, localPlayerID));
 
             notificationInbox = CreatePanelComponent<NotificationInboxPanel>("NotificationInbox");
-            notificationInbox.Initialize(ct, localPlayerID);
+            InitPanel("NotificationInbox", () => notificationInbox.Initialize(ct, localPlayerID));
 
             // ---- AI & Evolution ----
 
             evolution = CreatePanelComponent<EvolutionPanel>("Evolution");
-            evolution.Initialize(ct);
+            InitPanel("Evolution", () => evolution.Initialize(ct));
 
             genomeSelection = CreatePanelComponent<GenomeSelectionPanel>("GenomeSelection");
-            genomeSelection.Initialize(ct);
+            InitPanel("GenomeSelection", () => genomeSelection.Initialize(ct));
 
             arenaResults = CreatePanelComponent<ArenaResultsPanel>("ArenaResults");
-            arenaResults.Initialize(ct);
+            InitPanel("ArenaResults", () => arenaResults.Initialize(ct));
 
             spectatorOverlay = CreatePanelComponent<SpectatorOverlay>("SpectatorOverlay");
-            spectatorOverlay.Initialize(ct);
+            InitPanel("SpectatorOverlay", () => spectatorOverlay.Initialize(ct));
+
+            // ---- Full-screen Navigation (created last so they render on top) ----
+
+            mainMenu = CreatePanelComponent<MainMenuPanel>("MainMenu");
+            InitPanel("MainMenu", () => mainMenu.Initialize(ct));
+
+            gameSetup = CreatePanelComponent<GameSetupPanel>("GameSetup");
+            InitPanel("GameSetup", () => gameSetup.Initialize(ct));
+
+            gameOver = CreatePanelComponent<GameOverPanel>("GameOver");
+            InitPanel("GameOver", () => gameOver.Initialize(ct));
+
+            about = CreatePanelComponent<AboutPanel>("About");
+            InitPanel("About", () => about.Initialize(ct));
+        }
+
+        private void InitPanel(string name, Action initialize)
+        {
+            try
+            {
+                initialize();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[UIManager] Failed to initialize {name}: {ex}");
+            }
         }
 
         private T CreatePanelComponent<T>(string name) where T : MonoBehaviour
@@ -336,24 +365,27 @@ namespace Sporefront.Visual
             mainMenu.OnEvolveAI += () => { mainMenu.Hide(); evolution.Show(); };
             mainMenu.OnSpectateAI += () => { mainMenu.Hide(); genomeSelection.Show(); };
 
+            // ---- MenuBarPanel ----
+            menuBar.OnResearchClicked += () => researchTree.Show(gameState);
+            menuBar.OnMilitaryClicked += () => militaryOverview.Show(gameState);
+            menuBar.OnBuildingsClicked += () => buildingsOverview.Show(gameState);
+            menuBar.OnEntitiesClicked += () => entitiesOverview.Show(gameState);
+            menuBar.OnSettingsClicked += () => settings.Show();
+
             // ---- GameSetupPanel ----
             gameSetup.OnBack += () => { gameSetup.Hide(); mainMenu.Show(); };
+            gameSetup.OnStartGame += (config) => { gameSetup.Hide(); OnStartNewGame?.Invoke(config); };
 
             // ---- GameOverPanel ----
             gameOver.OnReturnToMenu += () => { gameOver.Hide(); mainMenu.Show(); };
 
-            // ---- AboutPanel ----
-            about.OnClose += () => about.Hide();
-
-            // ---- Overview panels (close) ----
-            buildingsOverview.OnClose += () => buildingsOverview.Hide();
+            // ---- Overview panels ----
             buildingsOverview.OnBuildingSelected += (id) =>
             {
                 buildingsOverview.Hide();
                 buildingDetail.Show(id, gameState);
             };
 
-            entitiesOverview.OnClose += () => entitiesOverview.Hide();
             entitiesOverview.OnEntitySelected += (id, isArmy) =>
             {
                 entitiesOverview.Hide();
@@ -363,11 +395,6 @@ namespace Sporefront.Visual
                     buildingDetail.Show(id, gameState);
             };
 
-            militaryOverview.OnClose += () => militaryOverview.Hide();
-
-            resourceOverview.OnClose += () => resourceOverview.Hide();
-
-            trainingOverview.OnClose += () => trainingOverview.Hide();
             trainingOverview.OnBuildingSelected += (id) =>
             {
                 trainingOverview.Hide();
@@ -375,14 +402,12 @@ namespace Sporefront.Visual
             };
 
             // ---- Commander ----
-            commander.OnClose += () => commander.Hide();
             commander.OnRecruitCommander += (specialty) =>
             {
                 // Commander recruitment handled via command
             };
 
             // ---- Research ----
-            researchTree.OnClose += () => researchTree.Hide();
             researchTree.OnStartResearch += (type) =>
             {
                 // Find a suitable research building (Library, University)
@@ -395,13 +420,11 @@ namespace Sporefront.Visual
             };
 
             // ---- Combat panels ----
-            liveCombat.OnClose += () => liveCombat.Hide();
             liveCombat.OnFocusCombat += (coord) =>
             {
                 cameraController.FocusOn(coord, -1f, true);
             };
 
-            combatHistory.OnClose += () => combatHistory.Hide();
             combatHistory.OnViewCombatDetail += (id) =>
             {
                 // Search detailed records by ID
@@ -425,10 +448,7 @@ namespace Sporefront.Visual
                 liveCombat.Show(id, gameState);
             };
 
-            combatDetail.OnClose += () => combatDetail.Hide();
-
             // ---- Action panels ----
-            gatherPanel.OnClose += () => gatherPanel.Hide();
             gatherPanel.OnGatherConfirmed += (vgID, rpID) =>
             {
                 var cmd = new GatherCommand(localPlayerID, vgID, rpID);
@@ -443,7 +463,6 @@ namespace Sporefront.Visual
                 gatherPanel.Hide();
             };
 
-            reinforcePanel.OnClose += () => reinforcePanel.Hide();
             reinforcePanel.OnReinforceConfirmed += (srcArmyID, targetArmyID, units) =>
             {
                 var cmd = new ReinforceArmyCommand(localPlayerID, srcArmyID, targetArmyID, units);
@@ -451,7 +470,6 @@ namespace Sporefront.Visual
                 reinforcePanel.Hide();
             };
 
-            villagerDeploy.OnClose += () => villagerDeploy.Hide();
             villagerDeploy.OnDeployNew += (buildingID, count) =>
             {
                 var cmd = new DeployVillagersCommand(localPlayerID, buildingID, count);
@@ -470,11 +488,7 @@ namespace Sporefront.Visual
                 villagerDeploy.Hide();
             };
 
-            // ---- Settings ----
-            settings.OnClose += () => settings.Hide();
-
             // ---- Notification Inbox ----
-            notificationInbox.OnClose += () => notificationInbox.Hide();
             notificationInbox.OnNotificationTapped += (coord) =>
             {
                 if (coord.HasValue)
@@ -486,16 +500,16 @@ namespace Sporefront.Visual
             };
 
             // ---- Evolution ----
-            evolution.OnClose += () => { evolution.Hide(); mainMenu.Show(); };
+            evolution.OnClose += () => { mainMenu.Show(); };
 
             // ---- Genome Selection ----
-            genomeSelection.OnClose += () => { genomeSelection.Hide(); mainMenu.Show(); };
+            genomeSelection.OnClose += () => { mainMenu.Show(); };
 
             // ---- Arena Results ----
             arenaResults.OnBack += () => { arenaResults.Hide(); gameSetup.Show(); };
 
             // ---- Spectator ----
-            spectatorOverlay.OnExit += () => { spectatorOverlay.Hide(); mainMenu.Show(); };
+            spectatorOverlay.OnExit += () => { mainMenu.Show(); };
         }
 
         // ================================================================
@@ -539,6 +553,44 @@ namespace Sporefront.Visual
         // ================================================================
         // Public Panel Access — for GameSceneManager and external callers
         // ================================================================
+
+        /// <summary>
+        /// Called by GameSceneManager after game world is populated.
+        /// Refreshes localPlayerID, hides main menu, shows gameplay HUD.
+        /// </summary>
+        public void OnGameStarted(GameState state)
+        {
+            gameState = state;
+            localPlayerID = state.localPlayerID ?? Guid.Empty;
+
+            // Propagate localPlayerID to all panels that cached it during Initialize
+            buildingDetail.UpdateLocalPlayerID(localPlayerID);
+            armyDetail.UpdateLocalPlayerID(localPlayerID);
+            actionPanel.UpdateLocalPlayerID(localPlayerID);
+            buildingsOverview.UpdateLocalPlayerID(localPlayerID);
+            entitiesOverview.UpdateLocalPlayerID(localPlayerID);
+            militaryOverview.UpdateLocalPlayerID(localPlayerID);
+            resourceOverview.UpdateLocalPlayerID(localPlayerID);
+            trainingOverview.UpdateLocalPlayerID(localPlayerID);
+            commander.UpdateLocalPlayerID(localPlayerID);
+            researchTree.UpdateLocalPlayerID(localPlayerID);
+            liveCombat.UpdateLocalPlayerID(localPlayerID);
+            combatHistory.UpdateLocalPlayerID(localPlayerID);
+            combatDetail.UpdateLocalPlayerID(localPlayerID);
+            gatherPanel.UpdateLocalPlayerID(localPlayerID);
+            reinforcePanel.UpdateLocalPlayerID(localPlayerID);
+            villagerDeploy.UpdateLocalPlayerID(localPlayerID);
+            settings.UpdateLocalPlayerID(localPlayerID);
+            notificationInbox.UpdateLocalPlayerID(localPlayerID);
+
+            mainMenu.Hide();
+            resourceBar.Show();
+            resourceBar.Refresh(state, localPlayerID);
+            menuBar.Show();
+
+            // Initial entity render
+            entityRenderer.UpdateEntities(state);
+        }
 
         public void ShowMainMenu() => mainMenu.Show();
         public void HideMainMenu() => mainMenu.Hide();
@@ -609,6 +661,9 @@ namespace Sporefront.Visual
 
             // Update path renderer
             pathRenderer.UpdatePaths(gameState, localPlayerID);
+
+            // Update entity visuals on map
+            entityRenderer.UpdateEntities(gameState);
 
             // Route notification-worthy changes
             foreach (var change in batch.changes)

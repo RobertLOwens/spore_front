@@ -49,7 +49,7 @@ namespace Sporefront.Visual
             rt.anchorMax = new Vector2(0, 1);
             rt.pivot = new Vector2(0, 0.5f);
             rt.offsetMin = new Vector2(0, 50);
-            rt.offsetMax = new Vector2(240, -50);
+            rt.offsetMax = new Vector2(240, -70);
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "EntityScroll", out contentRT);

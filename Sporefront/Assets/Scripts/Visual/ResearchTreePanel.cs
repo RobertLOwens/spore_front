@@ -110,7 +110,7 @@ namespace Sporefront.Visual
 
             // Override content layout for horizontal tree
             var contentVLG = treeContentRT.GetComponent<VerticalLayoutGroup>();
-            if (contentVLG != null) Destroy(contentVLG);
+            if (contentVLG != null) DestroyImmediate(contentVLG);
             var hlg = treeContentRT.gameObject.AddComponent<HorizontalLayoutGroup>();
             hlg.spacing = BranchSpacingH;
             hlg.childAlignment = TextAnchor.UpperLeft;
@@ -139,6 +139,11 @@ namespace Sporefront.Visual
             closeBtnRT.offsetMax = new Vector2(-8, 38);
 
             backdrop.SetActive(false);
+        }
+
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
         }
 
         // ================================================================

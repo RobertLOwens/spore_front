@@ -65,6 +65,11 @@ namespace Sporefront.Visual
             CreateTargetBanner(canvasTransform);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Build Mode (#19)
         // ================================================================

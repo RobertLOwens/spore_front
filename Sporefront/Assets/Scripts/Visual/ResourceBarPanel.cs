@@ -17,6 +17,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
+        private GameObject panel;
         private Text woodLabel;
         private Text foodLabel;
         private Text stoneLabel;
@@ -31,28 +32,28 @@ namespace Sporefront.Visual
         public void Initialize(Transform canvasTransform)
         {
             // Panel: full width, 40px, anchored top
-            var panel = UIHelper.CreatePanel(canvasTransform, "ResourceBar", UIHelper.HudBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "ResourceBar", UIHelper.HudBg);
             var rt = panel.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(0, -40);
+            rt.offsetMin = new Vector2(0, -60);
             rt.offsetMax = new Vector2(0, 0);
 
             gameObject.transform.SetParent(panel.transform, false);
 
             // Horizontal layout
-            var row = UIHelper.CreateHorizontalRow(panel.transform, 40f, 16f);
+            var row = UIHelper.CreateHorizontalRow(panel.transform, 60f, 16f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
             row.padding = new RectOffset(16, 16, 0, 0);
             row.childAlignment = TextAnchor.MiddleLeft;
 
             // Resource labels
-            woodLabel = CreateResourceLabel(row.transform, "W", 80);
-            foodLabel = CreateResourceLabel(row.transform, "F", 80);
-            stoneLabel = CreateResourceLabel(row.transform, "S", 80);
-            oreLabel = CreateResourceLabel(row.transform, "O", 80);
+            woodLabel = CreateResourceLabel(row.transform, "W", 120);
+            foodLabel = CreateResourceLabel(row.transform, "F", 120);
+            stoneLabel = CreateResourceLabel(row.transform, "S", 120);
+            oreLabel = CreateResourceLabel(row.transform, "O", 120);
 
             // Spacer
             var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
@@ -60,21 +61,31 @@ namespace Sporefront.Visual
             spacer.GetComponent<LayoutElement>().flexibleWidth = 1;
 
             // Population
-            popLabel = UIHelper.CreateLabel(row.transform, "Pop: -/-", 13,
+            popLabel = UIHelper.CreateLabel(row.transform, "Pop: -/-", 16,
                 UIHelper.HudTextColor, TextAnchor.MiddleRight);
-            popLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 40);
+            popLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(140, 60);
             var popLE = popLabel.gameObject.AddComponent<LayoutElement>();
-            popLE.preferredWidth = 100;
+            popLE.preferredWidth = 140;
 
             // Starvation warning (hidden by default)
-            starvationLabel = UIHelper.CreateLabel(row.transform, "STARVING", 13,
+            starvationLabel = UIHelper.CreateLabel(row.transform, "STARVING", 16,
                 SporefrontColors.SporeRed, TextAnchor.MiddleRight);
             starvationLabel.fontStyle = FontStyle.Bold;
-            starvationLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(80, 40);
+            starvationLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 60);
             var starvLE = starvationLabel.gameObject.AddComponent<LayoutElement>();
-            starvLE.preferredWidth = 80;
+            starvLE.preferredWidth = 100;
             starvationLabel.gameObject.SetActive(false);
+
+            panel.SetActive(false);
         }
+
+        // ================================================================
+        // Show / Hide
+        // ================================================================
+
+        public void Show() => panel.SetActive(true);
+        public void Hide() => panel.SetActive(false);
+        public bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Refresh
@@ -105,10 +116,10 @@ namespace Sporefront.Visual
 
         private Text CreateResourceLabel(Transform parent, string icon, float width)
         {
-            var label = UIHelper.CreateLabel(parent, $"{icon} ---", 13,
+            var label = UIHelper.CreateLabel(parent, $"{icon} ---", 16,
                 UIHelper.HudTextColor, TextAnchor.MiddleLeft);
             var labelRT = label.GetComponent<RectTransform>();
-            labelRT.sizeDelta = new Vector2(width, 40);
+            labelRT.sizeDelta = new Vector2(width, 60);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
             return label;

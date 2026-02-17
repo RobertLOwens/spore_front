@@ -55,9 +55,9 @@ namespace Sporefront.Visual
         public const int DefaultHeaderFontSize = 18;
 
         public static readonly Color PanelBg = new Color(
-            SporefrontColors.ParchmentLight.r,
-            SporefrontColors.ParchmentLight.g,
-            SporefrontColors.ParchmentLight.b, 0.95f);
+            SporefrontColors.ParchmentMid.r,
+            SporefrontColors.ParchmentMid.g,
+            SporefrontColors.ParchmentMid.b, 0.95f);
 
         public static readonly Color HudBg = new Color(
             SporefrontColors.InkDark.r,
@@ -76,9 +76,17 @@ namespace Sporefront.Visual
 
         public static GameObject CreatePanel(Transform parent, string name, Color bgColor)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
             go.transform.SetParent(parent, false);
             go.GetComponent<Image>().color = bgColor;
+
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = new Color(
+                SporefrontColors.InkFaded.r,
+                SporefrontColors.InkFaded.g,
+                SporefrontColors.InkFaded.b, 0.3f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
             return go;
         }
 
@@ -143,7 +151,7 @@ namespace Sporefront.Visual
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
-            hlg.childControlWidth = false;
+            hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             return hlg;
         }
@@ -176,11 +184,9 @@ namespace Sporefront.Visual
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            // Viewport with mask
-            var viewportGO = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            // Viewport with rect-based clipping (RectMask2D works reliably with URP)
+            var viewportGO = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
             viewportGO.transform.SetParent(scrollGO.transform, false);
-            viewportGO.GetComponent<Image>().color = Color.clear;
-            viewportGO.GetComponent<Mask>().showMaskGraphic = false;
             var vpRT = viewportGO.GetComponent<RectTransform>();
             StretchFull(vpRT);
 
@@ -203,7 +209,7 @@ namespace Sporefront.Visual
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
+            vlg.childControlHeight = true;
             vlg.padding = new RectOffset(8, 8, 8, 8);
 
             scrollRect.viewport = vpRT;

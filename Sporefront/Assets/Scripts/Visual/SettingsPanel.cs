@@ -101,6 +101,11 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================

@@ -28,6 +28,8 @@ namespace Sporefront.Visual
         private CameraController cameraController;
         private UIManager uiManager;
 
+        private bool gameStarted = false;
+
         private HexCoordinate? hoveredTile;
         private HexCoordinate? selectedTile;
 
@@ -55,16 +57,19 @@ namespace Sporefront.Visual
             if (cameraController == null)
                 cameraController = Camera.main.gameObject.AddComponent<CameraController>();
 
-            BootstrapGame();
+            BootstrapMainMenu();
         }
 
         private void Update()
         {
-            // Engine tick — drives game simulation
-            GameEngine.Instance.Update(Time.timeAsDouble);
+            if (gameStarted)
+            {
+                // Engine tick — drives game simulation
+                GameEngine.Instance.Update(Time.timeAsDouble);
 
-            HandleTileHover();
-            HandleTileInteraction();
+                HandleTileHover();
+                HandleTileInteraction();
+            }
 
             // UI update (notification timers, etc.)
             if (uiManager != null)
@@ -72,13 +77,38 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
-        // Game Bootstrap
+        // Phase 1: Main Menu — create empty state, UI, show main menu
         // ================================================================
 
-        private void BootstrapGame()
+        private void BootstrapMainMenu()
         {
-            // 1. Create GameState
+            // 1. Create empty GameState (needed for UI initialization)
             gameState = new GameState(35, 35);
+
+            // 2. Initialize UI (creates canvas, all panels, event wiring)
+            var uiGO = new GameObject("UIManager");
+            uiGO.transform.SetParent(transform, false);
+            uiManager = uiGO.AddComponent<UIManager>();
+            uiManager.Initialize(gameState, gridRenderer, cameraController);
+
+            // 3. Listen for new game request from main menu
+            uiManager.OnStartNewGame += StartNewGame;
+
+            // 4. Show main menu
+            uiManager.ShowMainMenu();
+
+            Debug.Log("[GameSceneManager] Main menu shown");
+        }
+
+        // ================================================================
+        // Phase 2: Start Game — populate world, start engine
+        // ================================================================
+
+        private void StartNewGame(GameSetupConfig config)
+        {
+            // 1. Create game state with configured dimensions
+            var (width, height) = GetMapDimensions(config.mapSize);
+            gameState = new GameState(width, height);
 
             // 2. Create players
             var human = new PlayerState("Player 1", "3A5E8B", false);
@@ -87,9 +117,15 @@ namespace Sporefront.Visual
             gameState.players[ai.id] = ai;
             gameState.localPlayerID = human.id;
 
-            // 3. Generate Arabia map
+            // 3. Generate Arabia map scaled to configured size
             ulong seed = (ulong)DateTime.UtcNow.Ticks;
-            var generator = new ArabiaMapGenerator(seed);
+            float areaRatio = (float)(width * height) / (35f * 35f);
+            var mapConfig = new ArabiaMapConfig
+            {
+                treePocketCount = Mathf.RoundToInt(25 * areaRatio),
+                mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
+            };
+            var generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
             var terrain = generator.GenerateTerrain();
 
             // 4. Apply terrain to map data
@@ -113,22 +149,34 @@ namespace Sporefront.Visual
             gridRenderer.BuildGrid(gameState.mapData);
 
             // 8. Set camera bounds and focus on player start
-            cameraController.SetMapBounds(35, 35);
+            cameraController.SetMapBounds(width, height);
             if (startPositions.Count > 0)
             {
                 cameraController.FocusOn(startPositions[0].coordinate, 8f, false);
             }
 
-            // 9. Initialize UI
-            var uiGO = new GameObject("UIManager");
-            uiGO.transform.SetParent(transform, false);
-            uiManager = uiGO.AddComponent<UIManager>();
-            uiManager.Initialize(gameState, gridRenderer, cameraController);
-
-            // 10. Subscribe to state changes
+            // 9. Subscribe to state changes
             GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
 
-            Debug.Log($"[GameSceneManager] Game bootstrapped — seed: {seed}, tiles: {terrain.Count}");
+            // 10. Transition UI from main menu to gameplay
+            uiManager.OnGameStarted(gameState);
+
+            // 11. Game is now running
+            gameStarted = true;
+
+            Debug.Log($"[GameSceneManager] Game started — seed: {seed}, map: {width}x{height}, tiles: {terrain.Count}");
+        }
+
+        private (int width, int height) GetMapDimensions(MapSize size)
+        {
+            switch (size)
+            {
+                case MapSize.Small:  return (25, 25);
+                case MapSize.Medium: return (35, 35);
+                case MapSize.Large:  return (50, 50);
+                case MapSize.Huge:   return (65, 65);
+                default:             return (35, 35);
+            }
         }
 
         // ================================================================
@@ -156,10 +204,7 @@ namespace Sporefront.Visual
                 );
                 cc.state = BuildingState.Completed;
                 cc.health = cc.maxHealth;
-                gameState.buildings[cc.id] = cc;
-                player.ownedBuildingIDs.Add(cc.id);
-                gameState.mapData.buildingIDs.Add(cc.id);
-                gameState.mapData.buildingCoordinates[cc.id] = pos.coordinate;
+                gameState.AddBuilding(cc);
 
                 // Place starting resources around each player
                 var resources = generator.GenerateStartingResources(pos.coordinate);
@@ -179,6 +224,12 @@ namespace Sporefront.Visual
                 player.SetResource(ResourceType.Wood, 200);
                 player.SetResource(ResourceType.Ore, 100);
                 player.SetResource(ResourceType.Stone, 100);
+
+                // Spawn starting villagers (5 per player)
+                var spawnCoord = gameState.mapData.FindNearestWalkable(pos.coordinate, 3, player.id, gameState);
+                var villagerCoord = spawnCoord ?? pos.coordinate;
+                var villagers = new VillagerGroupData("Villagers", villagerCoord, 5, player.id);
+                gameState.AddVillagerGroup(villagers);
             }
         }
 

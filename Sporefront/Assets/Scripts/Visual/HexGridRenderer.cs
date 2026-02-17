@@ -148,7 +148,7 @@ namespace Sporefront.Visual
 
         private Material CreateUnlitMaterial(Color color)
         {
-            // Sprites/Default is always available and works with MaterialPropertyBlock
+            // Sprites/Default supports MaterialPropertyBlock for per-tile coloring
             Shader shader = Shader.Find("Sprites/Default");
             if (shader == null)
             {

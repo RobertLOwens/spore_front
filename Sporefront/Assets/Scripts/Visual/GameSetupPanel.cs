@@ -161,6 +161,7 @@ namespace Sporefront.Visual
         public void Show()
         {
             panel.SetActive(true);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
         }
 
         public void Hide()

@@ -48,7 +48,7 @@ namespace Sporefront.Visual
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(1, 0.5f);
             rt.offsetMin = new Vector2(-260, 50); // 50px bottom margin
-            rt.offsetMax = new Vector2(0, -50);    // 50px top margin (below resource bar)
+            rt.offsetMax = new Vector2(0, -70);    // 70px top margin (below resource bar)
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "TileScroll", out contentRT);
