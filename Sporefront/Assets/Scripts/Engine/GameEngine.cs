@@ -252,7 +252,7 @@ namespace Sporefront.Engine
             if (adjustedTime - lastAIUpdate >= aiUpdateInterval)
             {
                 // Process hunt arrivals (villagers reaching animals)
-                aiController.ProcessHuntArrivals(gameState, adjustedTime);
+                aiController.ProcessHuntArrivals(gameState);
 
                 // Generate and execute AI commands
                 var aiCommands = aiController.Update(adjustedTime);

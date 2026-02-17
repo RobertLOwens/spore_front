@@ -407,7 +407,7 @@ namespace Sporefront.Engine
                 CommanderData attackerCommander = gameState.GetCommander(attacker.commanderID.Value);
                 if (attackerCommander != null)
                 {
-                    combat.attackerTacticsBonus = (double)attackerCommander.tactics * GameConfig.Commander.TacticsTerrainScaling;
+                    combat.attackerTacticsBonus = (double)attackerCommander.Tactics * GameConfig.Commander.TacticsTerrainScaling;
                     combat.attackerCommanderData = attackerCommander;
                 }
             }
@@ -416,7 +416,7 @@ namespace Sporefront.Engine
                 CommanderData defenderCommander = gameState.GetCommander(defender.commanderID.Value);
                 if (defenderCommander != null)
                 {
-                    combat.defenderTacticsBonus = (double)defenderCommander.tactics * GameConfig.Commander.TacticsTerrainScaling;
+                    combat.defenderTacticsBonus = (double)defenderCommander.Tactics * GameConfig.Commander.TacticsTerrainScaling;
                     combat.defenderCommanderData = defenderCommander;
                 }
             }
@@ -1082,14 +1082,14 @@ namespace Sporefront.Engine
 
                 // Accumulate damage and convert to villager kills
                 combat.accumulatedDamage += effectiveArmyDamage;
-                int villagersToKill = (int)(combat.accumulatedDamage / VillagerGroupData.HPPerVillager);
+                int villagersToKill = (int)(combat.accumulatedDamage / VillagerGroupData.HpPerVillager);
 
                 if (villagersToKill > 0)
                 {
                     int actualKills = Math.Min(villagersToKill, villagerGroup.villagerCount);
                     int removedCount = villagerGroup.RemoveVillagers(actualKills);
                     combat.villagersKilled += removedCount;
-                    combat.accumulatedDamage -= villagersToKill * VillagerGroupData.HPPerVillager;
+                    combat.accumulatedDamage -= villagersToKill * VillagerGroupData.HpPerVillager;
 
                     changes.Add(new VillagerCasualtiesChange
                     {
@@ -1102,7 +1102,7 @@ namespace Sporefront.Engine
                     {
                         sourceID = combat.attackerArmyID,
                         targetID = combat.defenderVillagerGroupID,
-                        damage = removedCount * VillagerGroupData.HPPerVillager,
+                        damage = removedCount * VillagerGroupData.HpPerVillager,
                         damageType = "melee"
                     });
                 }
@@ -1746,7 +1746,7 @@ namespace Sporefront.Engine
                 CommanderData attackerCommander = state.GetCommander(attacker.commanderID.Value);
                 if (attackerCommander != null)
                 {
-                    combat.attackerTacticsBonus = (double)attackerCommander.tactics * GameConfig.Commander.TacticsTerrainScaling;
+                    combat.attackerTacticsBonus = (double)attackerCommander.Tactics * GameConfig.Commander.TacticsTerrainScaling;
                     combat.attackerCommanderData = attackerCommander;
                 }
             }
@@ -1755,7 +1755,7 @@ namespace Sporefront.Engine
                 CommanderData defenderCommander = state.GetCommander(defender.commanderID.Value);
                 if (defenderCommander != null)
                 {
-                    combat.defenderTacticsBonus = (double)defenderCommander.tactics * GameConfig.Commander.TacticsTerrainScaling;
+                    combat.defenderTacticsBonus = (double)defenderCommander.Tactics * GameConfig.Commander.TacticsTerrainScaling;
                     combat.defenderCommanderData = defenderCommander;
                 }
             }

@@ -1,0 +1,26 @@
+# Unity generated
+Sporefront/[Ll]ibrary/
+Sporefront/[Tt]emp/
+Sporefront/[Oo]bj/
+Sporefront/[Bb]uild/
+Sporefront/[Bb]uilds/
+Sporefront/[Ll]ogs/
+Sporefront/[Uu]serSettings/
+Sporefront/[Mm]emoryCaptures/
+Sporefront/[Rr]ecordings/
+
+# Auto-generated project files
+Sporefront/*.csproj
+Sporefront/*.sln
+Sporefront/*.slnx
+
+# IDE
+.vscode/
+.vs/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db

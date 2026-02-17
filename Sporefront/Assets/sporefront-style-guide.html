@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sporefront — Mood Board & Style Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Uncial+Antiqua&family=MedievalSharp&family=IM+Fell+English:ital@0;1&family=IM+Fell+DW+Pica:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Parchment palette */
+    --parchment-light: #F2E8D5;
+    --parchment-mid: #E4D5B7;
+    --parchment-dark: #D4C4A0;
+    --parchment-deep: #C4B08A;
+    --parchment-shadow: #A89970;
+
+    /* Ink palette */
+    --ink-black: #1A1611;
+    --ink-dark: #2C2418;
+    --ink-mid: #4A3D2E;
+    --ink-light: #6B5D4A;
+    --ink-faded: #8A7D6A;
+
+    /* Mushroom accent colors */
+    --spore-red: #8B3A3A;
+    --spore-red-light: #A85454;
+    --spore-purple: #5E3A5E;
+    --spore-purple-light: #7A5478;
+    --spore-green: #3A5E3A;
+    --spore-green-light: #4A7A4A;
+    --spore-amber: #8B6B3A;
+    --spore-amber-light: #A8854A;
+    --spore-teal: #3A6B6B;
+
+    /* UI colors */
+    --bg-deep: #0D0B08;
+    --bg-section: #151210;
+    --border-subtle: rgba(228, 213, 183, 0.08);
+    --border-accent: rgba(228, 213, 183, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--parchment-mid);
+    font-family: 'IM Fell English', serif;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ========== NOISE TEXTURE OVERLAY ========== */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ========== HERO SECTION ========== */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 40%, rgba(139, 107, 58, 0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 30% 70%, rgba(94, 58, 94, 0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero-subtitle {
+    font-family: 'IM Fell DW Pica', serif;
+    font-style: italic;
+    font-size: 0.9rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink-faded);
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 1s ease 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Uncial Antiqua', cursive;
+    font-size: clamp(3rem, 8vw, 6.5rem);
+    color: var(--parchment-light);
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+    opacity: 0;
+    animation: fadeUp 1s ease 0.5s forwards;
+    text-shadow: 0 0 80px rgba(139, 107, 58, 0.15);
+  }
+
+  .hero-tagline {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 1.15rem;
+    color: var(--parchment-shadow);
+    margin-top: 1rem;
+    margin-bottom: 3rem;
+    opacity: 0;
+    animation: fadeUp 1s ease 0.8s forwards;
+  }
+
+  .hero-divider {
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--parchment-shadow), transparent);
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fadeUp 1s ease 1s forwards;
+  }
+
+  .hero-meta {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: fadeUp 1s ease 1.2s forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ========== SECTIONS ========== */
+  section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+  }
+
+  .section-label {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--spore-amber);
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-family: 'Uncial Antiqua', cursive;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    color: var(--parchment-light);
+    margin-bottom: 1.5rem;
+    line-height: 1.2;
+  }
+
+  .section-body {
+    font-size: 1.05rem;
+    color: var(--parchment-shadow);
+    max-width: 720px;
+    margin-bottom: 3rem;
+  }
+
+  .section-body strong {
+    color: var(--parchment-mid);
+  }
+
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-accent), transparent);
+    margin: 0 auto;
+    max-width: 1200px;
+  }
+
+  /* ========== COLOR PALETTE ========== */
+  .palette-group {
+    margin-bottom: 3rem;
+  }
+
+  .palette-group-title {
+    font-family: 'MedievalSharp', cursive;
+    font-size: 1rem;
+    color: var(--parchment-mid);
+    margin-bottom: 1rem;
+    letter-spacing: 0.05em;
+  }
+
+  .palette-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+  }
+
+  .swatch-color {
+    width: 100%;
+    aspect-ratio: 1.6;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .swatch-color.textured::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+
+  .swatch-name {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.8rem;
+    color: var(--parchment-shadow);
+  }
+
+  .swatch-hex {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.75rem;
+    color: var(--ink-faded);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ========== TYPOGRAPHY ========== */
+  .type-specimen {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 2.5rem;
+    margin-bottom: 2rem;
+    background: rgba(255,255,255,0.01);
+    position: relative;
+  }
+
+  .type-specimen-label {
+    position: absolute;
+    top: 1rem;
+    right: 1.5rem;
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-faded);
+    background: var(--bg-deep);
+    padding: 0.2rem 0.6rem;
+    border-radius: 3px;
+  }
+
+  .type-specimen-role {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.75rem;
+    color: var(--spore-amber);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  .type-display {
+    font-family: 'Uncial Antiqua', cursive;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    color: var(--parchment-light);
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+
+  .type-medieval {
+    font-family: 'MedievalSharp', cursive;
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    color: var(--parchment-light);
+    line-height: 1.3;
+    margin-bottom: 0.5rem;
+  }
+
+  .type-body-sample {
+    font-family: 'IM Fell English', serif;
+    font-size: 1.1rem;
+    color: var(--parchment-mid);
+    line-height: 1.8;
+  }
+
+  .type-body-italic {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 1.1rem;
+    color: var(--parchment-shadow);
+    line-height: 1.8;
+  }
+
+  .type-note {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.85rem;
+    color: var(--ink-faded);
+    margin-top: 1rem;
+    font-style: italic;
+  }
+
+  /* ========== HEX TILE DEMO ========== */
+  .hex-demo-container {
+    display: flex;
+    gap: 3rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 3rem;
+  }
+
+  .hex-grid-demo {
+    flex: 1;
+    min-width: 320px;
+    position: relative;
+  }
+
+  .hex-canvas {
+    width: 100%;
+    aspect-ratio: 1.2;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+    position: relative;
+    background: var(--parchment-mid);
+  }
+
+  .hex-canvas svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .hex-notes {
+    flex: 1;
+    min-width: 280px;
+  }
+
+  .note-card {
+    border-left: 2px solid var(--spore-amber);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(139, 107, 58, 0.03);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .note-card-title {
+    font-family: 'MedievalSharp', cursive;
+    font-size: 0.95rem;
+    color: var(--parchment-light);
+    margin-bottom: 0.4rem;
+  }
+
+  .note-card-body {
+    font-size: 0.9rem;
+    color: var(--parchment-shadow);
+    line-height: 1.6;
+  }
+
+  /* ========== ENTITY STYLE COMPARISON ========== */
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+  }
+
+  .comparison-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.01);
+    transition: border-color 0.3s ease;
+  }
+
+  .comparison-card:hover {
+    border-color: var(--border-accent);
+  }
+
+  .comparison-card.recommended {
+    border-color: var(--spore-amber);
+  }
+
+  .comparison-card.recommended .comparison-badge {
+    display: block;
+  }
+
+  .comparison-preview {
+    aspect-ratio: 1.4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .comparison-preview svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .comparison-badge {
+    display: none;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--spore-amber);
+    background: rgba(13, 11, 8, 0.85);
+    padding: 0.3rem 0.8rem;
+    border-radius: 3px;
+    border: 1px solid var(--spore-amber);
+  }
+
+  .comparison-info {
+    padding: 1.5rem;
+  }
+
+  .comparison-title {
+    font-family: 'MedievalSharp', cursive;
+    font-size: 1.1rem;
+    color: var(--parchment-light);
+    margin-bottom: 0.5rem;
+  }
+
+  .comparison-desc {
+    font-size: 0.9rem;
+    color: var(--parchment-shadow);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+
+  .comparison-pros, .comparison-cons {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    margin-bottom: 0.5rem;
+  }
+
+  .comparison-pros { color: var(--spore-green-light); }
+  .comparison-cons { color: var(--spore-red-light); }
+
+  /* ========== MUSHROOM SPECIMENS ========== */
+  .specimen-row {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 3rem 0;
+  }
+
+  .specimen {
+    text-align: center;
+    flex: 0 0 auto;
+  }
+
+  .specimen svg {
+    margin-bottom: 0.75rem;
+  }
+
+  .specimen-label {
+    font-family: 'MedievalSharp', cursive;
+    font-size: 0.85rem;
+    color: var(--parchment-shadow);
+  }
+
+  .specimen-sub {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.7rem;
+    font-style: italic;
+    color: var(--ink-faded);
+  }
+
+  /* ========== FONT RECOMMENDATIONS ========== */
+  .font-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .font-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 2rem;
+    background: rgba(255,255,255,0.01);
+    transition: border-color 0.3s ease;
+  }
+
+  .font-card:hover {
+    border-color: var(--border-accent);
+  }
+
+  .font-card-name {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--spore-amber);
+    margin-bottom: 0.75rem;
+  }
+
+  .font-card-sample {
+    font-size: 1.8rem;
+    color: var(--parchment-light);
+    margin-bottom: 0.5rem;
+    line-height: 1.3;
+  }
+
+  .font-card-use {
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    font-style: italic;
+  }
+
+  /* ========== GUIDELINES GRID ========== */
+  .guidelines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  .guideline-card {
+    padding: 2rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.01);
+  }
+
+  .guideline-icon {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+  }
+
+  .guideline-title {
+    font-family: 'MedievalSharp', cursive;
+    font-size: 1.05rem;
+    color: var(--parchment-light);
+    margin-bottom: 0.6rem;
+  }
+
+  .guideline-body {
+    font-size: 0.9rem;
+    color: var(--parchment-shadow);
+    line-height: 1.6;
+  }
+
+  /* ========== FOOTER ========== */
+  .footer {
+    text-align: center;
+    padding: 4rem 2rem;
+    font-family: 'IM Fell DW Pica', serif;
+    font-size: 0.8rem;
+    color: var(--ink-faded);
+    font-style: italic;
+  }
+
+  /* ========== PARCHMENT TEXTURE SVG FILTER ========== */
+  .parchment-bg {
+    filter: url(#parchment-texture);
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG Filters & Definitions (hidden) -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="parchment-texture">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise"/>
+      <feDiffuseLighting in="noise" lighting-color="#E4D5B7" surfaceScale="1.5" result="diffLight">
+        <feDistantLight azimuth="45" elevation="55"/>
+      </feDiffuseLighting>
+      <feComposite in="SourceGraphic" in2="diffLight" operator="multiply"/>
+    </filter>
+    <filter id="ink-wobble">
+      <feTurbulence type="turbulence" baseFrequency="0.02" numOctaves="2" result="turbulence"/>
+      <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="paper-grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="4" result="grain"/>
+      <feColorMatrix type="saturate" values="0" in="grain" result="grainBW"/>
+      <feBlend in="SourceGraphic" in2="grainBW" mode="multiply"/>
+    </filter>
+  </defs>
+</svg>
+
+<!-- ==================== HERO ==================== -->
+<header class="hero">
+  <p class="hero-subtitle">Mood Board & Style Guide</p>
+  <h1 class="hero-title">Sporefront</h1>
+  <p class="hero-tagline">A slow-paced hex-grid RTS — where ink meets spore</p>
+  <div class="hero-divider"></div>
+  <p class="hero-meta">Pen-Drawn Fantasy Cartography · Fungal Kingdoms · Parchment & Ink</p>
+</header>
+
+<div class="divider"></div>
+
+<!-- ==================== VISION ==================== -->
+<section>
+  <p class="section-label">01 — Vision</p>
+  <h2 class="section-title">The World on Parchment</h2>
+  <p class="section-body">
+    Sporefront should feel like unrolling an ancient cartographer's map and discovering that the mushroom kingdoms drawn upon it are <strong>alive and moving</strong>. The visual language is rooted in hand-drawn fantasy cartography — black ink on aged paper — with fungal entities emerging from the parchment in muted, earthy color washes. Every element should feel <strong>drawn, not rendered</strong>.
+  </p>
+
+  <div class="guidelines-grid">
+    <div class="guideline-card">
+      <div class="guideline-icon">✦</div>
+      <div class="guideline-title">Hand-Drawn, Not Digital</div>
+      <div class="guideline-body">Lines should vary in weight and have subtle imperfections. No perfectly straight edges. Hex borders should feel like they were ruled with a pen, not generated by a computer. Think wobble, not perfection.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">✦</div>
+      <div class="guideline-title">Ink on Parchment</div>
+      <div class="guideline-body">The dominant palette is monochrome — dark brown-black ink on warm parchment. Color is used sparingly and deliberately, reserved for entities and important UI elements. Less is more.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">✦</div>
+      <div class="guideline-title">Fungal, Not Floral</div>
+      <div class="guideline-body">The organic shapes in this world are mushrooms, mycelium, and spore networks — not flowers and trees. Rounded caps, bulbous stems, branching networks. Shapes feel damp and earthen, not bright and airy.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">✦</div>
+      <div class="guideline-title">Slow & Contemplative</div>
+      <div class="guideline-body">The visual pacing matches the gameplay. Animations are gentle and organic — spores drifting, mycelium slowly spreading, ink blooming into newly explored hexes. Nothing flashy or urgent.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== COLOR PALETTE ==================== -->
+<section>
+  <p class="section-label">02 — Color Palette</p>
+  <h2 class="section-title">Ink, Parchment & Spore</h2>
+  <p class="section-body">
+    The base map lives entirely in the <strong>parchment and ink</strong> ranges. Color enters the world through the mushroom entities — muted, earthy tones that feel like watercolor washes or hand-tinted illustrations on old paper. Never saturated, never digital-looking.
+  </p>
+
+  <div class="palette-group">
+    <div class="palette-group-title">Parchment — The Map Surface</div>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color textured" style="background: #F2E8D5;"></div>
+        <div class="swatch-name">Parchment Light</div>
+        <div class="swatch-hex">#F2E8D5</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color textured" style="background: #E4D5B7;"></div>
+        <div class="swatch-name">Parchment Mid</div>
+        <div class="swatch-hex">#E4D5B7</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color textured" style="background: #D4C4A0;"></div>
+        <div class="swatch-name">Parchment Dark</div>
+        <div class="swatch-hex">#D4C4A0</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color textured" style="background: #C4B08A;"></div>
+        <div class="swatch-name">Parchment Deep</div>
+        <div class="swatch-hex">#C4B08A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color textured" style="background: #A89970;"></div>
+        <div class="swatch-name">Parchment Shadow</div>
+        <div class="swatch-hex">#A89970</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="palette-group">
+    <div class="palette-group-title">Ink — Lines, Borders & Text</div>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color" style="background: #1A1611;"></div>
+        <div class="swatch-name">Ink Black</div>
+        <div class="swatch-hex">#1A1611</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #2C2418;"></div>
+        <div class="swatch-name">Ink Dark</div>
+        <div class="swatch-hex">#2C2418</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #4A3D2E;"></div>
+        <div class="swatch-name">Ink Mid</div>
+        <div class="swatch-hex">#4A3D2E</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #6B5D4A;"></div>
+        <div class="swatch-name">Ink Light</div>
+        <div class="swatch-hex">#6B5D4A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #8A7D6A;"></div>
+        <div class="swatch-name">Ink Faded</div>
+        <div class="swatch-hex">#8A7D6A</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="palette-group">
+    <div class="palette-group-title">Spore Accents — Entity & Mushroom Colors</div>
+    <div class="palette-row">
+      <div class="swatch">
+        <div class="swatch-color" style="background: linear-gradient(135deg, #8B3A3A, #A85454);"></div>
+        <div class="swatch-name">Spore Red</div>
+        <div class="swatch-hex">#8B3A3A → #A85454</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: linear-gradient(135deg, #5E3A5E, #7A5478);"></div>
+        <div class="swatch-name">Spore Purple</div>
+        <div class="swatch-hex">#5E3A5E → #7A5478</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: linear-gradient(135deg, #3A5E3A, #4A7A4A);"></div>
+        <div class="swatch-name">Spore Green</div>
+        <div class="swatch-hex">#3A5E3A → #4A7A4A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: linear-gradient(135deg, #8B6B3A, #A8854A);"></div>
+        <div class="swatch-name">Spore Amber</div>
+        <div class="swatch-hex">#8B6B3A → #A8854A</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: linear-gradient(135deg, #3A6B6B, #4A8585);"></div>
+        <div class="swatch-name">Spore Teal</div>
+        <div class="swatch-hex">#3A6B6B → #4A8585</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== HEX TILES ==================== -->
+<section>
+  <p class="section-label">03 — The Map</p>
+  <h2 class="section-title">Hex Tiles & Terrain</h2>
+  <p class="section-body">
+    Each hex tile is a piece of the parchment. Terrain features — mountains, forests, water — are drawn in ink <strong>on top of</strong> the parchment surface, just as they would be on a Tolkien-style map. The hex grid lines themselves should feel like faint ruled lines, lighter than the terrain ink.
+  </p>
+
+  <div class="hex-demo-container">
+    <div class="hex-grid-demo">
+      <div class="hex-canvas">
+        <svg viewBox="0 0 500 420" xmlns="http://www.w3.org/2000/svg">
+          <!-- Parchment background -->
+          <rect width="500" height="420" fill="#E4D5B7"/>
+          <!-- Paper texture via filter -->
+          <rect width="500" height="420" filter="url(#paper-grain)" fill="#D4C4A0" opacity="0.3"/>
+
+          <!-- Age spots / stains -->
+          <circle cx="120" cy="80" r="40" fill="#C4B08A" opacity="0.3"/>
+          <circle cx="380" cy="320" r="55" fill="#C4B08A" opacity="0.2"/>
+          <circle cx="250" cy="200" r="80" fill="#D4C4A0" opacity="0.15"/>
+
+          <!-- Hex grid - row 1 -->
+          <g stroke="#8A7D6A" stroke-width="0.8" fill="none" opacity="0.5">
+            <!-- Row 1 -->
+            <polygon points="95,30 145,30 170,73 145,116 95,116 70,73"/>
+            <polygon points="170,30 220,30 245,73 220,116 170,116 145,73"/>
+            <polygon points="245,30 295,30 320,73 295,116 245,116 220,73"/>
+            <polygon points="320,30 370,30 395,73 370,116 320,116 295,73"/>
+            <!-- Row 2 (offset) -->
+            <polygon points="132,116 182,116 207,159 182,202 132,202 107,159"/>
+            <polygon points="207,116 257,116 282,159 257,202 207,202 182,159"/>
+            <polygon points="282,116 332,116 357,159 332,202 282,202 257,159"/>
+            <polygon points="357,116 407,116 432,159 407,202 357,202 332,159"/>
+            <!-- Row 3 -->
+            <polygon points="95,202 145,202 170,245 145,288 95,288 70,245"/>
+            <polygon points="170,202 220,202 245,245 220,288 170,288 145,245"/>
+            <polygon points="245,202 295,202 320,245 295,288 245,288 220,245"/>
+            <polygon points="320,202 370,202 395,245 370,288 320,288 295,245"/>
+            <!-- Row 4 (offset) -->
+            <polygon points="132,288 182,288 207,331 182,374 132,374 107,331"/>
+            <polygon points="207,288 257,288 282,331 257,374 207,374 182,331"/>
+            <polygon points="282,288 332,288 357,331 332,374 282,374 257,331"/>
+            <polygon points="357,288 407,288 432,331 407,374 357,374 332,331"/>
+          </g>
+
+          <!-- TERRAIN: Mountains (ink strokes) -->
+          <g stroke="#2C2418" fill="none" stroke-width="1.2" stroke-linecap="round">
+            <!-- Mountain cluster in top-right hex -->
+            <path d="M310,55 L320,38 L330,55" />
+            <path d="M325,58 L338,36 L348,55" />
+            <path d="M340,60 L355,40 L365,58" />
+            <!-- Snow caps -->
+            <path d="M318,43 L320,38 L323,42" stroke-width="0.6"/>
+            <path d="M335,41 L338,36 L341,41" stroke-width="0.6"/>
+          </g>
+
+          <!-- TERRAIN: Trees (small pen marks) -->
+          <g stroke="#2C2418" fill="none" stroke-width="1" stroke-linecap="round">
+            <!-- Forest cluster in middle-left -->
+            <path d="M140,150 L143,138 L146,150"/>
+            <path d="M141,150 L143,141 L145,150" stroke-width="0.6"/>
+            <path d="M152,152 L155,140 L158,152"/>
+            <path d="M153,152 L155,143 L157,152" stroke-width="0.6"/>
+            <path d="M146,155 L149,143 L152,155"/>
+            <path d="M147,155 L149,146 L151,155" stroke-width="0.6"/>
+            <path d="M160,148 L163,137 L166,148"/>
+            <path d="M130,153 L133,142 L136,153"/>
+          </g>
+
+          <!-- TERRAIN: Water (wavy lines) -->
+          <g stroke="#4A3D2E" fill="none" stroke-width="0.8" stroke-linecap="round" opacity="0.7">
+            <path d="M220,230 Q230,226 240,230 Q250,234 260,230 Q270,226 280,230"/>
+            <path d="M225,238 Q235,234 245,238 Q255,242 265,238 Q275,234 285,238"/>
+            <path d="M228,246 Q238,242 248,246 Q258,250 268,246"/>
+            <path d="M222,254 Q232,250 242,254 Q252,258 262,254 Q272,250 280,254"/>
+          </g>
+
+          <!-- TERRAIN: Hills (hatching) -->
+          <g stroke="#4A3D2E" fill="none" stroke-width="0.7" stroke-linecap="round" opacity="0.6">
+            <path d="M320,230 Q332,218 345,230"/>
+            <path d="M318,228 Q332,215 347,228" stroke-width="0.4"/>
+            <path d="M335,240 Q347,228 360,240"/>
+            <path d="M333,238 Q347,226 362,238" stroke-width="0.4"/>
+          </g>
+
+          <!-- MUSHROOM ENTITY (with color wash) -->
+          <g transform="translate(207, 130)">
+            <!-- Color wash background -->
+            <ellipse cx="25" cy="28" rx="18" ry="12" fill="#8B3A3A" opacity="0.25"/>
+            <!-- Mushroom cap -->
+            <path d="M15,18 Q15,6 25,4 Q35,6 35,18" fill="#8B3A3A" opacity="0.5" stroke="#2C2418" stroke-width="1.2"/>
+            <!-- Stem -->
+            <path d="M22,18 L22,30 Q22,33 25,33 Q28,33 28,30 L28,18" fill="#E4D5B7" stroke="#2C2418" stroke-width="1"/>
+            <!-- Gills -->
+            <line x1="20" y1="18" x2="30" y2="18" stroke="#2C2418" stroke-width="0.8"/>
+            <!-- Spots on cap -->
+            <circle cx="20" cy="11" r="1.5" fill="#E4D5B7" opacity="0.6"/>
+            <circle cx="28" cy="9" r="1.2" fill="#E4D5B7" opacity="0.6"/>
+            <circle cx="24" cy="14" r="1" fill="#E4D5B7" opacity="0.6"/>
+          </g>
+
+          <!-- MUSHROOM ENTITY 2 (purple) -->
+          <g transform="translate(280, 300)">
+            <ellipse cx="25" cy="26" rx="16" ry="10" fill="#5E3A5E" opacity="0.2"/>
+            <!-- Tall thin mushroom -->
+            <path d="M20,14 Q20,4 25,2 Q30,4 30,14" fill="#5E3A5E" opacity="0.45" stroke="#2C2418" stroke-width="1.1"/>
+            <path d="M23,14 L23,28 Q23,30 25,30 Q27,30 27,28 L27,14" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.9"/>
+            <line x1="21" y1="14" x2="29" y2="14" stroke="#2C2418" stroke-width="0.7"/>
+          </g>
+
+          <!-- MUSHROOM ENTITY 3 (green, cluster) -->
+          <g transform="translate(130, 310)">
+            <ellipse cx="25" cy="32" rx="22" ry="10" fill="#3A5E3A" opacity="0.15"/>
+            <!-- Small cluster -->
+            <path d="M15,22 Q15,15 20,14 Q25,15 25,22" fill="#3A5E3A" opacity="0.4" stroke="#2C2418" stroke-width="1"/>
+            <path d="M18,22 L18,30 L22,30 L22,22" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.8"/>
+            <path d="M25,19 Q25,11 30,10 Q35,11 35,19" fill="#3A5E3A" opacity="0.45" stroke="#2C2418" stroke-width="1"/>
+            <path d="M28,19 L28,28 L32,28 L32,19" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.8"/>
+          </g>
+
+          <!-- Map labels -->
+          <text x="310" y="85" font-family="'MedievalSharp', cursive" font-size="9" fill="#2C2418" letter-spacing="0.5" opacity="0.8">Iron Peaks</text>
+          <text x="130" y="175" font-family="'MedievalSharp', cursive" font-size="8" fill="#2C2418" letter-spacing="0.3" opacity="0.7">Duskwood</text>
+          <text x="225" y="268" font-family="'IM Fell English', serif" font-size="8" fill="#4A3D2E" font-style="italic" letter-spacing="1" opacity="0.6">Stillwater</text>
+
+          <!-- Compass rose hint -->
+          <g transform="translate(440, 30)" opacity="0.4">
+            <line x1="0" y1="-12" x2="0" y2="12" stroke="#2C2418" stroke-width="0.8"/>
+            <line x1="-12" y1="0" x2="12" y2="0" stroke="#2C2418" stroke-width="0.8"/>
+            <polygon points="0,-14 -3,-6 3,-6" fill="#2C2418"/>
+            <text x="-2" y="-17" font-family="'IM Fell DW Pica', serif" font-size="7" fill="#2C2418">N</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="hex-notes">
+      <div class="note-card">
+        <div class="note-card-title">Hex Border Weight</div>
+        <div class="note-card-body">Grid lines at 0.5–1px in Ink Faded (#8A7D6A), noticeably lighter than terrain features. They should guide the eye without competing with the map content. Consider slight opacity variation per line.</div>
+      </div>
+      <div class="note-card">
+        <div class="note-card-title">Terrain Ink</div>
+        <div class="note-card-body">Mountains, trees, and terrain markers drawn in Ink Dark (#2C2418) at 1–1.5px stroke. Use varied stroke widths and hand-drawn paths — no perfectly geometric shapes. Water features in slightly lighter ink.</div>
+      </div>
+      <div class="note-card">
+        <div class="note-card-title">Parchment Variation</div>
+        <div class="note-card-body">Different hex tiles can subtly vary in parchment tone to suggest age, wear, or terrain type. Water hexes might be slightly cooler, mountain hexes slightly darker at the edges. Use fractal noise textures for grain.</div>
+      </div>
+      <div class="note-card">
+        <div class="note-card-title">Fog of War</div>
+        <div class="note-card-body">Unexplored hexes could appear as blank, slightly darker parchment — as if the cartographer hasn't drawn that part of the map yet. Exploration literally draws the world into existence.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== ENTITY STYLE ==================== -->
+<section>
+  <p class="section-label">04 — Entity Style</p>
+  <h2 class="section-title">Mushroom Entities</h2>
+  <p class="section-body">
+    The core design question: should mushroom entities be pure ink drawings like the terrain, or should they use color to stand apart? Below are two approaches. The <strong>recommended approach</strong> uses ink outlines with muted watercolor washes — keeping the hand-drawn feel while giving entities the contrast needed for gameplay clarity.
+  </p>
+
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <div class="comparison-preview">
+        <svg viewBox="0 0 300 210" xmlns="http://www.w3.org/2000/svg">
+          <rect width="300" height="210" fill="#E4D5B7"/>
+          <rect width="300" height="210" filter="url(#paper-grain)" fill="#D4C4A0" opacity="0.3"/>
+          <!-- Hex grid hint -->
+          <g stroke="#8A7D6A" stroke-width="0.6" fill="none" opacity="0.3">
+            <polygon points="100,20 150,20 175,63 150,106 100,106 75,63"/>
+            <polygon points="175,20 225,20 250,63 225,106 175,106 150,63"/>
+            <polygon points="137,106 187,106 212,149 187,192 137,192 112,149"/>
+          </g>
+          <!-- Pure ink mushrooms -->
+          <g stroke="#2C2418" fill="none" stroke-width="1.5" stroke-linecap="round">
+            <!-- Mushroom 1 -->
+            <path d="M110,45 Q110,28 125,25 Q140,28 140,45"/>
+            <path d="M120,45 L120,65 Q120,68 125,68 Q130,68 130,65 L130,45"/>
+            <line x1="112" y1="45" x2="138" y2="45"/>
+            <circle cx="119" cy="35" r="2" fill="#2C2418"/>
+            <circle cx="130" cy="32" r="1.5" fill="#2C2418"/>
+            <!-- Mushroom 2 -->
+            <path d="M185,40 Q185,22 200,20 Q215,22 215,40"/>
+            <path d="M195,40 L195,62 Q195,65 200,65 Q205,65 205,62 L205,40"/>
+            <line x1="187" y1="40" x2="213" y2="40"/>
+            <!-- Mushroom 3 -->
+            <path d="M150,130 Q150,115 162,113 Q174,115 174,130"/>
+            <path d="M158,130 L158,152 Q158,155 162,155 Q166,155 166,152 L166,130"/>
+            <line x1="152" y1="130" x2="172" y2="130"/>
+          </g>
+          <!-- Mountains for context -->
+          <g stroke="#2C2418" fill="none" stroke-width="1.2" stroke-linecap="round">
+            <path d="M88,70 L95,55 L102,70"/>
+            <path d="M230,55 L240,38 L250,55"/>
+          </g>
+        </svg>
+      </div>
+      <div class="comparison-info">
+        <div class="comparison-title">Option A: Pure Ink</div>
+        <div class="comparison-desc">Mushrooms drawn entirely in ink, same style as terrain. Heavier line weight and more detail to distinguish from landscape features.</div>
+        <div class="comparison-pros">+ Perfectly cohesive with map aesthetic</div>
+        <div class="comparison-pros">+ Simpler to implement consistently</div>
+        <div class="comparison-cons">− Hard to distinguish entities from terrain at a glance</div>
+        <div class="comparison-cons">− Player ownership / team colors become difficult</div>
+      </div>
+    </div>
+
+    <div class="comparison-card recommended">
+      <div class="comparison-preview">
+        <svg viewBox="0 0 300 210" xmlns="http://www.w3.org/2000/svg">
+          <rect width="300" height="210" fill="#E4D5B7"/>
+          <rect width="300" height="210" filter="url(#paper-grain)" fill="#D4C4A0" opacity="0.3"/>
+          <div class="comparison-badge">Recommended</div>
+          <!-- Hex grid hint -->
+          <g stroke="#8A7D6A" stroke-width="0.6" fill="none" opacity="0.3">
+            <polygon points="100,20 150,20 175,63 150,106 100,106 75,63"/>
+            <polygon points="175,20 225,20 250,63 225,106 175,106 150,63"/>
+            <polygon points="137,106 187,106 212,149 187,192 137,192 112,149"/>
+          </g>
+          <!-- Ink + color wash mushrooms -->
+          <g stroke-linecap="round">
+            <!-- Mushroom 1 (red) -->
+            <ellipse cx="125" cy="55" rx="18" ry="10" fill="#8B3A3A" opacity="0.2"/>
+            <path d="M110,45 Q110,28 125,25 Q140,28 140,45" fill="#8B3A3A" opacity="0.4" stroke="#2C2418" stroke-width="1.3"/>
+            <path d="M120,45 L120,60 Q120,63 125,63 Q130,63 130,60 L130,45" fill="#E4D5B7" stroke="#2C2418" stroke-width="1"/>
+            <line x1="112" y1="45" x2="138" y2="45" stroke="#2C2418" stroke-width="1"/>
+            <circle cx="119" cy="35" r="2.5" fill="#E4D5B7" opacity="0.5"/>
+            <circle cx="130" cy="33" r="1.8" fill="#E4D5B7" opacity="0.5"/>
+            <!-- Mushroom 2 (purple) -->
+            <ellipse cx="200" cy="52" rx="16" ry="9" fill="#5E3A5E" opacity="0.18"/>
+            <path d="M185,42 Q185,24 200,22 Q215,24 215,42" fill="#5E3A5E" opacity="0.38" stroke="#2C2418" stroke-width="1.3"/>
+            <path d="M195,42 L195,58 Q195,61 200,61 Q205,61 205,58 L205,42" fill="#E4D5B7" stroke="#2C2418" stroke-width="1"/>
+            <line x1="187" y1="42" x2="213" y2="42" stroke="#2C2418" stroke-width="1"/>
+            <!-- Mushroom 3 (green cluster) -->
+            <ellipse cx="165" cy="148" rx="20" ry="10" fill="#3A5E3A" opacity="0.15"/>
+            <path d="M150,133 Q150,118 160,116 Q170,118 170,133" fill="#3A5E3A" opacity="0.35" stroke="#2C2418" stroke-width="1.2"/>
+            <path d="M155,133 L155,148 Q155,150 160,150 Q165,150 165,148 L165,133" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.9"/>
+            <path d="M168,128 Q168,116 175,115 Q182,116 182,128" fill="#3A5E3A" opacity="0.4" stroke="#2C2418" stroke-width="1.2"/>
+            <path d="M172,128 L172,143 Q172,145 175,145 Q178,145 178,143 L178,128" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.9"/>
+          </g>
+          <!-- Mountains for context (pure ink) -->
+          <g stroke="#2C2418" fill="none" stroke-width="1.2" stroke-linecap="round">
+            <path d="M88,70 L95,55 L102,70"/>
+            <path d="M230,55 L240,38 L250,55"/>
+          </g>
+        </svg>
+        <div class="comparison-badge">Recommended</div>
+      </div>
+      <div class="comparison-info">
+        <div class="comparison-title">Option B: Ink + Color Wash</div>
+        <div class="comparison-desc">Ink outlines with translucent watercolor fills. Entities have color; terrain stays monochrome. Like a cartographer who hand-tinted the important features.</div>
+        <div class="comparison-pros">+ Instant visual separation from terrain</div>
+        <div class="comparison-pros">+ Natural way to show player/team ownership</div>
+        <div class="comparison-pros">+ Still feels hand-drawn and cohesive</div>
+        <div class="comparison-cons">− Requires careful color balancing to not feel "digital"</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mushroom Specimens -->
+  <p class="section-body">Below: example mushroom entity types rendered in the recommended ink + wash style. Each faction or unit type can have a distinct silhouette, making them identifiable even at small sizes.</p>
+
+  <div class="specimen-row">
+    <div class="specimen">
+      <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="40" cy="75" rx="25" ry="8" fill="#8B3A3A" opacity="0.15"/>
+        <path d="M20,50 Q20,22 40,18 Q60,22 60,50" fill="#8B3A3A" opacity="0.45" stroke="#2C2418" stroke-width="1.5"/>
+        <path d="M32,50 L32,72 Q32,76 40,76 Q48,76 48,72 L48,50" fill="#E4D5B7" stroke="#2C2418" stroke-width="1.2"/>
+        <line x1="22" y1="50" x2="58" y2="50" stroke="#2C2418" stroke-width="1.2"/>
+        <circle cx="30" cy="35" r="3.5" fill="#E4D5B7" opacity="0.55"/>
+        <circle cx="45" cy="30" r="2.5" fill="#E4D5B7" opacity="0.55"/>
+        <circle cx="38" cy="42" r="2" fill="#E4D5B7" opacity="0.55"/>
+      </svg>
+      <div class="specimen-label">Toadstool Scout</div>
+      <div class="specimen-sub">Basic unit — fast, fragile</div>
+    </div>
+
+    <div class="specimen">
+      <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="40" cy="78" rx="28" ry="8" fill="#5E3A5E" opacity="0.15"/>
+        <!-- Big flat cap -->
+        <path d="M10,48 Q10,30 40,26 Q70,30 70,48" fill="#5E3A5E" opacity="0.4" stroke="#2C2418" stroke-width="1.5"/>
+        <path d="M35,48 L35,74 Q35,77 40,77 Q45,77 45,74 L45,48" fill="#E4D5B7" stroke="#2C2418" stroke-width="1.2"/>
+        <line x1="12" y1="48" x2="68" y2="48" stroke="#2C2418" stroke-width="1.2"/>
+        <!-- Ring on stem -->
+        <ellipse cx="40" cy="58" rx="7" ry="2" fill="none" stroke="#2C2418" stroke-width="0.8"/>
+      </svg>
+      <div class="specimen-label">Parasol Guardian</div>
+      <div class="specimen-sub">Defensive unit — wide area</div>
+    </div>
+
+    <div class="specimen">
+      <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="40" cy="78" rx="22" ry="7" fill="#3A5E3A" opacity="0.15"/>
+        <!-- Tall narrow cap -->
+        <path d="M30,35 Q30,10 40,5 Q50,10 50,35" fill="#3A5E3A" opacity="0.42" stroke="#2C2418" stroke-width="1.5"/>
+        <path d="M36,35 L36,74 Q36,77 40,77 Q44,77 44,74 L44,35" fill="#E4D5B7" stroke="#2C2418" stroke-width="1.2"/>
+        <line x1="31" y1="35" x2="49" y2="35" stroke="#2C2418" stroke-width="1"/>
+      </svg>
+      <div class="specimen-label">Morel Spire</div>
+      <div class="specimen-sub">Tower / structure</div>
+    </div>
+
+    <div class="specimen">
+      <svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="50" cy="80" rx="35" ry="8" fill="#8B6B3A" opacity="0.15"/>
+        <!-- Cluster of small mushrooms -->
+        <path d="M25,52 Q25,40 33,38 Q41,40 41,52" fill="#8B6B3A" opacity="0.4" stroke="#2C2418" stroke-width="1.2"/>
+        <path d="M30,52 L30,70 Q30,72 33,72 Q36,72 36,70 L36,52" fill="#E4D5B7" stroke="#2C2418" stroke-width="1"/>
+        <path d="M42,48 Q42,34 50,32 Q58,34 58,48" fill="#8B6B3A" opacity="0.45" stroke="#2C2418" stroke-width="1.3"/>
+        <path d="M47,48 L47,72 Q47,75 50,75 Q53,75 53,72 L53,48" fill="#E4D5B7" stroke="#2C2418" stroke-width="1"/>
+        <path d="M60,55 Q60,45 66,43 Q72,45 72,55" fill="#8B6B3A" opacity="0.35" stroke="#2C2418" stroke-width="1.1"/>
+        <path d="M64,55 L64,68 Q64,70 66,70 Q68,70 68,68 L68,55" fill="#E4D5B7" stroke="#2C2418" stroke-width="0.9"/>
+        <!-- Mycelium lines -->
+        <g stroke="#8B6B3A" stroke-width="0.5" fill="none" opacity="0.4">
+          <path d="M33,72 Q30,78 22,82"/>
+          <path d="M50,75 Q55,80 62,82"/>
+          <path d="M50,75 Q45,82 40,85"/>
+          <path d="M66,70 Q72,76 78,78"/>
+        </g>
+      </svg>
+      <div class="specimen-label">Colony Cluster</div>
+      <div class="specimen-sub">Resource generator</div>
+    </div>
+
+    <div class="specimen">
+      <svg width="80" height="100" viewBox="0 0 80 100" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="40" cy="78" rx="25" ry="8" fill="#3A6B6B" opacity="0.15"/>
+        <!-- Rounded puffball -->
+        <ellipse cx="40" cy="42" rx="22" ry="20" fill="#3A6B6B" opacity="0.35" stroke="#2C2418" stroke-width="1.5"/>
+        <path d="M36,60 L36,74 Q36,77 40,77 Q44,77 44,74 L44,60" fill="#E4D5B7" stroke="#2C2418" stroke-width="1.2"/>
+        <!-- Spore dots floating up -->
+        <circle cx="35" cy="20" r="1" fill="#3A6B6B" opacity="0.4"/>
+        <circle cx="42" cy="15" r="0.8" fill="#3A6B6B" opacity="0.3"/>
+        <circle cx="48" cy="18" r="1.2" fill="#3A6B6B" opacity="0.35"/>
+        <circle cx="38" cy="10" r="0.6" fill="#3A6B6B" opacity="0.2"/>
+        <circle cx="45" cy="8" r="0.7" fill="#3A6B6B" opacity="0.15"/>
+      </svg>
+      <div class="specimen-label">Puffball Caster</div>
+      <div class="specimen-sub">Ranged / spore attack</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== TYPOGRAPHY ==================== -->
+<section>
+  <p class="section-label">05 — Typography</p>
+  <h2 class="section-title">Fonts & Lettering</h2>
+  <p class="section-body">
+    A two-tier type system: a <strong>display face</strong> for region names and titles (the sweeping map labels), and a <strong>body face</strong> for UI text and gameplay information. Both should feel rooted in the tradition of hand-lettered cartography. Below are recommended pairings using freely available Google Fonts that capture the aesthetic — with notes on premium alternatives.
+  </p>
+
+  <div class="font-grid">
+    <div class="font-card">
+      <div class="font-card-name">Display — Region Names</div>
+      <div class="font-card-sample" style="font-family: 'Uncial Antiqua', cursive;">The Damp Hollows</div>
+      <div class="font-card-use">Uncial Antiqua — Free via Google Fonts. Uncial letterforms evoke medieval manuscripts and Tolkien-era cartography. Use for large territory labels that arc across the map.</div>
+    </div>
+    <div class="font-card">
+      <div class="font-card-name">Display Alt — Locations</div>
+      <div class="font-card-sample" style="font-family: 'MedievalSharp', cursive;">Sporekeep &middot; Roothold</div>
+      <div class="font-card-use">MedievalSharp — Free via Google Fonts. Sharper, more readable at smaller sizes. Use for city/location names on the map and section headers in UI.</div>
+    </div>
+    <div class="font-card">
+      <div class="font-card-name">Body — UI & Descriptions</div>
+      <div class="font-card-sample" style="font-family: 'IM Fell English', serif;">A colony spreads its roots beneath the moss-covered stones.</div>
+      <div class="font-card-use">IM Fell English — Free via Google Fonts. Based on 17th-century typefaces with beautiful imperfections. Pairs naturally with the hand-drawn map aesthetic.</div>
+    </div>
+    <div class="font-card">
+      <div class="font-card-name">Body Alt — Flavor Text</div>
+      <div class="font-card-sample" style="font-family: 'IM Fell DW Pica', serif; font-style: italic;">The old growth remembers what the soil has forgotten.</div>
+      <div class="font-card-use">IM Fell DW Pica Italic — Free via Google Fonts. Use for flavor text, lore excerpts, and in-game descriptions. The italic has a wonderful hand-written quality.</div>
+    </div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-specimen-label">Full Pairing Demo</div>
+    <div class="type-specimen-role">How the type system works together</div>
+    <div class="type-display">The Mycelium Wars</div>
+    <div class="type-medieval" style="margin-top: 0.5rem; opacity: 0.7;">Chapter III — Beneath the Rotting Canopy</div>
+    <div class="type-body-sample" style="margin-top: 1.5rem;">
+      The Toadstool Scouts pushed deeper into the Duskwood, their spore trails marking the path for the colony to follow. In the distance, the Parasol Guardians held the ridge — their wide caps casting shadows over the ink-dark soil below.
+    </div>
+    <div class="type-body-italic" style="margin-top: 1rem;">
+      "Where mycelium spreads, kingdoms follow. Where it withers, only parchment remains."
+    </div>
+    <div class="type-note">
+      Premium alternative: <strong>Aniron</strong> (free for personal use) for the classic LOTR movie credits feel. For authentic Tolkien map labels, the paid <strong>Baynes</strong> font from MyTolkienBooks.com is the gold standard.
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== DESIGN PRINCIPLES ==================== -->
+<section>
+  <p class="section-label">06 — Design Principles</p>
+  <h2 class="section-title">Rules of the Realm</h2>
+
+  <div class="guidelines-grid">
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">Ink Before Color</div>
+      <div class="guideline-body">Every visual element starts as an ink drawing. Color is a secondary layer — a wash applied on top. If you removed all color, the map and entities should still be fully readable in black and white.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">Imperfect by Design</div>
+      <div class="guideline-body">No perfect circles, no ruler-straight lines, no pixel-perfect alignment. Use SVG path randomization, varied stroke widths, and subtle noise. The hand-drawn quality is the brand.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">Color = Life</div>
+      <div class="guideline-body">The monochrome ink map is the "dead" layer — static terrain. Color only appears where living things exist (mushroom entities, mycelium networks, spore clouds). This creates a powerful visual metaphor.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">Reveal, Don't Render</div>
+      <div class="guideline-body">New terrain should feel like being drawn into existence — ink blooming on parchment. Don't pop it in; animate it as if a pen is sketching it in real time. Fog of war = blank parchment.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">Silhouette First</div>
+      <div class="guideline-body">Every mushroom entity type must be identifiable by silhouette alone. Tall/thin, wide/flat, clustered, round — shape language matters more than detail. Players will be zoomed out most of the time.</div>
+    </div>
+    <div class="guideline-card">
+      <div class="guideline-icon">⬡</div>
+      <div class="guideline-title">The Cartographer's Desk</div>
+      <div class="guideline-body">UI elements outside the map (menus, panels, tooltips) should feel like they're on the cartographer's desk — the same parchment, the same ink. Think hand-written labels, not modern UI buttons.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ==================== NEXT STEPS ==================== -->
+<section>
+  <p class="section-label">07 — Next Steps</p>
+  <h2 class="section-title">From Parchment to Prototype</h2>
+  <p class="section-body">
+    With this style guide in hand, the next moves are: build a hex grid renderer with parchment texturing and hand-drawn line variation, create the mushroom entity sprite system with ink + wash rendering, implement the font stack with proper fallbacks, and prototype the fog-of-war "ink bloom" reveal animation. Every technical decision should serve the central fantasy: <strong>you are looking at a living map.</strong>
+  </p>
+</section>
+
+<footer class="footer">
+  Sporefront Style Guide — A living document<br>
+  <span style="opacity: 0.6;">Drawn in ink. Grown from spore.</span>
+</footer>
+
+</body>
+</html>

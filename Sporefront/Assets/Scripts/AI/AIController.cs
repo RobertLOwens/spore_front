@@ -132,7 +132,7 @@ namespace Sporefront.AI
         // Hunt Arrival Processing
         // ================================================================
 
-        private void ProcessHuntArrivals(GameState state)
+        public void ProcessHuntArrivals(GameState state)
         {
             // Collect groups to process (avoid modifying collection during iteration)
             var groups = state.villagerGroups.Values.ToList();
@@ -402,7 +402,7 @@ namespace Sporefront.AI
             double compositionModifier = 1.0;
             if (enemyAnalysis != null)
             {
-                var analysis = enemyAnalysis;
+                var analysis = enemyAnalysis.Value;
 
                 var ourArmies = gameState.GetArmiesForPlayer(playerID);
                 double ourCavalryRatio = 0.0;

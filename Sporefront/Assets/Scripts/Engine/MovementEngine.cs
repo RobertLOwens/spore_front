@@ -119,7 +119,7 @@ namespace Sporefront.Engine
                 var commander = gameState.GetCommander(army.commanderID.Value);
                 if (commander != null)
                 {
-                    double logisticsBonus = 1.0 + (double)commander.logistics * GameConfig.Commander.LogisticsSpeedScaling;
+                    double logisticsBonus = 1.0 + (double)commander.Logistics * GameConfig.Commander.LogisticsSpeedScaling;
                     speed *= logisticsBonus;
                 }
             }
@@ -274,7 +274,7 @@ namespace Sporefront.Engine
                     var commander = gameState.GetCommander(army.commanderID.Value);
                     if (commander != null)
                     {
-                        double logisticsBonus = 1.0 + (double)commander.logistics * GameConfig.Commander.LogisticsSpeedScaling;
+                        double logisticsBonus = 1.0 + (double)commander.Logistics * GameConfig.Commander.LogisticsSpeedScaling;
                         speed *= logisticsBonus;
                     }
                 }

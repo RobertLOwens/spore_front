@@ -55,12 +55,12 @@ namespace Sporefront.Commands
 
             foreach (var army in state.armies.Values)
             {
-                foreach (var reinforcement in army.pendingReinforcements)
+                foreach (var r in army.pendingReinforcements)
                 {
-                    if (reinforcement.reinforcementID == reinforcementID)
+                    if (r.reinforcementID == reinforcementID)
                     {
                         owningArmy = army;
-                        foundReinforcement = reinforcement;
+                        foundReinforcement = r;
                         break;
                     }
                 }
