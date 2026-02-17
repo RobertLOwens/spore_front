@@ -316,11 +316,18 @@ namespace Sporefront.Visual
             tileInfo.OnBuildRequested += (coord) => actionPanel.ShowBuildMenu(coord, gameState);
             tileInfo.OnMoveRequested += (entityID, coord) =>
                 actionPanel.ShowMoveTarget(entityID, false);
+            tileInfo.OnArmyMoveRequested += (id) =>
+                actionPanel.ShowMoveTarget(id, true);
             tileInfo.OnAttackRequested += (armyID, coord) =>
                 actionPanel.ShowAttackTarget(armyID);
             tileInfo.OnGatherRequested += (vgID, rpID) =>
             {
                 var cmd = new GatherCommand(localPlayerID, vgID, rpID);
+                GameEngine.Instance.ExecuteCommand(cmd);
+            };
+            tileInfo.OnMoveEntityToTile += (entityID, destination, isArmy) =>
+            {
+                var cmd = new MoveCommand(localPlayerID, entityID, destination, isArmy);
                 GameEngine.Instance.ExecuteCommand(cmd);
             };
 
@@ -365,12 +372,24 @@ namespace Sporefront.Visual
             mainMenu.OnEvolveAI += () => { mainMenu.Hide(); evolution.Show(); };
             mainMenu.OnSpectateAI += () => { mainMenu.Hide(); genomeSelection.Show(); };
 
-            // ---- MenuBarPanel ----
+            // ---- ResourceBarPanel (top-right buttons) ----
+            resourceBar.OnNotificationClicked += () => notificationInbox.Show();
+            resourceBar.OnSettingsClicked += () => settings.Show();
+            resourceBar.OnMainMenuClicked += () =>
+            {
+                resourceBar.Hide();
+                menuBar.Hide();
+                mainMenu.Show();
+            };
+
+            // ---- MenuBarPanel (bottom nav) ----
             menuBar.OnResearchClicked += () => researchTree.Show(gameState);
             menuBar.OnMilitaryClicked += () => militaryOverview.Show(gameState);
             menuBar.OnBuildingsClicked += () => buildingsOverview.Show(gameState);
             menuBar.OnEntitiesClicked += () => entitiesOverview.Show(gameState);
-            menuBar.OnSettingsClicked += () => settings.Show();
+            menuBar.OnCommandersClicked += () => commander.Show(gameState);
+            menuBar.OnResourcesClicked += () => resourceOverview.Show(gameState);
+            menuBar.OnTrainingClicked += () => trainingOverview.Show(gameState);
 
             // ---- GameSetupPanel ----
             gameSetup.OnBack += () => { gameSetup.Hide(); mainMenu.Show(); };
@@ -498,6 +517,10 @@ namespace Sporefront.Visual
                     OnTileSelected(coord.Value);
                 }
             };
+            notificationInbox.OnClose += () =>
+                resourceBar.UpdateNotificationBadge(notificationInbox.GetUnreadCount());
+            notificationInbox.OnMarkAllRead += () =>
+                resourceBar.UpdateNotificationBadge(notificationInbox.GetUnreadCount());
 
             // ---- Evolution ----
             evolution.OnClose += () => { mainMenu.Show(); };
@@ -670,6 +693,9 @@ namespace Sporefront.Visual
             {
                 RouteNotification(change);
             }
+
+            // Update notification badge
+            resourceBar.UpdateNotificationBadge(notificationInbox.GetUnreadCount());
         }
 
         // ================================================================
@@ -683,9 +709,10 @@ namespace Sporefront.Visual
                 var building = gameState.GetBuilding(bcc.buildingID);
                 if (building != null && building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
                 {
-                    notifications.ShowNotification(
-                        new BuildingCompletedNotification(
-                            building.buildingType, building.coordinate));
+                    var notif = new BuildingCompletedNotification(
+                        building.buildingType, building.coordinate);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
             else if (change is TrainingCompletedChange tcc)
@@ -693,17 +720,18 @@ namespace Sporefront.Visual
                 var building = gameState.GetBuilding(tcc.buildingID);
                 if (building != null && building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
                 {
-                    notifications.ShowNotification(
-                        new TrainingCompletedNotification(
-                            tcc.unitType, tcc.quantity, building.coordinate));
+                    var notif = new TrainingCompletedNotification(
+                        tcc.unitType, tcc.quantity, building.coordinate);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
             else if (change is ResourcePointDepletedChange rpdc)
             {
-                var rp = gameState.GetResourcePoint(rpdc.coordinate);
-                notifications.ShowNotification(
-                    new ResourcePointDepletedNotification(
-                        rpdc.resourceType, rpdc.coordinate));
+                var notif = new ResourcePointDepletedNotification(
+                    rpdc.resourceType, rpdc.coordinate);
+                notifications.ShowNotification(notif);
+                notificationInbox.AddNotification(notif);
             }
             else if (change is CombatStartedChange csc)
             {
@@ -711,25 +739,28 @@ namespace Sporefront.Visual
                 var defender = gameState.GetArmy(csc.defenderID);
                 if (defender != null && defender.ownerID.HasValue && defender.ownerID.Value == localPlayerID)
                 {
-                    notifications.ShowNotification(
-                        new ArmyAttackedNotification(
-                            defender.name, csc.coordinate));
+                    var notif = new ArmyAttackedNotification(
+                        defender.name, csc.coordinate);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
             else if (change is ResearchCompletedChange rcc)
             {
                 if (rcc.playerID == localPlayerID)
                 {
-                    notifications.ShowNotification(
-                        new ResearchCompletedNotification(rcc.researchType));
+                    var notif = new ResearchCompletedNotification(rcc.researchType);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
             else if (change is UnitUpgradeCompletedChange uucc)
             {
                 if (uucc.playerID == localPlayerID)
                 {
-                    notifications.ShowNotification(
-                        new ResearchCompletedNotification($"{uucc.unitType} Tier {uucc.tier} Upgrade"));
+                    var notif = new ResearchCompletedNotification($"{uucc.unitType} Tier {uucc.tier} Upgrade");
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
         }
