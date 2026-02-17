@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sporefront.Data;
 using Sporefront.Engine;
 using Sporefront.Models;
@@ -54,6 +55,13 @@ namespace Sporefront.Commands
             if (!player.CanAfford(buildCost))
                 return EngineCommandResult.Failure("Insufficient resources.");
 
+            // Check that at least one idle villager group exists
+            var villagers = state.GetVillagerGroupsForPlayer(PlayerID);
+            bool hasIdleVillager = villagers != null &&
+                villagers.Any(g => g.currentTask.IsIdle && g.currentPath == null);
+            if (!hasIdleVillager)
+                return EngineCommandResult.Failure("No idle villagers available.");
+
             return EngineCommandResult.Success(null);
         }
 
@@ -76,13 +84,9 @@ namespace Sporefront.Commands
             // Create the building
             var building = new BuildingData(buildingType, coordinate, PlayerID, rotation);
 
-            // Start construction with 1 builder
-            building.StartConstruction(1);
-
             // Add building to game state
             state.AddBuilding(building);
 
-            // Emit state changes
             changeBuilder.Add(new BuildingPlacedChange
             {
                 buildingID = building.id,
@@ -92,10 +96,60 @@ namespace Sporefront.Commands
                 rotation = rotation
             });
 
-            changeBuilder.Add(new BuildingConstructionStartedChange
+            // Find nearest idle villager to dispatch as builder
+            var idleVillagers = state.GetVillagerGroupsForPlayer(PlayerID)
+                .Where(g => g.currentTask.IsIdle && g.currentPath == null)
+                .OrderBy(g => g.coordinate.Distance(coordinate))
+                .ToList();
+
+            if (idleVillagers.Count > 0)
             {
-                buildingID = building.id
-            });
+                var builder = idleVillagers[0];
+                builder.AssignTask(new BuildingTask(building.id), coordinate, building.id);
+
+                changeBuilder.Add(new VillagerGroupTaskChangedChange
+                {
+                    groupID = builder.id,
+                    task = "Building",
+                    targetCoordinate = coordinate
+                });
+
+                if (builder.coordinate.Equals(coordinate))
+                {
+                    // Already on-site: start construction immediately
+                    building.StartConstruction(builder.villagerCount);
+                    changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                }
+                else
+                {
+                    // Dispatch villager — building stays in Planning until arrival
+                    var path = state.mapData.FindPath(builder.coordinate, coordinate, PlayerID, state);
+                    if (path != null)
+                    {
+                        builder.SetPath(path);
+                        changeBuilder.Add(new VillagerGroupMovedChange
+                        {
+                            groupID = builder.id,
+                            from = builder.coordinate,
+                            to = coordinate,
+                            path = path
+                        });
+                    }
+                    else
+                    {
+                        // No path found — start construction as fallback
+                        building.StartConstruction(1);
+                        builder.ClearTask();
+                        changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                    }
+                }
+            }
+            else
+            {
+                // No idle villager — start construction without one (graceful fallback)
+                building.StartConstruction(1);
+                changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+            }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

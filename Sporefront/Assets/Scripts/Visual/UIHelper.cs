@@ -5,6 +5,7 @@
 // ============================================================================
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -71,23 +72,112 @@ namespace Sporefront.Visual
         public static readonly Color HudTextColor = SporefrontColors.ParchmentLight;
 
         // ================================================================
+        // Rounded Corner Sprites
+        // ================================================================
+
+        public const int PanelCornerRadius = 16;
+        public const int ButtonCornerRadius = 12;
+        public const int SmallCornerRadius = 6;
+
+        private static readonly Dictionary<int, Sprite> _roundedRectCache = new Dictionary<int, Sprite>();
+
+        public static Sprite GetRoundedRectSprite(int cornerRadius)
+        {
+            if (_roundedRectCache.TryGetValue(cornerRadius, out var cached))
+                return cached;
+            var sprite = CreateRoundedRectSprite(cornerRadius);
+            _roundedRectCache[cornerRadius] = sprite;
+            return sprite;
+        }
+
+        private static Sprite CreateRoundedRectSprite(int cornerRadius)
+        {
+            int size = cornerRadius * 2 + 2;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            var pixels = new Color[size * size];
+            float r = cornerRadius;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float px = x + 0.5f;
+                    float py = y + 0.5f;
+
+                    float dx = Mathf.Max(r - px, px - (size - r), 0f);
+                    float dy = Mathf.Max(r - py, py - (size - r), 0f);
+
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    float alpha = Mathf.Clamp01(r - dist + 0.5f);
+
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            float border = cornerRadius;
+            return Sprite.Create(tex,
+                new Rect(0, 0, size, size),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0,
+                SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
+        }
+
+        // ================================================================
         // Element Creators
         // ================================================================
 
-        public static GameObject CreatePanel(Transform parent, string name, Color bgColor)
+        public static GameObject CreatePanel(Transform parent, string name, Color bgColor,
+            int cornerRadius = -1)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
-            go.transform.SetParent(parent, false);
-            go.GetComponent<Image>().color = bgColor;
+            int effectiveRadius = cornerRadius == -1 ? PanelCornerRadius : cornerRadius;
 
-            var outline = go.GetComponent<Outline>();
-            outline.effectColor = new Color(
-                SporefrontColors.InkFaded.r,
-                SporefrontColors.InkFaded.g,
-                SporefrontColors.InkFaded.b, 0.3f);
-            outline.effectDistance = new Vector2(2f, -2f);
+            // Auto-skip rounding for transparent overlays and near-black backdrops
+            bool useRounding = effectiveRadius > 0
+                && bgColor.a >= 0.01f
+                && (bgColor.r + bgColor.g + bgColor.b) >= 0.05f;
 
-            return go;
+            if (useRounding)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Shadow));
+                go.transform.SetParent(parent, false);
+
+                var img = go.GetComponent<Image>();
+                img.color = bgColor;
+                img.sprite = GetRoundedRectSprite(effectiveRadius);
+                img.type = Image.Type.Sliced;
+
+                var shadow = go.GetComponent<Shadow>();
+                shadow.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.25f);
+                shadow.effectDistance = new Vector2(1.5f, -1.5f);
+
+                return go;
+            }
+            else
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
+                go.transform.SetParent(parent, false);
+                go.GetComponent<Image>().color = bgColor;
+
+                var outline = go.GetComponent<Outline>();
+                outline.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.3f);
+                outline.effectDistance = new Vector2(2f, -2f);
+
+                return go;
+            }
         }
 
         public static Text CreateLabel(Transform parent, string text, int fontSize = -1,
@@ -116,13 +206,16 @@ namespace Sporefront.Visual
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
 
-            go.GetComponent<Image>().color = bg;
+            var img = go.GetComponent<Image>();
+            img.color = bg;
+            img.sprite = GetRoundedRectSprite(ButtonCornerRadius);
+            img.type = Image.Type.Sliced;
 
             var btn = go.GetComponent<Button>();
             var colors = btn.colors;
             colors.normalColor = bg;
-            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.15f);
-            colors.pressedColor = Color.Lerp(bg, Color.black, 0.1f);
+            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.2f);
+            colors.pressedColor = Color.Lerp(bg, Color.black, 0.15f);
             colors.disabledColor = new Color(bg.r, bg.g, bg.b, 0.5f);
             btn.colors = colors;
 
@@ -221,12 +314,12 @@ namespace Sporefront.Visual
         public static (Image bg, Image fill) CreateProgressBar(Transform parent, float height = 16f,
             Color? bgColor = null, Color? fillColor = null)
         {
-            var bgGO = CreatePanel(parent, "ProgressBar", bgColor ?? SporefrontColors.InkFaded);
+            var bgGO = CreatePanel(parent, "ProgressBar", bgColor ?? SporefrontColors.InkFaded, SmallCornerRadius);
             var bgRT = bgGO.GetComponent<RectTransform>();
             bgRT.sizeDelta = new Vector2(0, height);
             var bgImg = bgGO.GetComponent<Image>();
 
-            var fillGO = CreatePanel(bgGO.transform, "Fill", fillColor ?? SporefrontColors.SporeGreen);
+            var fillGO = CreatePanel(bgGO.transform, "Fill", fillColor ?? SporefrontColors.SporeGreen, SmallCornerRadius);
             var fillRT = fillGO.GetComponent<RectTransform>();
             fillRT.anchorMin = Vector2.zero;
             fillRT.anchorMax = new Vector2(0, 1);
@@ -250,7 +343,7 @@ namespace Sporefront.Visual
             rt.sizeDelta = new Vector2(0, 20);
 
             // Background
-            var bgGO = CreatePanel(go.transform, "Background", SporefrontColors.InkFaded);
+            var bgGO = CreatePanel(go.transform, "Background", SporefrontColors.InkFaded, SmallCornerRadius);
             var bgRT = bgGO.GetComponent<RectTransform>();
             StretchFull(bgRT);
             bgRT.offsetMin = new Vector2(0, 7);
@@ -264,7 +357,7 @@ namespace Sporefront.Visual
             fillAreaRT.offsetMin = new Vector2(5, 7);
             fillAreaRT.offsetMax = new Vector2(-5, -7);
 
-            var fillGO = CreatePanel(fillAreaGO.transform, "Fill", SporefrontColors.SporeAmber);
+            var fillGO = CreatePanel(fillAreaGO.transform, "Fill", SporefrontColors.SporeAmber, SmallCornerRadius);
             var fillRT = fillGO.GetComponent<RectTransform>();
             fillRT.anchorMin = Vector2.zero;
             fillRT.anchorMax = new Vector2(0, 1);
@@ -278,7 +371,7 @@ namespace Sporefront.Visual
             handleAreaRT.offsetMin = new Vector2(5, 0);
             handleAreaRT.offsetMax = new Vector2(-5, 0);
 
-            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentDeep);
+            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentDeep, SmallCornerRadius);
             var handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.sizeDelta = new Vector2(16, 0);
 
@@ -301,7 +394,7 @@ namespace Sporefront.Visual
         {
             var go = CreatePanel(parent, "Divider",
                 color ?? new Color(SporefrontColors.InkFaded.r, SporefrontColors.InkFaded.g,
-                    SporefrontColors.InkFaded.b, 0.3f));
+                    SporefrontColors.InkFaded.b, 0.3f), 0);
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, height);
             var le = go.AddComponent<LayoutElement>();

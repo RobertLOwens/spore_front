@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: Visual/MenuBarPanel.cs
-// PURPOSE: Top menu bar with navigation buttons for overview panels
-//          Positioned below ResourceBar (y=-40), 32px tall
+// PURPOSE: Bottom navigation bar with 7 tabs for overview panels
+//          Anchored at screen bottom, full width, 48px tall
 // ============================================================================
 
 using System;
@@ -16,11 +16,13 @@ namespace Sporefront.Visual
         // Events
         // ================================================================
 
-        public event Action OnResearchClicked;
-        public event Action OnMilitaryClicked;
-        public event Action OnBuildingsClicked;
         public event Action OnEntitiesClicked;
-        public event Action OnSettingsClicked;
+        public event Action OnBuildingsClicked;
+        public event Action OnCommandersClicked;
+        public event Action OnMilitaryClicked;
+        public event Action OnResourcesClicked;
+        public event Action OnResearchClicked;
+        public event Action OnTrainingClicked;
 
         // ================================================================
         // State
@@ -34,34 +36,30 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            // Full width, 32px, anchored top below ResourceBar (which is 40px)
-            panel = UIHelper.CreatePanel(canvasTransform, "MenuBar", UIHelper.HudBg);
+            // Full width, 48px, anchored bottom
+            panel = UIHelper.CreatePanel(canvasTransform, "BottomNavBar", UIHelper.HudBg, 0);
             var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 1);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(0, -72); // 40 (resource bar) + 32 (this bar)
-            rt.offsetMax = new Vector2(0, -40); // starts at y=-40
+            rt.anchorMin = new Vector2(0, 0);
+            rt.anchorMax = new Vector2(1, 0);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.offsetMin = new Vector2(0, 0);
+            rt.offsetMax = new Vector2(0, 48);
 
             // Horizontal layout
-            var row = UIHelper.CreateHorizontalRow(panel.transform, 32f, 4f);
+            var row = UIHelper.CreateHorizontalRow(panel.transform, 48f, 4f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
-            row.padding = new RectOffset(8, 8, 2, 2);
-            row.childAlignment = TextAnchor.MiddleLeft;
+            row.padding = new RectOffset(8, 8, 4, 4);
+            row.childAlignment = TextAnchor.MiddleCenter;
 
-            // Navigation buttons
-            CreateMenuBarButton(row.transform, "Research", () => OnResearchClicked?.Invoke());
-            CreateMenuBarButton(row.transform, "Military", () => OnMilitaryClicked?.Invoke());
-            CreateMenuBarButton(row.transform, "Buildings", () => OnBuildingsClicked?.Invoke());
-            CreateMenuBarButton(row.transform, "Entities", () => OnEntitiesClicked?.Invoke());
-
-            // Flexible spacer to push Settings to right
-            var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
-            spacer.transform.SetParent(row.transform, false);
-            spacer.GetComponent<LayoutElement>().flexibleWidth = 1;
-
-            CreateMenuBarButton(row.transform, "Settings", () => OnSettingsClicked?.Invoke());
+            // Navigation buttons (equal width via flexibleWidth)
+            CreateNavButton(row.transform, "Entities", () => OnEntitiesClicked?.Invoke());
+            CreateNavButton(row.transform, "Buildings", () => OnBuildingsClicked?.Invoke());
+            CreateNavButton(row.transform, "Commanders", () => OnCommandersClicked?.Invoke());
+            CreateNavButton(row.transform, "Military", () => OnMilitaryClicked?.Invoke());
+            CreateNavButton(row.transform, "Resources", () => OnResourcesClicked?.Invoke());
+            CreateNavButton(row.transform, "Research", () => OnResearchClicked?.Invoke());
+            CreateNavButton(row.transform, "Training", () => OnTrainingClicked?.Invoke());
 
             panel.SetActive(false);
         }
@@ -78,14 +76,14 @@ namespace Sporefront.Visual
         // Helpers
         // ================================================================
 
-        private Button CreateMenuBarButton(Transform parent, string text, Action onClick)
+        private Button CreateNavButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
                 SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
                 12, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
-            le.preferredWidth = 80;
-            le.preferredHeight = 28;
+            le.flexibleWidth = 1;
+            le.preferredHeight = 40;
             return btn;
         }
     }

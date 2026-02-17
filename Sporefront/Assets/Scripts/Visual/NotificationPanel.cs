@@ -62,7 +62,7 @@ namespace Sporefront.Visual
             rt.anchorMin = new Vector2(1, 1);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(1, 1);
-            rt.anchoredPosition = new Vector2(-10, -50); // Below resource bar
+            rt.anchoredPosition = new Vector2(-10, -70); // Below resource bar + top-right buttons
             rt.sizeDelta = new Vector2(BannerWidth, 300);
         }
 
