@@ -159,6 +159,21 @@ namespace Sporefront.Visual
                 BuildTrainingSection(building, gameState, player);
                 UIHelper.CreateDivider(contentRT);
 
+                // Market section
+                if (building.buildingType == BuildingType.Market)
+                {
+                    BuildMarketSection(building, gameState, player);
+                    UIHelper.CreateDivider(contentRT);
+                }
+
+                // Unit upgrades section (military production buildings)
+                var availableUpgrades = UnitUpgradeTypeExtensions.UpgradesForBuilding(building.buildingType);
+                if (availableUpgrades.Count > 0)
+                {
+                    BuildUnitUpgradesSection(building, gameState, player, availableUpgrades);
+                    UIHelper.CreateDivider(contentRT);
+                }
+
                 // Garrison section
                 BuildGarrisonSection(building);
                 UIHelper.CreateDivider(contentRT);
@@ -166,6 +181,14 @@ namespace Sporefront.Visual
                 // Deploy section
                 BuildDeploySection(building, gameState);
                 UIHelper.CreateDivider(contentRT);
+
+                // Home base section
+                int? homeBaseCapacity = building.GetArmyHomeBaseCapacity();
+                if (homeBaseCapacity.HasValue || building.buildingType == BuildingType.CityCenter)
+                {
+                    BuildHomeBaseSection(building, gameState);
+                    UIHelper.CreateDivider(contentRT);
+                }
 
                 // Upgrade section
                 BuildUpgradeSection(building, player);
@@ -415,6 +438,331 @@ namespace Sporefront.Visual
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
                 barLE.preferredHeight = 14;
+            }
+        }
+
+        // ================================================================
+        // Market Section
+        // ================================================================
+
+        private Dictionary<ResourceType, int> tradeInputAmounts = new Dictionary<ResourceType, int>();
+        private ResourceType tradeOutputType = ResourceType.Food;
+        private Text tradePreviewLabel;
+
+        private void BuildMarketSection(BuildingData building, GameState gameState, PlayerState player)
+        {
+            var sectionLabel = UIHelper.CreateLabel(contentRT, "Trade Resources",
+                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 24;
+
+            var rateLabel = UIHelper.CreateLabel(contentRT, "Exchange Rate: 80%", 11,
+                SporefrontColors.InkLight);
+            var rateLE = rateLabel.gameObject.AddComponent<LayoutElement>();
+            rateLE.preferredHeight = 18;
+
+            // Input sliders for each resource
+            tradeInputAmounts.Clear();
+            var resourceTypes = (ResourceType[])Enum.GetValues(typeof(ResourceType));
+            foreach (var rt in resourceTypes)
+            {
+                int available = player != null ? player.GetResource(rt) : 0;
+                tradeInputAmounts[rt] = 0;
+
+                var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
+
+                var nameLabel = UIHelper.CreateLabel(row.transform,
+                    $"{UIHelper.ResourceIcon(rt)} {rt}", 12);
+                var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+                nameLE.preferredWidth = 60;
+
+                var capturedRT = rt;
+                var amountLabel = UIHelper.CreateLabel(row.transform, "0", 12,
+                    SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+                var amountLE = amountLabel.gameObject.AddComponent<LayoutElement>();
+                amountLE.preferredWidth = 30;
+
+                if (available > 0)
+                {
+                    var slider = UIHelper.CreateSlider(row.transform, 0, available, true, (val) =>
+                    {
+                        tradeInputAmounts[capturedRT] = (int)val;
+                        amountLabel.text = ((int)val).ToString();
+                        UpdateTradePreview();
+                    });
+                    var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
+                    sliderLE.flexibleWidth = 1;
+                    sliderLE.preferredHeight = 20;
+                }
+                else
+                {
+                    var emptyLabel = UIHelper.CreateLabel(row.transform, "(none)", 11,
+                        SporefrontColors.InkFaded);
+                    var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
+                    emptyLE.flexibleWidth = 1;
+                }
+
+                var maxLabel = UIHelper.CreateLabel(row.transform, $"/{available}", 10,
+                    SporefrontColors.InkFaded);
+                var maxLE = maxLabel.gameObject.AddComponent<LayoutElement>();
+                maxLE.preferredWidth = 40;
+            }
+
+            // Output type selection
+            var outputHeader = UIHelper.CreateLabel(contentRT, "Receive:", 12,
+                UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+            var outputHeaderLE = outputHeader.gameObject.AddComponent<LayoutElement>();
+            outputHeaderLE.preferredHeight = 22;
+
+            var outputRow = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
+            foreach (var rt in resourceTypes)
+            {
+                var capturedRT = rt;
+                bool isSelected = (rt == tradeOutputType);
+                var btn = UIHelper.CreateButton(outputRow.transform,
+                    UIHelper.ResourceIcon(rt),
+                    isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
+                    isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText, 12, () =>
+                    {
+                        tradeOutputType = capturedRT;
+                        if (currentBuildingID.HasValue)
+                            Rebuild(GameEngine.Instance.gameState);
+                    });
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 40;
+                btnLE.preferredHeight = 28;
+            }
+
+            // Preview
+            tradePreviewLabel = UIHelper.CreateLabel(contentRT, "Select resources to trade", 12,
+                SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+            var previewLE = tradePreviewLabel.gameObject.AddComponent<LayoutElement>();
+            previewLE.preferredHeight = 22;
+            UpdateTradePreview();
+
+            // Execute button
+            var tradeBtn = UIHelper.CreateButton(contentRT, "Execute Trade",
+                SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                {
+                    if (!currentBuildingID.HasValue) return;
+                    var inputs = new Dictionary<ResourceType, int>();
+                    foreach (var kvp in tradeInputAmounts)
+                    {
+                        if (kvp.Value > 0 && kvp.Key != tradeOutputType)
+                            inputs[kvp.Key] = kvp.Value;
+                    }
+                    if (inputs.Count == 0) return;
+                    var cmd = new MarketTradeCommand(localPlayerID, currentBuildingID.Value,
+                        inputs, tradeOutputType);
+                    GameEngine.Instance.ExecuteCommand(cmd);
+                });
+            var tradeBtnLE = tradeBtn.gameObject.AddComponent<LayoutElement>();
+            tradeBtnLE.preferredHeight = 32;
+        }
+
+        private void UpdateTradePreview()
+        {
+            if (tradePreviewLabel == null) return;
+            int totalInput = 0;
+            foreach (var kvp in tradeInputAmounts)
+            {
+                if (kvp.Key != tradeOutputType)
+                    totalInput += kvp.Value;
+            }
+            if (totalInput <= 0)
+            {
+                tradePreviewLabel.text = "Select resources to trade";
+                return;
+            }
+            int output = MarketTradeCommand.CalculateOutput(totalInput);
+            tradePreviewLabel.text = $"{totalInput} input -> {output} {UIHelper.ResourceIcon(tradeOutputType)}";
+        }
+
+        // ================================================================
+        // Unit Upgrades Section
+        // ================================================================
+
+        private void BuildUnitUpgradesSection(BuildingData building, GameState gameState,
+            PlayerState player, List<UnitUpgradeType> upgrades)
+        {
+            var sectionLabel = UIHelper.CreateLabel(contentRT, "Unit Upgrades",
+                UIHelper.DefaultHeaderFontSize - 2, SporefrontColors.SporeAmber,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 24;
+
+            // Group by unit type
+            MilitaryUnitType? currentUnit = null;
+            foreach (var upgrade in upgrades)
+            {
+                var unitType = upgrade.GetUnitType();
+                if (!currentUnit.HasValue || currentUnit.Value != unitType)
+                {
+                    currentUnit = unitType;
+                    int tier = player != null ? player.GetUnitUpgradeTier(unitType) : 0;
+                    var unitHeader = UIHelper.CreateLabel(contentRT,
+                        $"{unitType.DisplayName()} (Tier {tier})", 12,
+                        SporefrontColors.InkDark, TextAnchor.MiddleLeft, true);
+                    var unitHeaderLE = unitHeader.gameObject.AddComponent<LayoutElement>();
+                    unitHeaderLE.preferredHeight = 20;
+                }
+
+                bool completed = player != null && player.HasCompletedUnitUpgrade(upgrade.ToString());
+                bool isActive = player != null && player.activeUnitUpgrade == upgrade.ToString();
+                bool prereqMet = true;
+                var prereq = upgrade.Prerequisite();
+                if (prereq.HasValue && player != null)
+                    prereqMet = player.HasCompletedUnitUpgrade(prereq.Value.ToString());
+                bool levelMet = building.level >= upgrade.RequiredBuildingLevel();
+                bool canStart = !completed && !isActive && prereqMet && levelMet
+                    && player != null && !player.IsUnitUpgradeActive()
+                    && player.CanAfford(upgrade.Cost());
+
+                var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
+
+                // Status indicator
+                string statusText;
+                Color statusColor;
+                if (completed)
+                {
+                    statusText = "Done";
+                    statusColor = SporefrontColors.SporeGreen;
+                }
+                else if (isActive)
+                {
+                    statusText = "Active";
+                    statusColor = SporefrontColors.SporeTeal;
+                }
+                else if (!prereqMet || !levelMet)
+                {
+                    statusText = "Locked";
+                    statusColor = SporefrontColors.InkFaded;
+                }
+                else
+                {
+                    statusText = $"Tier {upgrade.Tier()}";
+                    statusColor = SporefrontColors.InkMid;
+                }
+
+                var statusLabel = UIHelper.CreateLabel(row.transform, statusText, 11, statusColor);
+                var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
+                statusLE.preferredWidth = 45;
+
+                // Cost
+                if (!completed)
+                {
+                    var cost = upgrade.Cost();
+                    var costLabel = UIHelper.CreateLabel(row.transform, FormatCost(cost), 10,
+                        (canStart || isActive) ? SporefrontColors.InkLight : SporefrontColors.InkFaded);
+                    costLabel.supportRichText = true;
+                    var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
+                    costLE.flexibleWidth = 1;
+                }
+                else
+                {
+                    var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
+                    spacer.transform.SetParent(row.transform, false);
+                    spacer.GetComponent<LayoutElement>().flexibleWidth = 1;
+                }
+
+                // Action button
+                if (!completed && !isActive)
+                {
+                    var capturedUpgrade = upgrade;
+                    var btn = UIHelper.CreateButton(row.transform, "Upgrade",
+                        canStart ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
+                        canStart ? UIHelper.ButtonText : SporefrontColors.InkLight, 11, () =>
+                        {
+                            if (!currentBuildingID.HasValue) return;
+                            var cmd = new UpgradeUnitCommand(localPlayerID,
+                                capturedUpgrade.ToString(), currentBuildingID.Value);
+                            GameEngine.Instance.ExecuteCommand(cmd);
+                        });
+                    btn.interactable = canStart;
+                    var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                    btnLE.preferredWidth = 60;
+                }
+
+                // Active progress bar
+                if (isActive && player.activeUnitUpgradeStartTime.HasValue)
+                {
+                    double elapsed = gameState.currentTime - player.activeUnitUpgradeStartTime.Value;
+                    double total = upgrade.UpgradeTime();
+                    double pct = Math.Min(1.0, elapsed / total);
+                    double remaining = Math.Max(0, total - elapsed);
+
+                    var progressRow = UIHelper.CreateHorizontalRow(contentRT, 16f, 4f);
+                    var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
+                        SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+                    var fillRT = fill.GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)pct), 1);
+                    var barLE = bg.gameObject.AddComponent<LayoutElement>();
+                    barLE.flexibleWidth = 1;
+                    barLE.preferredHeight = 12;
+
+                    var timeLabel = UIHelper.CreateLabel(progressRow.transform,
+                        $"{(int)remaining}s", 10, SporefrontColors.InkLight);
+                    var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
+                    timeLE.preferredWidth = 30;
+                }
+            }
+        }
+
+        // ================================================================
+        // Home Base Section
+        // ================================================================
+
+        private void BuildHomeBaseSection(BuildingData building, GameState gameState)
+        {
+            var sectionLabel = UIHelper.CreateLabel(contentRT, "Home Base",
+                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 24;
+
+            int? capacity = building.GetArmyHomeBaseCapacity();
+            int count = gameState.GetArmyCountForHomeBase(building.id);
+
+            string capacityText = capacity.HasValue
+                ? $"Army Capacity: {count}/{capacity.Value}"
+                : $"Army Capacity: {count} (Unlimited)";
+
+            var capLabel = UIHelper.CreateLabel(contentRT, capacityText, 12, SporefrontColors.InkMid);
+            var capLE = capLabel.gameObject.AddComponent<LayoutElement>();
+            capLE.preferredHeight = 20;
+
+            var armies = gameState.GetArmiesForHomeBase(building.id);
+            if (armies.Count == 0)
+            {
+                var emptyLabel = UIHelper.CreateLabel(contentRT, "No armies based here", 11,
+                    SporefrontColors.InkFaded);
+                var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
+                emptyLE.preferredHeight = 18;
+            }
+            else
+            {
+                foreach (var army in armies)
+                {
+                    var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
+
+                    var nameLabel = UIHelper.CreateLabel(row.transform,
+                        army.name ?? "Army", 12, SporefrontColors.InkDark);
+                    var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+                    nameLE.flexibleWidth = 1;
+
+                    int totalUnits = army.GetTotalUnits();
+                    var unitsLabel = UIHelper.CreateLabel(row.transform,
+                        $"{totalUnits} units", 11, SporefrontColors.InkLight);
+                    var unitsLE = unitsLabel.gameObject.AddComponent<LayoutElement>();
+                    unitsLE.preferredWidth = 60;
+
+                    var coordLabel = UIHelper.CreateLabel(row.transform,
+                        $"({army.coordinate.q},{army.coordinate.r})", 10,
+                        SporefrontColors.InkFaded);
+                    var coordLE = coordLabel.gameObject.AddComponent<LayoutElement>();
+                    coordLE.preferredWidth = 50;
+                }
             }
         }
 

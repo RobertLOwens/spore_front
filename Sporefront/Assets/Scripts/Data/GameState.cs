@@ -266,6 +266,21 @@ namespace Sporefront.Data
             return nearest;
         }
 
+        public BuildingData FindResearchBuilding(Guid playerID)
+        {
+            foreach (var b in buildings.Values)
+            {
+                if (b.ownerID.HasValue && b.ownerID.Value == playerID &&
+                    b.IsOperational &&
+                    (b.buildingType == BuildingType.University ||
+                     b.buildingType == BuildingType.Library))
+                {
+                    return b;
+                }
+            }
+            return null;
+        }
+
         public BuildingData GetBuilding(Guid id)
         {
             BuildingData building;
