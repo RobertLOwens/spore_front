@@ -26,6 +26,7 @@ namespace Sporefront.Visual
         public event Action<Guid> OnArmyMoveRequested;
         public event Action<Guid, HexCoordinate> OnAttackRequested;
         public event Action<Guid, Guid> OnGatherRequested; // villagerGroupID, resourcePointID
+        public event Action<Guid> OnHuntRequested; // resourcePointID — opens GatherPanel in hunt mode
         public event Action<Guid, HexCoordinate, bool> OnMoveEntityToTile; // entityID, destination, isArmy
 
         // ================================================================
@@ -57,13 +58,13 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            // Right-anchored panel, 260px wide
+            // Right-anchored panel
             panel = UIHelper.CreatePanel(canvasTransform, "TileInfoPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(1, 0);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(1, 0.5f);
-            rt.offsetMin = new Vector2(-260, 50); // 50px bottom margin
+            rt.offsetMin = new Vector2(-UIConstants.SidePanelWidth, 50); // bottom margin
             rt.offsetMax = new Vector2(0, -70);    // 70px top margin (below resource bar)
 
             // ScrollView
@@ -128,11 +129,15 @@ namespace Sporefront.Visual
             buildingHPFill = null;
 
             // Move selection view — show entity list instead of normal content
+            var panelImg = panel.GetComponent<Image>();
             if (showingMoveSelection)
             {
+                // Subtle tint to distinguish sub-flow
+                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeTeal, 0.06f);
                 BuildMoveSelectionView(gameState, coord);
                 return;
             }
+            panelImg.color = UIHelper.PanelBg;
 
             var tileNullable = gameState.mapData.GetTile(coord);
             if (!tileNullable.HasValue) return;
@@ -307,7 +312,7 @@ namespace Sporefront.Visual
         private void BuildArmiesSection(List<ArmyData> armies, GameState gameState)
         {
             var sectionHeader = UIHelper.CreateLabel(contentRT, "Armies",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 22;
@@ -315,13 +320,14 @@ namespace Sporefront.Visual
             foreach (var army in armies)
             {
                 bool isOwned = army.ownerID.HasValue && army.ownerID.Value == localPlayerID;
-                string status = army.isEntrenched ? " [E]" : army.isInCombat ? " [C]" : "";
+                string status = UIHelper.FormatArmyStatus(army);
                 int total = army.GetTotalUnits();
 
                 var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
 
                 var nameLabel = UIHelper.CreateLabel(row.transform,
                     $"{army.name}{status} ({total})", 12);
+                nameLabel.supportRichText = true;
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.flexibleWidth = 1;
                 nameLE.preferredHeight = 26;
@@ -361,7 +367,7 @@ namespace Sporefront.Visual
         private void BuildVillagersSection(List<VillagerGroupData> groups, HexCoordinate coord)
         {
             var sectionHeader = UIHelper.CreateLabel(contentRT, "Villagers",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 22;
@@ -398,22 +404,38 @@ namespace Sporefront.Visual
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
             labelLE.preferredHeight = 22;
 
-            // Gather button if local player has villagers nearby
-            var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-            if (villagers != null)
+            bool isHuntable = rp.resourceType.IsHuntable() && rp.currentHealth > 0;
+
+            if (isHuntable)
             {
-                foreach (var vg in villagers)
+                // Hunt button — opens GatherPanel in hunt mode with villager selection
+                var capturedRPID = rp.id;
+                var huntBtn = UIHelper.CreateButton(contentRT, "Hunt",
+                    SporefrontColors.SporeRed,
+                    UIHelper.HudTextColor, 12,
+                    () => OnHuntRequested?.Invoke(capturedRPID));
+                var btnLE = huntBtn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredHeight = 28;
+            }
+            else
+            {
+                // Gather button if local player has villagers nearby
+                var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+                if (villagers != null)
                 {
-                    if (vg.coordinate.Distance(rp.coordinate) <= 2 &&
-                        (vg.currentTask == null || vg.currentTask.IsIdle))
+                    foreach (var vg in villagers)
                     {
-                        var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
-                            SporefrontColors.SporeGreen,
-                            UIHelper.HudTextColor, 12,
-                            () => OnGatherRequested?.Invoke(vg.id, rp.id));
-                        var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
-                        btnLE.preferredHeight = 28;
-                        break; // One gather button is enough
+                        if (vg.coordinate.Distance(rp.coordinate) <= 2 &&
+                            (vg.currentTask == null || vg.currentTask.IsIdle))
+                        {
+                            var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
+                                SporefrontColors.SporeGreen,
+                                UIHelper.HudTextColor, 12,
+                                () => OnGatherRequested?.Invoke(vg.id, rp.id));
+                            var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
+                            btnLE.preferredHeight = 28;
+                            break;
+                        }
                     }
                 }
             }
@@ -421,10 +443,20 @@ namespace Sporefront.Visual
 
         private void BuildMoveSelectionView(GameState gameState, HexCoordinate coord)
         {
-            // Header
-            var header = UIHelper.CreateLabel(contentRT, $"Move to ({coord.q},{coord.r})",
+            // Breadcrumb header with back arrow
+            var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
+
+            var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                () => { showingMoveSelection = false; Rebuild(cachedGameState); });
+            var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
+            arrowLE.preferredWidth = 28;
+            arrowLE.preferredHeight = 28;
+
+            var header = UIHelper.CreateLabel(headerRow.transform, $"Move to ({coord.q},{coord.r})",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
+            headerLE.flexibleWidth = 1;
             headerLE.preferredHeight = 30;
 
             UIHelper.CreateDivider(contentRT);
@@ -440,7 +472,7 @@ namespace Sporefront.Visual
                     if (!hasArmies)
                     {
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Armies",
-                            UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
                         shLE.preferredHeight = 22;
@@ -483,7 +515,7 @@ namespace Sporefront.Visual
                     {
                         if (hasArmies) UIHelper.CreateDivider(contentRT);
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Villagers",
-                            UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
                         shLE.preferredHeight = 22;
@@ -522,14 +554,6 @@ namespace Sporefront.Visual
                 emptyLE.preferredHeight = 30;
             }
 
-            UIHelper.CreateDivider(contentRT);
-
-            // Back button
-            var backBtn = UIHelper.CreateButton(contentRT, "Back",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, -1,
-                () => { showingMoveSelection = false; Rebuild(cachedGameState); });
-            var backBtnLE = backBtn.gameObject.AddComponent<LayoutElement>();
-            backBtnLE.preferredHeight = 32;
         }
     }
 }

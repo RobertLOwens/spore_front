@@ -78,6 +78,9 @@ namespace Sporefront.Data
         // Arrival time (transient)
         [System.NonSerialized] public double arrivalTime;
 
+        // Movement speed (transient, for visual interpolation)
+        [System.NonSerialized] public double movementSpeed;
+
         // Stamina
         public double currentStamina = 100.0;
         public double maxStamina = 100.0;

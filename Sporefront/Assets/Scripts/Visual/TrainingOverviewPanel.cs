@@ -54,7 +54,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 420x480
             panel = UIHelper.CreatePanel(backdrop.transform, "TrainingOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 420, 480);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Active Training",
@@ -146,7 +146,7 @@ namespace Sporefront.Visual
             {
                 var sectionLabel = UIHelper.CreateLabel(contentRT,
                     $"Military Training ({militaryTrainingBuildings.Count})",
-                    UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                    UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                     TextAnchor.MiddleLeft, true);
                 var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                 sectionLE.preferredHeight = 26;
@@ -173,7 +173,7 @@ namespace Sporefront.Visual
             {
                 var sectionLabel = UIHelper.CreateLabel(contentRT,
                     $"Villager Training ({villagerTrainingBuildings.Count})",
-                    UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                    UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                     TextAnchor.MiddleLeft, true);
                 var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                 sectionLE.preferredHeight = 26;
@@ -271,22 +271,16 @@ namespace Sporefront.Visual
             double elapsed = gameState.currentTime - entry.startTime;
             double remaining = Math.Max(0, totalTime - elapsed);
 
-            string timeStr = remaining > 60 ? $"{(int)(remaining / 60)}m {(int)(remaining % 60)}s"
-                : $"{(int)remaining}s";
-
             var timeLabel = UIHelper.CreateLabel(card.transform,
-                $"Time remaining: {timeStr}", 10, SporefrontColors.InkLight);
+                $"~{UIHelper.FormatTime(remaining)} remaining",
+                UIConstants.FontCaption, SporefrontColors.InkLight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 16;
 
             // Make card tappable to open building detail
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedBuildingID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedBuildingID));
@@ -353,22 +347,16 @@ namespace Sporefront.Visual
             double elapsed = gameState.currentTime - entry.startTime;
             double remaining = Math.Max(0, totalTime - elapsed);
 
-            string timeStr = remaining > 60 ? $"{(int)(remaining / 60)}m {(int)(remaining % 60)}s"
-                : $"{(int)remaining}s";
-
             var timeLabel = UIHelper.CreateLabel(card.transform,
-                $"Time remaining: {timeStr}", 10, SporefrontColors.InkLight);
+                $"~{UIHelper.FormatTime(remaining)} remaining",
+                UIConstants.FontCaption, SporefrontColors.InkLight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 16;
 
             // Make card tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedBuildingID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedBuildingID));

@@ -124,6 +124,9 @@ namespace Sporefront.Engine
                 }
             }
 
+            // Store speed for visual interpolation
+            army.movementSpeed = speed;
+
             // Update progress (0.1 second update interval)
             army.movementProgress += speed * 0.1;
 
@@ -151,6 +154,7 @@ namespace Sporefront.Engine
                 {
                     army.currentPath = null;
                     army.pathIndex = 0;
+                    army.movementSpeed = 0.0;
                     bool wasRetreating = army.isRetreating;
                     army.isRetreating = false;
 
@@ -195,6 +199,9 @@ namespace Sporefront.Engine
                 speed = baseMovementSpeed * villagerMultiplier * terrainSpeedMultiplier;
             }
 
+            // Store speed for visual interpolation
+            group.movementSpeed = speed;
+
             // Update progress
             group.movementProgress += speed * 0.1;
 
@@ -222,6 +229,7 @@ namespace Sporefront.Engine
                 {
                     group.currentPath = null;
                     group.pathIndex = 0;
+                    group.movementSpeed = 0.0;
 
                     // Clear moving task if that was the current task
                     if (group.currentTask is MovingTask)
@@ -407,6 +415,7 @@ namespace Sporefront.Engine
             army.currentPath = null;
             army.pathIndex = 0;
             army.movementProgress = 0.0;
+            army.movementSpeed = 0.0;
             army.isRetreating = false;
         }
 
@@ -423,6 +432,7 @@ namespace Sporefront.Engine
             group.currentPath = null;
             group.pathIndex = 0;
             group.movementProgress = 0.0;
+            group.movementSpeed = 0.0;
 
             if (group.currentTask is MovingTask)
             {

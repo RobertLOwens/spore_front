@@ -52,7 +52,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 440x560
             panel = UIHelper.CreatePanel(backdrop.transform, "MilitaryOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 440, 560);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalLargeH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Military Overview",
@@ -196,7 +196,7 @@ namespace Sporefront.Visual
                 // Category header
                 var catHeader = UIHelper.CreateLabel(contentRT,
                     $"{CategoryDisplayName(category)} ({categoryTotals[category]})",
-                    UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                    UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                     TextAnchor.MiddleLeft, true);
                 var catHeaderLE = catHeader.gameObject.AddComponent<LayoutElement>();
                 catHeaderLE.preferredHeight = 26;
@@ -231,7 +231,7 @@ namespace Sporefront.Visual
 
             var totalLabel = UIHelper.CreateLabel(card.transform,
                 $"Total Military: {totalUnits} units",
-                UIHelper.DefaultHeaderFontSize - 1, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var totalLE = totalLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.preferredHeight = 24;
@@ -338,7 +338,7 @@ namespace Sporefront.Visual
             var costRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
             var cost = unitType.TrainingCost();
             var costLabel = UIHelper.CreateLabel(costRow.transform,
-                $"Cost: {FormatCost(cost)}", 10, SporefrontColors.InkLight);
+                $"Cost: {UIHelper.FormatCost(cost)}", 10, SporefrontColors.InkLight);
             costLabel.supportRichText = true;
             var costLabelLE = costLabel.gameObject.AddComponent<LayoutElement>();
             costLabelLE.flexibleWidth = 1;
@@ -379,15 +379,5 @@ namespace Sporefront.Visual
             }
         }
 
-        private string FormatCost(Dictionary<ResourceType, int> cost)
-        {
-            var parts = new List<string>();
-            foreach (var kvp in cost)
-            {
-                if (kvp.Value > 0)
-                    parts.Add($"{UIHelper.ResourceIcon(kvp.Key)}{kvp.Value}");
-            }
-            return string.Join(" ", parts);
-        }
     }
 }

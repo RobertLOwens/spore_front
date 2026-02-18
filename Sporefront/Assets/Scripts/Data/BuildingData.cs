@@ -83,14 +83,14 @@ namespace Sporefront.Data
 
         // Construction Logic
 
-        public void StartConstruction(int builders = 1)
+        public void StartConstruction(double currentTime, int builders = 1)
         {
             state = BuildingState.Constructing;
-            constructionStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            constructionStartTime = currentTime;
             buildersAssigned = Math.Max(1, builders);
             constructionProgress = 0.0;
             constructionHP = 0.0;
-            lastConstructionUpdateTime = constructionStartTime;
+            lastConstructionUpdateTime = currentTime;
         }
 
         public bool UpdateConstruction(double currentTime)
@@ -172,11 +172,20 @@ namespace Sporefront.Data
             return buildingType.UpgradeTime(level);
         }
 
-        public void StartUpgrade()
+        public double? GetRemainingUpgradeTime(double currentTime)
+        {
+            if (state != BuildingState.Upgrading || !upgradeStartTime.HasValue) return null;
+            double? upgradeTime = GetUpgradeTime();
+            if (!upgradeTime.HasValue) return null;
+            double elapsed = currentTime - upgradeStartTime.Value;
+            return Math.Max(0, upgradeTime.Value - elapsed);
+        }
+
+        public void StartUpgrade(double currentTime)
         {
             if (!CanUpgrade || state != BuildingState.Completed) return;
             state = BuildingState.Upgrading;
-            upgradeStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            upgradeStartTime = currentTime;
             upgradeProgress = 0.0;
         }
 
@@ -232,11 +241,11 @@ namespace Sporefront.Data
 
         public bool CanDemolish => buildingType != BuildingType.CityCenter && state == BuildingState.Completed;
 
-        public void StartDemolition(int demolishers = 1)
+        public void StartDemolition(double currentTime, int demolishers = 1)
         {
             if (!CanDemolish) return;
             state = BuildingState.Demolishing;
-            demolitionStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            demolitionStartTime = currentTime;
             demolishersAssigned = Math.Max(1, demolishers);
             demolitionProgress = 0.0;
         }

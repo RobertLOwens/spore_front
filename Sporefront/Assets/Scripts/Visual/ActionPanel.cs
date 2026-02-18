@@ -34,6 +34,7 @@ namespace Sporefront.Visual
 
         public event Action OnCancelled;
         public event Action<HexCoordinate, List<HexCoordinate>> OnBuildPreviewChanged;
+        public event Action<BuildingType, HexCoordinate, int> OnBuildTypeSelected;
 
         // ================================================================
         // State
@@ -230,7 +231,7 @@ namespace Sporefront.Visual
                 nameLE.flexibleWidth = 1;
 
                 // Cost string
-                string costStr = FormatCost(cost, canAfford);
+                string costStr = UIHelper.FormatCost(cost);
                 var costLabel = UIHelper.CreateLabel(nameRow.transform, costStr, 10,
                     canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
                 costLabel.supportRichText = true;
@@ -268,10 +269,10 @@ namespace Sporefront.Visual
                 {
                     var capturedType = bt;
                     var capturedCoord = buildCoord.Value;
+                    var capturedRotation = buildRotation;
                     buildBtn.onClick.AddListener(() =>
                     {
-                        var cmd = new BuildCommand(localPlayerID, capturedType, capturedCoord, buildRotation);
-                        GameEngine.Instance.ExecuteCommand(cmd);
+                        OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, capturedRotation);
                         Cancel();
                     });
                 }
@@ -326,19 +327,5 @@ namespace Sporefront.Visual
             if (label != null) label.text = message;
         }
 
-        // ================================================================
-        // Helpers
-        // ================================================================
-
-        private string FormatCost(Dictionary<ResourceType, int> cost, bool canAfford)
-        {
-            var parts = new List<string>();
-            foreach (var kvp in cost)
-            {
-                if (kvp.Value > 0)
-                    parts.Add($"{UIHelper.ResourceIcon(kvp.Key)}{kvp.Value}");
-            }
-            return string.Join(" ", parts);
-        }
     }
 }

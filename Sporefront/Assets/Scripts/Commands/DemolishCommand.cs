@@ -48,7 +48,7 @@ namespace Sporefront.Commands
             var building = state.GetBuilding(buildingID);
 
             // Start demolition
-            building.StartDemolition(1);
+            building.StartDemolition(state.currentTime, 1);
 
             // Emit state change
             changeBuilder.Add(new BuildingDemolitionStartedChange

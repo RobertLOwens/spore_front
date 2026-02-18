@@ -82,6 +82,8 @@ namespace Sporefront.Visual
         private GatherPanel gatherPanel;
         private ReinforcePanel reinforcePanel;
         private VillagerDeployPanel villagerDeploy;
+        private BuildVillagerSelectPanel buildVillagerSelect;
+        private UpgradeVillagerSelectPanel upgradeVillagerSelect;
 
         // ================================================================
         // Settings & Notifications
@@ -98,6 +100,12 @@ namespace Sporefront.Visual
         private GenomeSelectionPanel genomeSelection;
         private ArenaResultsPanel arenaResults;
         private SpectatorOverlay spectatorOverlay;
+
+        // ================================================================
+        // Tooltip
+        // ================================================================
+
+        private TooltipManager tooltip;
 
         // ================================================================
         // State
@@ -248,6 +256,12 @@ namespace Sporefront.Visual
             villagerDeploy = CreatePanelComponent<VillagerDeployPanel>("VillagerDeploy");
             InitPanel("VillagerDeploy", () => villagerDeploy.Initialize(ct, localPlayerID));
 
+            buildVillagerSelect = CreatePanelComponent<BuildVillagerSelectPanel>("BuildVillagerSelect");
+            InitPanel("BuildVillagerSelect", () => buildVillagerSelect.Initialize(ct, localPlayerID));
+
+            upgradeVillagerSelect = CreatePanelComponent<UpgradeVillagerSelectPanel>("UpgradeVillagerSelect");
+            InitPanel("UpgradeVillagerSelect", () => upgradeVillagerSelect.Initialize(ct, localPlayerID));
+
             // ---- Settings & Notifications ----
 
             settings = CreatePanelComponent<SettingsPanel>("Settings");
@@ -283,6 +297,10 @@ namespace Sporefront.Visual
 
             about = CreatePanelComponent<AboutPanel>("About");
             InitPanel("About", () => about.Initialize(ct));
+
+            // ---- Tooltip (last, so it renders on top) ----
+            tooltip = CreatePanelComponent<TooltipManager>("Tooltip");
+            InitPanel("Tooltip", () => tooltip.Initialize(canvas));
         }
 
         private void InitPanel(string name, Action initialize)
@@ -325,6 +343,10 @@ namespace Sporefront.Visual
                 var cmd = new GatherCommand(localPlayerID, vgID, rpID);
                 GameEngine.Instance.ExecuteCommand(cmd);
             };
+            tileInfo.OnHuntRequested += (rpID) =>
+            {
+                gatherPanel.Show(gameState, rpID);
+            };
             tileInfo.OnMoveEntityToTile += (entityID, destination, isArmy) =>
             {
                 var cmd = new MoveCommand(localPlayerID, entityID, destination, isArmy);
@@ -357,6 +379,33 @@ namespace Sporefront.Visual
                 selectionRenderer.ShowBuildPreview(occupied, valid);
             };
             actionPanel.OnCancelled += () => selectionRenderer.ClearBuildPreview();
+            actionPanel.OnBuildTypeSelected += (buildingType, coord, rotation) =>
+            {
+                buildVillagerSelect.Show(gameState, buildingType, coord, rotation);
+            };
+
+            // ---- BuildVillagerSelectPanel ----
+            buildVillagerSelect.OnVillagerSelected += (vgID, buildingType, coord, rotation) =>
+            {
+                var cmd = new BuildCommand(localPlayerID, buildingType, coord, rotation, vgID);
+                GameEngine.Instance.ExecuteCommand(cmd);
+                selectionRenderer.ClearBuildPreview();
+            };
+            buildVillagerSelect.OnClose += () => selectionRenderer.ClearBuildPreview();
+
+            // ---- BuildingDetailPanel upgrade flow ----
+            buildingDetail.OnUpgradeRequested += (buildingID, buildingType, coord, level) =>
+            {
+                upgradeVillagerSelect.Show(gameState, buildingID, buildingType, coord, level);
+            };
+
+            // ---- UpgradeVillagerSelectPanel ----
+            upgradeVillagerSelect.OnVillagerSelected += (vgID, buildingID) =>
+            {
+                var cmd = new UpgradeCommand(localPlayerID, buildingID, vgID);
+                GameEngine.Instance.ExecuteCommand(cmd);
+            };
+            upgradeVillagerSelect.OnClose += () => { };
 
             // ---- NotificationPanel (toast) ----
             notifications.OnNotificationClicked += (coord) =>
@@ -476,8 +525,7 @@ namespace Sporefront.Visual
             };
             gatherPanel.OnHuntConfirmed += (vgID, rpID) =>
             {
-                // Hunt uses same gather command - resource engine handles the difference
-                var cmd = new GatherCommand(localPlayerID, vgID, rpID);
+                var cmd = new HuntCommand(localPlayerID, vgID, rpID);
                 GameEngine.Instance.ExecuteCommand(cmd);
                 gatherPanel.Hide();
             };
@@ -603,6 +651,8 @@ namespace Sporefront.Visual
             gatherPanel.UpdateLocalPlayerID(localPlayerID);
             reinforcePanel.UpdateLocalPlayerID(localPlayerID);
             villagerDeploy.UpdateLocalPlayerID(localPlayerID);
+            buildVillagerSelect.UpdateLocalPlayerID(localPlayerID);
+            upgradeVillagerSelect.UpdateLocalPlayerID(localPlayerID);
             settings.UpdateLocalPlayerID(localPlayerID);
             notificationInbox.UpdateLocalPlayerID(localPlayerID);
 
@@ -681,6 +731,8 @@ namespace Sporefront.Visual
             if (gatherPanel.IsVisible) gatherPanel.Refresh(gameState);
             if (reinforcePanel.IsVisible) reinforcePanel.Refresh(gameState);
             if (villagerDeploy.IsVisible) villagerDeploy.Refresh(gameState);
+            if (buildVillagerSelect.IsVisible) buildVillagerSelect.Refresh(gameState);
+            if (upgradeVillagerSelect.IsVisible) upgradeVillagerSelect.Refresh(gameState);
 
             // Update path renderer
             pathRenderer.UpdatePaths(gameState, localPlayerID);
@@ -773,6 +825,13 @@ namespace Sporefront.Visual
         {
             notifications.UpdateNotifications();
             InterpolateProgressBars();
+
+            if (entityRenderer != null && gameState != null)
+            {
+                entityRenderer.InterpolateMovingEntities(gameState);
+                entityRenderer.UpdateBuildingBars(gameState);
+                pathRenderer?.UpdatePathStartPoints(entityRenderer);
+            }
         }
 
         // ================================================================

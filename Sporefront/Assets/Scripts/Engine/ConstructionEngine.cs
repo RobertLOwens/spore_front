@@ -50,7 +50,7 @@ namespace Sporefront.Engine
                         if (group.currentTask is BuildingTask bt && bt.BuildingID == building.id &&
                             group.coordinate == building.coordinate && group.currentPath == null)
                         {
-                            building.StartConstruction(group.villagerCount);
+                            building.StartConstruction(currentTime, group.villagerCount);
                             changes.Add(new BuildingConstructionStartedChange { buildingID = building.id });
                             break;
                         }
@@ -66,7 +66,7 @@ namespace Sporefront.Engine
                             group.coordinate == building.coordinate && group.currentPath == null)
                         {
                             building.pendingUpgrade = false;
-                            building.StartUpgrade();
+                            building.StartUpgrade(currentTime);
                             group.ClearTask();
                             changes.Add(new BuildingUpgradeStartedChange
                             {
@@ -388,7 +388,7 @@ namespace Sporefront.Engine
             gameState.AddBuilding(building);
 
             // Start construction
-            building.StartConstruction(1);
+            building.StartConstruction(gameState.currentTime, 1);
 
             changes.Add(new BuildingPlacedChange
             {
@@ -480,7 +480,7 @@ namespace Sporefront.Engine
 
             // Start upgrade
             int targetLevel = building.level + 1;
-            building.StartUpgrade();
+            building.StartUpgrade(gameState.currentTime);
 
             return new List<StateChange>
             {
@@ -523,7 +523,7 @@ namespace Sporefront.Engine
             if (!validation.valid)
                 return new List<StateChange>();
 
-            building.StartDemolition(demolishers);
+            building.StartDemolition(gameState.currentTime, demolishers);
 
             return new List<StateChange>
             {

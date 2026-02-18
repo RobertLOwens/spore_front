@@ -64,7 +64,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 420x520
             panel = UIHelper.CreatePanel(backdrop.transform, "EntitiesOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 420, 520);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Entities",
@@ -211,7 +211,7 @@ namespace Sporefront.Visual
                     // Section header
                     var sectionLabel = UIHelper.CreateLabel(contentRT,
                         $"Villager Groups ({villagerGroups.Count})",
-                        UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                        UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                         TextAnchor.MiddleLeft, true);
                     var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                     sectionLE.preferredHeight = 26;
@@ -235,7 +235,7 @@ namespace Sporefront.Visual
                     // Section header
                     var sectionLabel = UIHelper.CreateLabel(contentRT,
                         $"Armies ({armies.Count})",
-                        UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                        UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                         TextAnchor.MiddleLeft, true);
                     var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                     sectionLE.preferredHeight = 26;
@@ -303,11 +303,7 @@ namespace Sporefront.Visual
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedID = group.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, false));
@@ -335,10 +331,10 @@ namespace Sporefront.Visual
             // Row 1: Name + status + location
             var topRow = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
-            string status = army.isEntrenched ? " [E]" : army.isInCombat ? " [C]" :
-                army.isRetreating ? " [R]" : "";
+            string status = UIHelper.FormatArmyStatus(army);
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
                 $"{army.name}{status}", 12, UIHelper.HeaderTextColor);
+            nameLabel.supportRichText = true;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
             nameLE.preferredHeight = 20;
@@ -399,11 +395,7 @@ namespace Sporefront.Visual
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedID = army.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, true));

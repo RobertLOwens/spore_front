@@ -42,14 +42,14 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            // Left-anchored panel, 240px wide
+            // Left-anchored panel
             panel = UIHelper.CreatePanel(canvasTransform, "EntityListPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 0);
             rt.anchorMax = new Vector2(0, 1);
             rt.pivot = new Vector2(0, 0.5f);
             rt.offsetMin = new Vector2(0, 50);
-            rt.offsetMax = new Vector2(240, -70);
+            rt.offsetMax = new Vector2(UIConstants.SidePanelWidth, -70);
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "EntityScroll", out contentRT);
@@ -168,10 +168,10 @@ namespace Sporefront.Visual
 
             // Name row
             var nameRow = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
-            string status = army.isEntrenched ? " [E]" : army.isInCombat ? " [C]" :
-                            army.isRetreating ? " [R]" : "";
+            string status = UIHelper.FormatArmyStatus(army);
             var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                 $"{army.name}{status}", 12);
+            nameLabel.supportRichText = true;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 

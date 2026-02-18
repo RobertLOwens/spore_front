@@ -5,9 +5,13 @@
 // ============================================================================
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Sporefront.Data;
+using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
@@ -212,12 +216,7 @@ namespace Sporefront.Visual
             img.type = Image.Type.Sliced;
 
             var btn = go.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.normalColor = bg;
-            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.2f);
-            colors.pressedColor = Color.Lerp(bg, Color.black, 0.15f);
-            colors.disabledColor = new Color(bg.r, bg.g, bg.b, 0.5f);
-            btn.colors = colors;
+            btn.colors = StandardButtonColors(bg);
 
             // Button label
             var label = CreateLabel(go.transform, text,
@@ -445,6 +444,174 @@ namespace Sporefront.Visual
                 case Sporefront.Models.ResourceType.Ore: return "O";
                 default: return "?";
             }
+        }
+
+        // ================================================================
+        // Shared Formatting Utilities
+        // ================================================================
+
+        /// <summary>
+        /// Unified cost string: "W50 S20 O10". Consolidates 4 duplicate implementations.
+        /// </summary>
+        public static string FormatCost(Dictionary<ResourceType, int> cost)
+        {
+            var parts = new List<string>();
+            foreach (var kvp in cost)
+            {
+                if (kvp.Value > 0)
+                    parts.Add($"{ResourceIcon(kvp.Key)}{kvp.Value}");
+            }
+            return string.Join(" ", parts);
+        }
+
+        /// <summary>
+        /// Rich-text color-coded army status: [E] teal, [C] red, [R] amber.
+        /// Returns empty string if no status flags are active.
+        /// </summary>
+        public static string FormatArmyStatus(ArmyData army)
+        {
+            if (army.isEntrenched)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeTeal)}>[E]</color>";
+            if (army.isInCombat)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed)}>[C]</color>";
+            if (army.isRetreating)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[R]</color>";
+            return "";
+        }
+
+        /// <summary>
+        /// Formats seconds as "2m 15s", or "Done" if <= 0.
+        /// </summary>
+        public static string FormatTime(double seconds)
+        {
+            if (seconds <= 0) return "Done";
+            int totalSeconds = (int)Math.Ceiling(seconds);
+            int m = totalSeconds / 60;
+            int s = totalSeconds % 60;
+            if (m > 0) return $"{m}m {s:D2}s";
+            return $"{s}s";
+        }
+
+        // ================================================================
+        // Button Color Helpers
+        // ================================================================
+
+        /// <summary>
+        /// Standard ColorBlock for buttons — unified hover/pressed/disabled values.
+        /// </summary>
+        public static ColorBlock StandardButtonColors(Color bg)
+        {
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = bg;
+            colors.highlightedColor = Color.Lerp(bg, Color.white, UIConstants.HoverLerpAmount);
+            colors.pressedColor = Color.Lerp(bg, Color.black, UIConstants.PressedLerpAmount);
+            colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
+            return colors;
+        }
+
+        /// <summary>
+        /// Card-style ColorBlock for overview panel items — subtle hover.
+        /// </summary>
+        public static ColorBlock CardButtonColors(Color bg)
+        {
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = bg;
+            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.1f);
+            colors.pressedColor = Color.Lerp(bg, Color.black, 0.1f);
+            colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
+            return colors;
+        }
+
+        // ================================================================
+        // Progress Bar with Label
+        // ================================================================
+
+        /// <summary>
+        /// Progress bar with overlaid percentage text (e.g., "67%").
+        /// </summary>
+        public static (Image bg, Image fill, Text label) CreateProgressBarWithLabel(
+            Transform parent, float height = 16f,
+            Color? bgColor = null, Color? fillColor = null)
+        {
+            var result = CreateProgressBar(parent, height, bgColor, fillColor);
+
+            // Overlaid percentage label
+            var percentLabel = CreateLabel(result.bg.transform, "0%",
+                UIConstants.FontCaption, Color.white, TextAnchor.MiddleCenter);
+            var labelRT = percentLabel.GetComponent<RectTransform>();
+            StretchFull(labelRT);
+            percentLabel.fontStyle = FontStyle.Bold;
+
+            return (result.bg, result.fill, percentLabel);
+        }
+
+        // ================================================================
+        // Fade Helpers
+        // ================================================================
+
+        /// <summary>
+        /// Adds a hover tooltip to a UI element via EventTrigger.
+        /// </summary>
+        public static void AddTooltip(GameObject target, string text)
+        {
+            var trigger = target.GetComponent<EventTrigger>();
+            if (trigger == null) trigger = target.AddComponent<EventTrigger>();
+
+            var enterEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            enterEntry.callback.AddListener((data) =>
+            {
+                var ped = (PointerEventData)data;
+                if (TooltipManager.Instance != null)
+                    TooltipManager.Instance.Show(text, ped.position);
+            });
+            trigger.triggers.Add(enterEntry);
+
+            var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exitEntry.callback.AddListener((data) =>
+            {
+                if (TooltipManager.Instance != null)
+                    TooltipManager.Instance.Hide();
+            });
+            trigger.triggers.Add(exitEntry);
+        }
+
+        /// <summary>
+        /// Fades a CanvasGroup from 0 to 1 over the given duration.
+        /// </summary>
+        public static IEnumerator FadeIn(CanvasGroup cg, float duration = -1f)
+        {
+            float d = duration > 0 ? duration : UIConstants.PanelFadeDuration;
+            cg.alpha = 0f;
+            cg.interactable = false;
+            cg.blocksRaycasts = true;
+            float elapsed = 0f;
+            while (elapsed < d)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                cg.alpha = Mathf.Clamp01(elapsed / d);
+                yield return null;
+            }
+            cg.alpha = 1f;
+            cg.interactable = true;
+        }
+
+        /// <summary>
+        /// Fades a CanvasGroup from 1 to 0 over the given duration, then deactivates the GO.
+        /// </summary>
+        public static IEnumerator FadeOut(CanvasGroup cg, float duration = -1f)
+        {
+            float d = duration > 0 ? duration : UIConstants.PanelFadeDuration;
+            cg.interactable = false;
+            float elapsed = 0f;
+            while (elapsed < d)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                cg.alpha = Mathf.Clamp01(1f - elapsed / d);
+                yield return null;
+            }
+            cg.alpha = 0f;
+            cg.blocksRaycasts = false;
+            cg.gameObject.SetActive(false);
         }
     }
 }

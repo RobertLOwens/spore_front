@@ -33,6 +33,10 @@ namespace Sporefront.Visual
         private Guid? currentArmyID;
         private Guid localPlayerID;
 
+        // Fade animation
+        private CanvasGroup backdropCG;
+        private Coroutine fadeCoroutine;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -46,6 +50,7 @@ namespace Sporefront.Visual
                 new Color(0, 0, 0, 0.4f));
             var bdRT = backdrop.GetComponent<RectTransform>();
             UIHelper.StretchFull(bdRT);
+            backdropCG = backdrop.AddComponent<CanvasGroup>();
             var bdBtn = backdrop.AddComponent<Button>();
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Close);
@@ -53,7 +58,7 @@ namespace Sporefront.Visual
             // Main panel — centered 380x450
             panel = UIHelper.CreatePanel(backdrop.transform, "ArmyDetailPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 380, 450);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalSmallW, UIConstants.ModalMediumH);
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "ArmyScroll", out contentRT);
@@ -88,13 +93,16 @@ namespace Sporefront.Visual
         {
             currentArmyID = armyID;
             Rebuild(gameState);
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
         }
 
         public void Close()
         {
             currentArmyID = null;
-            backdrop.SetActive(false);
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
         }
 
         public void Refresh(GameState gameState)
@@ -173,7 +181,7 @@ namespace Sporefront.Visual
         private void BuildCompositionSection(ArmyData army)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Composition",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -204,7 +212,7 @@ namespace Sporefront.Visual
         private void BuildCommanderSection(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Commander",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;

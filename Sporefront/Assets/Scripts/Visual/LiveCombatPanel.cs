@@ -423,7 +423,7 @@ namespace Sporefront.Visual
         private void BuildUnitBreakdowns(ActiveCombat combat)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Unit Breakdown",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;

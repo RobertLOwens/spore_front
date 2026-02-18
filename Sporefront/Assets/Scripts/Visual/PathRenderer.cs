@@ -17,16 +17,16 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private List<GameObject> activePathObjects = new List<GameObject>();
-        private const float LineWidth = 0.04f;
-        private const float GlowWidth = 0.08f;
+        private Dictionary<Guid, PathVisualData> activePaths = new Dictionary<Guid, PathVisualData>();
+        private const float LineWidth = 0.02f;
+        private const float GlowWidth = 0.04f;
         private const float ZPosition = -0.02f;
 
         // ================================================================
         // Public API
         // ================================================================
 
-        public void ShowPath(List<HexCoordinate> path, Color color)
+        public void ShowPath(Guid entityID, List<HexCoordinate> path, Color color)
         {
             if (path == null || path.Count < 2) return;
 
@@ -43,16 +43,21 @@ namespace Sporefront.Visual
             // Direction arrows at every 3rd segment
             CreateDirectionArrows(pathGO, path, color);
 
-            activePathObjects.Add(pathGO);
+            activePaths[entityID] = new PathVisualData
+            {
+                rootGO = pathGO,
+                mainLine = mainLR,
+                glowLine = glowLR
+            };
         }
 
         public void ClearPaths()
         {
-            foreach (var go in activePathObjects)
+            foreach (var kvp in activePaths)
             {
-                if (go != null) Destroy(go);
+                if (kvp.Value.rootGO != null) Destroy(kvp.Value.rootGO);
             }
-            activePathObjects.Clear();
+            activePaths.Clear();
         }
 
         public void UpdatePaths(GameState gameState, Guid localPlayerID)
@@ -66,10 +71,11 @@ namespace Sporefront.Visual
             foreach (var armyID in player.ownedArmyIDs)
             {
                 var army = gameState.GetArmy(armyID);
-                if (army == null || army.currentPath == null || army.currentPath.Count < 2) continue;
+                if (army == null || army.currentPath == null) continue;
 
-                // Build remaining path from current position
+                // Build remaining path starting from entity's current coordinate
                 var remaining = new List<HexCoordinate>();
+                remaining.Add(army.coordinate);
                 int startIdx = Mathf.Max(0, army.pathIndex);
                 for (int i = startIdx; i < army.currentPath.Count; i++)
                     remaining.Add(army.currentPath[i]);
@@ -79,22 +85,45 @@ namespace Sporefront.Visual
                 Color color = army.isInCombat ? SporefrontColors.SporeRed :
                               army.isRetreating ? SporefrontColors.SporeAmber :
                               SporefrontColors.SporeGreen;
-                ShowPath(remaining, color);
+                ShowPath(armyID, remaining, color);
             }
 
             // Show paths for owned villager groups
             foreach (var groupID in player.ownedVillagerGroupIDs)
             {
                 var group = gameState.GetVillagerGroup(groupID);
-                if (group == null || group.currentPath == null || group.currentPath.Count < 2) continue;
+                if (group == null || group.currentPath == null) continue;
 
+                // Build remaining path starting from entity's current coordinate
                 var remaining = new List<HexCoordinate>();
+                remaining.Add(group.coordinate);
                 int startIdx = Mathf.Max(0, group.pathIndex);
                 for (int i = startIdx; i < group.currentPath.Count; i++)
                     remaining.Add(group.currentPath[i]);
 
                 if (remaining.Count < 2) continue;
-                ShowPath(remaining, SporefrontColors.SporeAmber);
+                ShowPath(groupID, remaining, SporefrontColors.SporeAmber);
+            }
+        }
+
+        /// <summary>
+        /// Updates path start points each frame to track moving entities.
+        /// Called from UIManager.UpdateUI after InterpolateMovingEntities.
+        /// </summary>
+        public void UpdatePathStartPoints(EntityRenderer entityRenderer)
+        {
+            foreach (var kvp in activePaths)
+            {
+                var pathData = kvp.Value;
+                if (pathData.mainLine == null) continue;
+
+                Vector3 bottomPos = entityRenderer.GetEntityBottomPosition(kvp.Key);
+                if (bottomPos == Vector3.zero) continue;
+
+                bottomPos.z = ZPosition;
+                pathData.mainLine.SetPosition(0, bottomPos);
+                if (pathData.glowLine != null)
+                    pathData.glowLine.SetPosition(0, bottomPos);
             }
         }
 
@@ -178,6 +207,17 @@ namespace Sporefront.Visual
         private void OnDestroy()
         {
             ClearPaths();
+        }
+
+        // ================================================================
+        // Internal Types
+        // ================================================================
+
+        private struct PathVisualData
+        {
+            public GameObject rootGO;
+            public LineRenderer mainLine;
+            public LineRenderer glowLine;
         }
     }
 }

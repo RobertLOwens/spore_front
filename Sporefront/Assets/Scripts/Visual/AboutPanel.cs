@@ -43,7 +43,7 @@ namespace Sporefront.Visual
             // Center panel
             panel = UIHelper.CreatePanel(backdrop.transform, "AboutPanel", UIHelper.PanelBg);
             var panelRT = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(panelRT, 380, 420);
+            UIHelper.SetFixedSize(panelRT, UIConstants.ModalSmallW, UIConstants.ModalSmallH);
 
             BuildContent();
             backdrop.SetActive(false);

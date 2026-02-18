@@ -53,7 +53,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 440x560
             panel = UIHelper.CreatePanel(backdrop.transform, "ResourceOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 440, 560);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalLargeH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Resource Overview",
@@ -355,7 +355,7 @@ namespace Sporefront.Visual
             if (bonuses.Count == 0) return;
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Active Bonuses",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 26;

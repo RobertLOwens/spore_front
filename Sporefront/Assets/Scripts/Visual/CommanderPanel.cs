@@ -63,7 +63,7 @@ namespace Sporefront.Visual
             // Main panel — centered 700x520
             panel = UIHelper.CreatePanel(backdrop.transform, "CommanderPanel", UIHelper.PanelBg);
             var panelRT = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(panelRT, 700, 520);
+            UIHelper.SetFixedSize(panelRT, UIConstants.ModalXLW, UIConstants.ModalMediumH);
 
             // Title
             var titleLabel = UIHelper.CreateLabel(panel.transform, "Commanders",
@@ -388,7 +388,7 @@ namespace Sporefront.Visual
         private void BuildStatsSection(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Commander Stats",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -433,7 +433,7 @@ namespace Sporefront.Visual
         private void BuildStatBenefits(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Stat Effects",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -477,7 +477,7 @@ namespace Sporefront.Visual
         private void BuildAssignmentInfo(CommanderData commander, GameState gameState)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Assignment",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;

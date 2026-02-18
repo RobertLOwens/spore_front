@@ -6,6 +6,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Sporefront.Data;
 using Sporefront.Models;
@@ -37,6 +38,8 @@ namespace Sporefront.Visual
         private Button notificationButton;
         private Text badgeText;
         private GameObject badgeGO;
+
+        private Text speedLabel;
 
         private Button ellipsisButton;
         private GameObject ellipsisDropdown;
@@ -70,9 +73,13 @@ namespace Sporefront.Visual
 
             // Resource labels (full names, wider)
             woodLabel = CreateResourceLabel(row.transform, "Wood", 160);
+            UIHelper.AddTooltip(woodLabel.gameObject, "Wood: gathered from trees");
             foodLabel = CreateResourceLabel(row.transform, "Food", 160);
+            UIHelper.AddTooltip(foodLabel.gameObject, "Food: gathered from farms and bushes");
             stoneLabel = CreateResourceLabel(row.transform, "Stone", 160);
+            UIHelper.AddTooltip(stoneLabel.gameObject, "Stone: mined from quarries");
             oreLabel = CreateResourceLabel(row.transform, "Ore", 160);
+            UIHelper.AddTooltip(oreLabel.gameObject, "Ore: mined from deposits");
 
             // Spacer
             var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
@@ -95,8 +102,18 @@ namespace Sporefront.Visual
             starvLE.preferredWidth = 100;
             starvationLabel.gameObject.SetActive(false);
 
+            // Game speed indicator (hidden at normal speed)
+            speedLabel = UIHelper.CreateLabel(row.transform, "", UIConstants.FontBody,
+                SporefrontColors.SporeAmber, TextAnchor.MiddleRight);
+            speedLabel.fontStyle = FontStyle.Bold;
+            speedLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(60, 60);
+            var speedLE = speedLabel.gameObject.AddComponent<LayoutElement>();
+            speedLE.preferredWidth = 60;
+            speedLabel.gameObject.SetActive(false);
+
             // Notification button
             CreateNotificationButton(row.transform);
+            UIHelper.AddTooltip(notificationButton.gameObject, "Notifications");
 
             // Ellipsis button
             CreateEllipsisButton(row.transform);
@@ -131,11 +148,42 @@ namespace Sporefront.Visual
 
             int current, capacity;
             gameState.GetPopulationStats(localPlayerID, out current, out capacity);
-            popLabel.text = $"Pop: {current}/{capacity}";
+
+            // Population capacity warning
+            if (capacity > 0)
+            {
+                float ratio = (float)current / capacity;
+                if (ratio >= 1f)
+                {
+                    popLabel.text = $"Pop: {current}/{capacity} FULL";
+                    popLabel.color = SporefrontColors.SporeRed;
+                }
+                else if (ratio >= 0.9f)
+                {
+                    popLabel.text = $"Pop: {current}/{capacity} !";
+                    popLabel.color = SporefrontColors.SporeAmber;
+                }
+                else
+                {
+                    popLabel.text = $"Pop: {current}/{capacity}";
+                    popLabel.color = UIHelper.HudTextColor;
+                }
+            }
+            else
+            {
+                popLabel.text = $"Pop: {current}/{capacity}";
+                popLabel.color = UIHelper.HudTextColor;
+            }
 
             // Starvation warning
             bool starving = player.GetResource(ResourceType.Food) <= 0;
             starvationLabel.gameObject.SetActive(starving);
+
+            // Game speed indicator
+            bool showSpeed = gameState.gameSpeed != 1.0;
+            speedLabel.gameObject.SetActive(showSpeed);
+            if (showSpeed)
+                speedLabel.text = $"{gameState.gameSpeed:0.#}x";
         }
 
         // ================================================================
@@ -164,13 +212,14 @@ namespace Sporefront.Visual
         private void Update()
         {
             if (ellipsisDropdown != null && ellipsisDropdown.activeSelf
-                && Input.GetMouseButtonDown(0))
+                && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
             {
                 var dropdownRT = ellipsisDropdown.GetComponent<RectTransform>();
                 var ellipsisBtnRT = ellipsisButton.GetComponent<RectTransform>();
+                Vector2 mousePos = Mouse.current.position.ReadValue();
 
-                if (!RectTransformUtility.RectangleContainsScreenPoint(dropdownRT, Input.mousePosition)
-                    && !RectTransformUtility.RectangleContainsScreenPoint(ellipsisBtnRT, Input.mousePosition))
+                if (!RectTransformUtility.RectangleContainsScreenPoint(dropdownRT, mousePos)
+                    && !RectTransformUtility.RectangleContainsScreenPoint(ellipsisBtnRT, mousePos))
                 {
                     ellipsisDropdown.SetActive(false);
                 }

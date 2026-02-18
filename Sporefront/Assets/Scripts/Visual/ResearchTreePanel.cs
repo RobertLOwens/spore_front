@@ -80,7 +80,7 @@ namespace Sporefront.Visual
             // Main panel — centered 750x550
             panel = UIHelper.CreatePanel(backdrop.transform, "ResearchTreePanel", UIHelper.PanelBg);
             var panelRT = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(panelRT, 750, 550);
+            UIHelper.SetFixedSize(panelRT, UIConstants.ModalXLW, UIConstants.ModalLargeH);
 
             // Title
             var titleLabel = UIHelper.CreateLabel(panel.transform, "Research Tree",

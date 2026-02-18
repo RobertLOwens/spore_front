@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sporefront.Data;
 using Sporefront.Models;
 using Sporefront.AI;
@@ -217,6 +218,21 @@ namespace Sporefront.Engine
                         if (building != null && building.ownerID.HasValue)
                         {
                             resourceEngine.UpdateCollectionRates(building.ownerID.Value);
+                        }
+                    }
+                }
+
+                // Auto-gather: when a resource camp/farm finishes, start the builder gathering
+                foreach (var change in constructionChanges)
+                {
+                    var completedChange = change as BuildingCompletedChange;
+                    if (completedChange != null)
+                    {
+                        var building = gameState?.GetBuilding(completedChange.buildingID);
+                        if (building != null && building.ownerID.HasValue)
+                        {
+                            var autoGatherChanges = TryAutoGatherAfterConstruction(building, constructionChanges);
+                            allChanges.AddRange(autoGatherChanges);
                         }
                     }
                 }
@@ -549,6 +565,87 @@ namespace Sporefront.Engine
         {
             if (gameState != null)
                 gameState.gameSpeed = Math.Max(0.1, Math.Min(speed, 10.0));
+        }
+
+        // ================================================================
+        // Auto-Gather After Construction
+        // ================================================================
+
+        /// <summary>
+        /// When a MiningCamp, LumberCamp, or Farm finishes construction, automatically
+        /// start the builder villager gathering from the nearby resource point.
+        /// </summary>
+        private List<StateChange> TryAutoGatherAfterConstruction(BuildingData building, List<StateChange> constructionChanges)
+        {
+            var changes = new List<StateChange>();
+
+            // Only auto-gather for resource-producing buildings
+            if (building.buildingType != BuildingType.MiningCamp &&
+                building.buildingType != BuildingType.LumberCamp &&
+                building.buildingType != BuildingType.Farm)
+                return changes;
+
+            // Find the builder villager that was just released to idle at the building coordinate
+            // Look for VillagerGroupTaskChangedChange with task="idle" in constructionChanges
+            Guid? builderGroupID = null;
+            foreach (var change in constructionChanges)
+            {
+                var taskChange = change as VillagerGroupTaskChangedChange;
+                if (taskChange != null && taskChange.task == "idle")
+                {
+                    var group = gameState.GetVillagerGroup(taskChange.groupID);
+                    if (group != null && group.coordinate.Equals(building.coordinate) &&
+                        group.ownerID.HasValue && group.ownerID.Value == building.ownerID.Value)
+                    {
+                        builderGroupID = group.id;
+                        break;
+                    }
+                }
+            }
+
+            if (!builderGroupID.HasValue) return changes;
+
+            // Find the resource point
+            ResourcePointData resourcePoint = null;
+
+            if (building.buildingType == BuildingType.MiningCamp ||
+                building.buildingType == BuildingType.LumberCamp)
+            {
+                // Resource point is at the building coordinate (preserved during placement)
+                resourcePoint = gameState.GetResourcePoint(building.coordinate);
+            }
+            else if (building.buildingType == BuildingType.Farm)
+            {
+                // Farm: search adjacent tiles for Farmland resource point
+                var neighbors = building.coordinate.Neighbors();
+                foreach (var neighbor in neighbors)
+                {
+                    var rp = gameState.GetResourcePoint(neighbor);
+                    if (rp != null && rp.resourceType == ResourcePointType.Farmland)
+                    {
+                        resourcePoint = rp;
+                        break;
+                    }
+                }
+            }
+
+            if (resourcePoint == null) return changes;
+
+            // Start gathering
+            bool success = resourceEngine.StartGathering(builderGroupID.Value, resourcePoint.id);
+            if (success)
+            {
+                changes.Add(new VillagerGroupTaskChangedChange
+                {
+                    groupID = builderGroupID.Value,
+                    task = "gathering",
+                    targetCoordinate = resourcePoint.coordinate
+                });
+
+                DebugLog.Log($"Auto-gather: Villager {builderGroupID.Value} started gathering at {building.buildingType} ({building.coordinate})");
+            }
+
+            return changes;
         }
     }
 }

@@ -1,7 +1,8 @@
 // ============================================================================
-// FILE: Visual/GatherPanel.cs
-// PURPOSE: Left-side slide-out panel for assigning villager groups to gather
-//          or hunt a resource point. Shows resource info and available groups.
+// FILE: Visual/BuildVillagerSelectPanel.cs
+// PURPOSE: Left-side slide-out panel for selecting a villager group to dispatch
+//          as builder. Shows all villager groups sorted by distance with
+//          walking time estimates and current task info.
 // ============================================================================
 
 using System;
@@ -15,14 +16,13 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class GatherPanel : MonoBehaviour
+    public class BuildVillagerSelectPanel : MonoBehaviour
     {
         // ================================================================
         // Events
         // ================================================================
 
-        public event Action<Guid, Guid> OnGatherConfirmed;  // villagerGroupID, resourcePointID
-        public event Action<Guid, Guid> OnHuntConfirmed;    // villagerGroupID, resourcePointID
+        public event Action<Guid, BuildingType, HexCoordinate, int> OnVillagerSelected; // vgID, type, coord, rotation
         public event Action OnClose;
 
         // ================================================================
@@ -31,9 +31,14 @@ namespace Sporefront.Visual
 
         private GameObject panel;
         private RectTransform contentRT;
-        private Guid? currentResourcePointID;
         private Guid localPlayerID;
-        private Guid? selectedVillagerGroupID;
+
+        private BuildingType pendingBuildingType;
+        private HexCoordinate pendingCoordinate;
+        private int pendingRotation;
+
+        // Walking time estimate: distance / (BaseSpeed * VillagerSpeedMultiplier) seconds
+        private const double WalkSecondsPerTile = 1.0 / (GameConfig.Movement.BaseSpeed * GameConfig.Movement.VillagerSpeedMultiplier);
 
         // ================================================================
         // Initialization
@@ -44,7 +49,7 @@ namespace Sporefront.Visual
             localPlayerID = playerID;
 
             // Left-anchored slide-out panel, 280px wide
-            panel = UIHelper.CreatePanel(canvasTransform, "GatherPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "BuildVillagerSelectPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 0.15f);
             rt.anchorMax = new Vector2(0, 0.85f);
@@ -53,13 +58,13 @@ namespace Sporefront.Visual
             rt.offsetMax = new Vector2(280, 0);
 
             // ScrollView
-            var scroll = UIHelper.CreateScrollView(panel.transform, "GatherScroll", out contentRT);
+            var scroll = UIHelper.CreateScrollView(panel.transform, "BuildVillagerScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
             scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = Vector2.zero;
 
-            // Bottom button row
+            // Bottom cancel button
             var btnRow = UIHelper.CreatePanel(panel.transform, "ButtonRow", Color.clear);
             var btnRowRT = btnRow.GetComponent<RectTransform>();
             btnRowRT.anchorMin = Vector2.zero;
@@ -90,25 +95,24 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show(GameState gameState, Guid resourcePointID)
+        public void Show(GameState gameState, BuildingType buildingType, HexCoordinate coordinate, int rotation)
         {
-            currentResourcePointID = resourcePointID;
-            selectedVillagerGroupID = null;
+            pendingBuildingType = buildingType;
+            pendingCoordinate = coordinate;
+            pendingRotation = rotation;
             Rebuild(gameState);
             panel.SetActive(true);
         }
 
         public void Hide()
         {
-            currentResourcePointID = null;
-            selectedVillagerGroupID = null;
             panel.SetActive(false);
             OnClose?.Invoke();
         }
 
         public void Refresh(GameState gameState)
         {
-            if (!currentResourcePointID.HasValue || !panel.activeSelf) return;
+            if (!panel.activeSelf) return;
             Rebuild(gameState);
         }
 
@@ -120,107 +124,36 @@ namespace Sporefront.Visual
 
         private void Rebuild(GameState gameState)
         {
-            if (!currentResourcePointID.HasValue) return;
-            var rp = gameState.GetResourcePoint(currentResourcePointID.Value);
-            if (rp == null) { Hide(); return; }
-
             // Clear
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
 
-            bool isHuntable = rp.resourceType.IsHuntable();
-
             // Header
             var header = UIHelper.CreateLabel(contentRT,
-                isHuntable ? "Hunt" : "Gather",
+                $"Select Builder",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 28;
 
+            // Building info
+            var infoLabel = UIHelper.CreateLabel(contentRT,
+                $"  {pendingBuildingType.DisplayName()} at ({pendingCoordinate.q},{pendingCoordinate.r})",
+                12, SporefrontColors.InkLight);
+            var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
+            infoLE.preferredHeight = 20;
+
             UIHelper.CreateDivider(contentRT);
 
-            // Resource point info
-            BuildResourceInfo(rp);
-            UIHelper.CreateDivider(contentRT);
-
-            // Available villager groups
-            BuildVillagerGroupList(gameState, rp, isHuntable);
-        }
-
-        // ================================================================
-        // Resource Info Section
-        // ================================================================
-
-        private void BuildResourceInfo(ResourcePointData rp)
-        {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Resource Point",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 22;
-
-            // Type
-            var typeLabel = UIHelper.CreateLabel(contentRT,
-                $"  Type: {rp.resourceType.DisplayName()}", 12);
-            var typeLE = typeLabel.gameObject.AddComponent<LayoutElement>();
-            typeLE.preferredHeight = 20;
-
-            // Yields
-            var yieldLabel = UIHelper.CreateLabel(contentRT,
-                $"  Yields: {UIHelper.ResourceIcon(rp.resourceType.ResourceYield())} {rp.resourceType.ResourceYield().DisplayName()}", 12);
-            var yieldLE = yieldLabel.gameObject.AddComponent<LayoutElement>();
-            yieldLE.preferredHeight = 20;
-
-            // Remaining amount
-            var remainLabel = UIHelper.CreateLabel(contentRT,
-                $"  Remaining: {rp.remainingAmount}/{rp.resourceType.InitialAmount()}", 12);
-            var remainLE = remainLabel.gameObject.AddComponent<LayoutElement>();
-            remainLE.preferredHeight = 20;
-
-            // Remaining bar
-            float pct = rp.resourceType.InitialAmount() > 0
-                ? (float)rp.remainingAmount / rp.resourceType.InitialAmount()
-                : 0f;
-            var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
-            var fillRT = fill.GetComponent<RectTransform>();
-            fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
-            var barLE = bg.gameObject.AddComponent<LayoutElement>();
-            barLE.preferredHeight = 12;
-
-            // Current gatherers
-            var gatherersLabel = UIHelper.CreateLabel(contentRT,
-                $"  Gatherers: {rp.totalVillagersGathering}/{ResourcePointData.MaxVillagersPerTile}", 12,
-                SporefrontColors.InkLight);
-            var gatherersLE = gatherersLabel.gameObject.AddComponent<LayoutElement>();
-            gatherersLE.preferredHeight = 20;
-
-            // Health (huntable animals)
-            if (rp.resourceType.IsHuntable())
-            {
-                var healthLabel = UIHelper.CreateLabel(contentRT,
-                    $"  Health: {(int)rp.currentHealth}/{(int)rp.resourceType.MaxHealth()}", 12);
-                var healthLE = healthLabel.gameObject.AddComponent<LayoutElement>();
-                healthLE.preferredHeight = 20;
-
-                float hpPct = rp.resourceType.MaxHealth() > 0
-                    ? (float)(rp.currentHealth / rp.resourceType.MaxHealth())
-                    : 0f;
-                var (hpBg, hpFill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeRed);
-                var hpFillRT = hpFill.GetComponent<RectTransform>();
-                hpFillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
-                var hpBarLE = hpBg.gameObject.AddComponent<LayoutElement>();
-                hpBarLE.preferredHeight = 12;
-            }
+            // Villager group list
+            BuildVillagerGroupList(gameState);
         }
 
         // ================================================================
         // Villager Group List
         // ================================================================
 
-        private void BuildVillagerGroupList(GameState gameState, ResourcePointData rp, bool isHuntable)
+        private void BuildVillagerGroupList(GameState gameState)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Villager Groups",
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
@@ -238,21 +171,28 @@ namespace Sporefront.Visual
                 return;
             }
 
-            // Sort by distance to resource point
+            // Sort by distance to build site
             groups.Sort((a, b) =>
-                a.coordinate.Distance(rp.coordinate).CompareTo(b.coordinate.Distance(rp.coordinate)));
+                a.coordinate.Distance(pendingCoordinate).CompareTo(
+                    b.coordinate.Distance(pendingCoordinate)));
 
             foreach (var group in groups)
             {
                 if (group.villagerCount <= 0) continue;
 
-                int distance = group.coordinate.Distance(rp.coordinate);
+                int distance = group.coordinate.Distance(pendingCoordinate);
                 bool isBusy = group.currentTask != null && !group.currentTask.IsIdle;
                 string taskDesc = isBusy ? group.currentTask.DisplayName : "Idle";
 
+                // Walking time estimate
+                int walkSeconds = distance > 0 ? Mathf.CeilToInt((float)(distance * WalkSecondsPerTile)) : 0;
+                string walkTimeStr = walkSeconds > 0
+                    ? (walkSeconds < 60 ? $"~{walkSeconds}s" : $"~{walkSeconds / 60}m{walkSeconds % 60}s")
+                    : "On-site";
+
                 var row = UIHelper.CreatePanel(contentRT, "VillagerRow", Color.clear);
                 var rowLE = row.AddComponent<LayoutElement>();
-                rowLE.preferredHeight = 56;
+                rowLE.preferredHeight = isBusy ? 72 : 56;
 
                 var vlg = row.AddComponent<VerticalLayoutGroup>();
                 vlg.spacing = 2;
@@ -273,30 +213,52 @@ namespace Sporefront.Visual
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                 distLE.preferredWidth = 55;
 
-                // Task + action
-                var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
-                var taskLabel = UIHelper.CreateLabel(actionRow.transform,
+                // Task + walk time
+                var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                     taskDesc, 11,
                     isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
-                // Confirm button
-                var capturedGroupID = group.id;
-                var capturedRPID = rp.id;
-                string btnText = isHuntable ? "Hunt" : "Gather";
-                Color btnColor = isHuntable ? SporefrontColors.SporeRed : SporefrontColors.SporeGreen;
+                var walkLabel = UIHelper.CreateLabel(infoRow.transform,
+                    walkTimeStr, 11, SporefrontColors.InkLight);
+                var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
+                walkLE.preferredWidth = 55;
 
-                var confirmBtn = UIHelper.CreateButton(actionRow.transform, btnText,
+                // Action row
+                var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+
+                var capturedGroupID = group.id;
+                var capturedType = pendingBuildingType;
+                var capturedCoord = pendingCoordinate;
+                var capturedRotation = pendingRotation;
+
+                if (isBusy)
+                {
+                    // Warning label for busy villagers
+                    var warnLabel = UIHelper.CreateLabel(actionRow.transform,
+                        $"Will cancel {taskDesc}", 10, SporefrontColors.SporeAmber);
+                    var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
+                    warnLE.flexibleWidth = 1;
+                }
+                else
+                {
+                    // Spacer for idle villagers
+                    var spacer = new GameObject("Spacer");
+                    spacer.transform.SetParent(actionRow.transform, false);
+                    var spacerLE = spacer.AddComponent<LayoutElement>();
+                    spacerLE.flexibleWidth = 1;
+                }
+
+                Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.SporeGreen;
+                var selectBtn = UIHelper.CreateButton(actionRow.transform, "Select",
                     btnColor, UIHelper.HudTextColor, 11, () =>
                     {
-                        if (isHuntable)
-                            OnHuntConfirmed?.Invoke(capturedGroupID, capturedRPID);
-                        else
-                            OnGatherConfirmed?.Invoke(capturedGroupID, capturedRPID);
+                        OnVillagerSelected?.Invoke(capturedGroupID, capturedType, capturedCoord, capturedRotation);
                         Hide();
                     });
-                var btnLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+                var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredWidth = 60;
                 btnLE.preferredHeight = 24;
             }

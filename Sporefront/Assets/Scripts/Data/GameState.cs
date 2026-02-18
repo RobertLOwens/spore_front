@@ -962,8 +962,6 @@ namespace Sporefront.Data
             if (!mapData.IsValidCoordinate(coordinate)) return false;
             if (!mapData.IsWalkable(coordinate)) return false;
             if (mapData.GetBuildingID(coordinate).HasValue) return false;
-            if (mapData.GetArmyID(coordinate).HasValue) return false;
-            if (mapData.GetVillagerGroupID(coordinate).HasValue) return false;
             return true;
         }
 

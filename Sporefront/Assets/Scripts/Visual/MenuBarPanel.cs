@@ -53,13 +53,20 @@ namespace Sporefront.Visual
             row.childAlignment = TextAnchor.MiddleCenter;
 
             // Navigation buttons (equal width via flexibleWidth)
-            CreateNavButton(row.transform, "Entities", () => OnEntitiesClicked?.Invoke());
-            CreateNavButton(row.transform, "Buildings", () => OnBuildingsClicked?.Invoke());
-            CreateNavButton(row.transform, "Commanders", () => OnCommandersClicked?.Invoke());
-            CreateNavButton(row.transform, "Military", () => OnMilitaryClicked?.Invoke());
-            CreateNavButton(row.transform, "Resources", () => OnResourcesClicked?.Invoke());
-            CreateNavButton(row.transform, "Research", () => OnResearchClicked?.Invoke());
-            CreateNavButton(row.transform, "Training", () => OnTrainingClicked?.Invoke());
+            var entitiesBtn = CreateNavButton(row.transform, "Entities", () => OnEntitiesClicked?.Invoke());
+            UIHelper.AddTooltip(entitiesBtn.gameObject, "View all armies and villager groups");
+            var buildingsBtn = CreateNavButton(row.transform, "Buildings", () => OnBuildingsClicked?.Invoke());
+            UIHelper.AddTooltip(buildingsBtn.gameObject, "View all buildings");
+            var commandersBtn = CreateNavButton(row.transform, "Commanders", () => OnCommandersClicked?.Invoke());
+            UIHelper.AddTooltip(commandersBtn.gameObject, "Manage commanders");
+            var militaryBtn = CreateNavButton(row.transform, "Military", () => OnMilitaryClicked?.Invoke());
+            UIHelper.AddTooltip(militaryBtn.gameObject, "Military overview and upgrades");
+            var resourcesBtn = CreateNavButton(row.transform, "Resources", () => OnResourcesClicked?.Invoke());
+            UIHelper.AddTooltip(resourcesBtn.gameObject, "Resource income and expenditure");
+            var researchBtn = CreateNavButton(row.transform, "Research", () => OnResearchClicked?.Invoke());
+            UIHelper.AddTooltip(researchBtn.gameObject, "Research tree and progress");
+            var trainingBtn = CreateNavButton(row.transform, "Training", () => OnTrainingClicked?.Invoke());
+            UIHelper.AddTooltip(trainingBtn.gameObject, "Active training queues");
 
             panel.SetActive(false);
         }

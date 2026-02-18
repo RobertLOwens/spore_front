@@ -150,7 +150,7 @@ namespace Sporefront.Visual
         private void BuildArmyInfoSection(ArmyData army)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Target Army",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -181,7 +181,7 @@ namespace Sporefront.Visual
         private void BuildBuildingsList(GameState gameState, ArmyData army)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Garrisons",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
