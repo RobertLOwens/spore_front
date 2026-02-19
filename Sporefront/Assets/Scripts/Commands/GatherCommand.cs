@@ -55,25 +55,48 @@ namespace Sporefront.Commands
             if (resourcePoint == null)
                 return EngineCommandResult.Failure("Resource point not found");
 
-            // Start gathering via ResourceEngine
-            bool success = GameEngine.Instance.resourceEngine.StartGathering(villagerGroupID, resourcePointID);
-            if (!success)
+            if (group.coordinate.Equals(resourcePoint.coordinate))
             {
-                DebugLog.Log(string.Format("GatherCommand: StartGathering failed for group {0} at resource {1}",
-                    villagerGroupID, resourcePointID));
-                return EngineCommandResult.Failure("Failed to start gathering");
+                // Already at the resource — start gathering immediately
+                bool success = GameEngine.Instance.resourceEngine.StartGathering(villagerGroupID, resourcePointID);
+                if (!success)
+                {
+                    DebugLog.Log(string.Format("GatherCommand: StartGathering failed for group {0} at resource {1}",
+                        villagerGroupID, resourcePointID));
+                    return EngineCommandResult.Failure("Failed to start gathering");
+                }
+
+                changeBuilder.Add(new VillagerGroupTaskChangedChange
+                {
+                    groupID = villagerGroupID,
+                    task = "gathering",
+                    targetCoordinate = resourcePoint.coordinate
+                });
+
+                DebugLog.Log(string.Format("GatherCommand: Villager group {0} now gathering at {1}",
+                    group.name, resourcePoint.coordinate));
             }
-
-            // Emit task changed state change
-            changeBuilder.Add(new VillagerGroupTaskChangedChange
+            else
             {
-                groupID = villagerGroupID,
-                task = "gathering",
-                targetCoordinate = resourcePoint.coordinate
-            });
+                // Not at resource — assign task and pathfind (StartGathering deferred to arrival)
+                group.AssignTask(new GatheringResourceTask(resourcePointID), resourcePoint.coordinate, resourcePointID);
 
-            DebugLog.Log(string.Format("GatherCommand: Villager group {0} now gathering at {1}",
-                group.name, resourcePoint.coordinate));
+                var path = state.mapData.FindPath(group.coordinate, resourcePoint.coordinate, PlayerID, state);
+                if (path != null)
+                {
+                    group.SetPath(path);
+                }
+
+                changeBuilder.Add(new VillagerGroupTaskChangedChange
+                {
+                    groupID = villagerGroupID,
+                    task = "gathering",
+                    targetCoordinate = resourcePoint.coordinate
+                });
+
+                DebugLog.Log(string.Format("GatherCommand: Villager group {0} moving to gather at {1}",
+                    group.name, resourcePoint.coordinate));
+            }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

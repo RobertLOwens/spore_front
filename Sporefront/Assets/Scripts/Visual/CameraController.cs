@@ -5,6 +5,7 @@
 // ============================================================================
 
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using Sporefront.Models;
 
@@ -115,6 +116,9 @@ namespace Sporefront.Visual
 
         private void HandleZoomInput()
         {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
             var mouse = Mouse.current;
             if (mouse == null) return;
 

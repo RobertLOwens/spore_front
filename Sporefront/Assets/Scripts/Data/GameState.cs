@@ -6,6 +6,8 @@ using Sporefront.Engine;
 
 namespace Sporefront.Data
 {
+    public enum VisibilityMode { Normal, Full }
+
     [System.Serializable]
     public class GameState
     {
@@ -38,6 +40,7 @@ namespace Sporefront.Data
         // Game Settings
         public bool isPaused;
         public double gameSpeed = 1.0;
+        public VisibilityMode visibilityMode = VisibilityMode.Normal;
 
         // Transient State (not saved)
         [System.NonSerialized]

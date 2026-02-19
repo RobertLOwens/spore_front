@@ -206,4 +206,18 @@ namespace Sporefront.Models
         public override string DeduplicationKey => $"entrenchment_{ArmyName}";
         public override int Priority => 45;
     }
+
+    public class CommandFailedNotification : GameNotificationType
+    {
+        public string Reason;
+
+        public CommandFailedNotification(string reason) { Reason = reason; }
+
+        public override string Icon => "warning";
+        public override string Message => Reason;
+        public override string NotificationTitle => "Command Failed";
+        public override HexCoordinate? Coordinate => null;
+        public override string DeduplicationKey => $"cmdFail_{Reason}";
+        public override int Priority => 30;
+    }
 }

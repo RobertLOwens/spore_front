@@ -35,7 +35,7 @@ namespace Sporefront.Visual
 
         public const float TopBarHeight = 60f;
         public const float BottomBarHeight = 48f;
-        public const float SidePanelWidth = 260f;
+        public const float SidePanelWidth = 320f;
 
         // ================================================================
         // Modal Size Tiers
@@ -51,6 +51,16 @@ namespace Sporefront.Visual
         public const float ModalSmallH = 420f;
         public const float ModalMediumH = 520f;
         public const float ModalLargeH = 560f;
+
+        // Detail / Build modals
+        public const float ModalDetailW = 480f;
+        public const float ModalDetailH = 620f;
+        public const float ModalBuildMenuW = 520f;
+        public const float ModalBuildMenuH = 580f;
+
+        // Section card layout
+        public const float SectionCardPadding = 10f;
+        public const float SectionCardSpacing = 6f;
 
         // ================================================================
         // Interaction

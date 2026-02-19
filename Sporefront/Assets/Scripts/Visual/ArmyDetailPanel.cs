@@ -148,6 +148,29 @@ namespace Sporefront.Visual
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.preferredHeight = 20;
 
+            // Entrenchment progress bar
+            if (army.isEntrenching && army.entrenchmentStartTime.HasValue)
+            {
+                double currentTime = gameState.currentTime;
+                double elapsed = currentTime - army.entrenchmentStartTime.Value;
+                double buildTime = GameConfig.Entrenchment.BuildTime;
+                float progress = Mathf.Clamp01((float)(elapsed / buildTime));
+                double remaining = buildTime - elapsed;
+
+                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
+                    SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                var fillRT = fill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(progress, 1);
+                var barLE = bg.gameObject.AddComponent<LayoutElement>();
+                barLE.preferredHeight = 14;
+
+                var timeLabel = UIHelper.CreateLabel(contentRT,
+                    $"Entrenching: {UIHelper.FormatTime(remaining)}", UIConstants.FontCaption,
+                    SporefrontColors.SporeAmber, TextAnchor.MiddleCenter);
+                var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
+                timeLE.preferredHeight = 18;
+            }
+
             UIHelper.CreateDivider(contentRT);
 
             // Composition
@@ -169,9 +192,16 @@ namespace Sporefront.Visual
             BuildStaminaBar(army);
             UIHelper.CreateDivider(contentRT);
 
+            // Pending reinforcements
+            if (isOwned && army.pendingReinforcements.Count > 0)
+            {
+                BuildReinforcementsSection(army);
+                UIHelper.CreateDivider(contentRT);
+            }
+
             // Actions (owned armies only)
             if (isOwned)
-                BuildActionsSection(army);
+                BuildActionsSection(army, gameState);
         }
 
         // ================================================================
@@ -269,10 +299,44 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
+        // Reinforcements
+        // ================================================================
+
+        private void BuildReinforcementsSection(ArmyData army)
+        {
+            var sectionLabel = UIHelper.CreateLabel(contentRT, "Pending Reinforcements",
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 22;
+
+            foreach (var reinforcement in army.pendingReinforcements)
+            {
+                var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
+
+                var infoLabel = UIHelper.CreateLabel(row.transform,
+                    $"{reinforcement.GetTotalUnits()} units en route", 12);
+                var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
+                infoLE.flexibleWidth = 1;
+
+                var capturedID = reinforcement.reinforcementID;
+                var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, 11, () =>
+                    {
+                        var cmd = new CancelReinforcementCommand(localPlayerID, capturedID);
+                        GameEngine.Instance.ExecuteCommand(cmd);
+                    });
+                var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                cancelLE.preferredWidth = 60;
+                cancelLE.preferredHeight = 28;
+            }
+        }
+
+        // ================================================================
         // Actions
         // ================================================================
 
-        private void BuildActionsSection(ArmyData army)
+        private void BuildActionsSection(ArmyData army, GameState gameState)
         {
             var row = UIHelper.CreateHorizontalRow(contentRT, 32f, 8f);
 
@@ -302,6 +366,28 @@ namespace Sporefront.Visual
                 var eLE = entrenchBtn.gameObject.AddComponent<LayoutElement>();
                 eLE.preferredWidth = 80;
                 eLE.preferredHeight = 32;
+            }
+
+            // Garrison — available when army is at an owned building
+            if (!army.isInCombat)
+            {
+                var building = gameState.GetBuilding(army.coordinate);
+                if (building != null && building.ownerID.HasValue &&
+                    building.ownerID.Value == localPlayerID && building.IsOperational)
+                {
+                    var capturedBuildingID = building.id;
+                    var capturedArmyID = army.id;
+                    var garrisonBtn = UIHelper.CreateButton(row.transform, "Garrison",
+                        SporefrontColors.SporeTeal, UIHelper.HudTextColor, 12, () =>
+                        {
+                            var cmd = new GarrisonArmyCommand(localPlayerID, capturedArmyID, capturedBuildingID);
+                            GameEngine.Instance.ExecuteCommand(cmd);
+                            Close();
+                        });
+                    var gLE = garrisonBtn.gameObject.AddComponent<LayoutElement>();
+                    gLE.preferredWidth = 80;
+                    gLE.preferredHeight = 32;
+                }
             }
 
             // Retreat

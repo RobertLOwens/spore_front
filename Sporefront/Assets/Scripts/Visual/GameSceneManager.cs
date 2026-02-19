@@ -93,6 +93,7 @@ namespace Sporefront.Visual
 
             // 3. Listen for new game request from main menu
             uiManager.OnStartNewGame += StartNewGame;
+            uiManager.OnPlayArenaGame += StartArenaGame;
 
             // 4. Show main menu
             uiManager.ShowMainMenu();
@@ -143,7 +144,12 @@ namespace Sporefront.Visual
             PlaceStartingEntities(startPositions, human, ai, generator);
 
             // 6. Initialize engine
+            gameState.visibilityMode = config.visibilityMode;
             GameEngine.Instance.Setup(gameState);
+
+            // 6b. Force initial vision tick so PlayerState.visibleCoordinates
+            //     is populated before any rendering happens
+            GameEngine.Instance.visionEngine.Update(0);
 
             // 7. Build visual grid
             gridRenderer.BuildGrid(gameState.mapData);
@@ -177,6 +183,209 @@ namespace Sporefront.Visual
                 case MapSize.Huge:   return (65, 65);
                 default:             return (35, 35);
             }
+        }
+
+        // ================================================================
+        // Phase 2b: Start Arena Game — playable combat on 7x7 map
+        // ================================================================
+
+        private void StartArenaGame(ArenaConfig arenaConfig)
+        {
+            var scenario = arenaConfig.scenarioConfig;
+            var army = arenaConfig.armyConfig;
+
+            // 1. Create 7x7 game state
+            gameState = new GameState(7, 7);
+
+            // 2. Generate arena terrain
+            for (int r = 0; r < 7; r++)
+            {
+                for (int q = 0; q < 7; q++)
+                {
+                    var coord = new HexCoordinate(q, r);
+                    gameState.mapData.SetTile(new TileData(coord, TerrainType.Plains, 0));
+                }
+            }
+            var enemyPos = new HexCoordinate(4, 3);
+            var playerPos = new HexCoordinate(2, 3);
+            int elevation = scenario.enemyTerrain == TerrainType.Hill ? 1 :
+                           (scenario.enemyTerrain == TerrainType.Mountain ? 2 : 0);
+            gameState.mapData.SetTile(new TileData(enemyPos, scenario.enemyTerrain, elevation));
+
+            // 3. Create players (defender is not AI-controlled in arena — player fights manually)
+            var human = new PlayerState("Attacker", "3A5E8B", false);
+            var ai = new PlayerState("Defender", "8B3A3A", false);
+            gameState.AddPlayer(human);
+            gameState.AddPlayer(ai);
+            gameState.localPlayerID = human.id;
+
+            // Set diplomacy
+            human.SetDiplomacyStatus(ai.id, DiplomacyStatus.Enemy);
+            ai.SetDiplomacyStatus(human.id, DiplomacyStatus.Enemy);
+
+            // 4. Create city centers (home bases)
+            var attackerCity = new BuildingData(BuildingType.CityCenter, new HexCoordinate(0, 0), human.id);
+            attackerCity.state = BuildingState.Completed;
+            attackerCity.health = attackerCity.maxHealth;
+            gameState.AddBuilding(attackerCity);
+
+            var defenderCity = new BuildingData(BuildingType.CityCenter, new HexCoordinate(6, 6), ai.id);
+            defenderCity.state = BuildingState.Completed;
+            defenderCity.health = defenderCity.maxHealth;
+            gameState.AddBuilding(defenderCity);
+
+            // 5. Apply unit tier upgrades
+            foreach (var kvp in scenario.playerUnitTiers)
+            {
+                if (kvp.Value <= 0) continue;
+                var upgrades = UnitUpgradeTypeExtensions.UpgradesForUnit(kvp.Key);
+                upgrades.Sort((a, b) => a.Tier().CompareTo(b.Tier()));
+                foreach (var upgrade in upgrades)
+                {
+                    if (upgrade.Tier() <= kvp.Value)
+                        human.CompleteUnitUpgrade(upgrade.ToString());
+                }
+            }
+            foreach (var kvp in scenario.enemyUnitTiers)
+            {
+                if (kvp.Value <= 0) continue;
+                var upgrades = UnitUpgradeTypeExtensions.UpgradesForUnit(kvp.Key);
+                upgrades.Sort((a, b) => a.Tier().CompareTo(b.Tier()));
+                foreach (var upgrade in upgrades)
+                {
+                    if (upgrade.Tier() <= kvp.Value)
+                        ai.CompleteUnitUpgrade(upgrade.ToString());
+                }
+            }
+
+            // 6. Create player (attacker) army
+            var attackerArmy = new ArmyData("Attacker Army", playerPos, human.id);
+            var attackerCmdr = new CommanderData("Attacker Cmdr", scenario.playerCommanderSpecialty, human.id);
+            attackerCmdr.level = scenario.playerCommanderLevel;
+            attackerCmdr.rank = CommanderRankExtensions.RankForLevel(scenario.playerCommanderLevel);
+            attackerArmy.commanderID = attackerCmdr.id;
+            attackerArmy.homeBaseID = attackerCity.id;
+            gameState.AddCommander(attackerCmdr);
+            foreach (var kvp in army.playerArmy)
+            {
+                if (kvp.Value > 0)
+                    attackerArmy.AddMilitaryUnits(kvp.Key, kvp.Value);
+            }
+            gameState.AddArmy(attackerArmy);
+
+            // Extra attacker armies (stacking)
+            int playerExtraCount = Math.Abs(scenario.playerArmyCount) - 1;
+            if (playerExtraCount > 0)
+            {
+                var adjacentHexes = playerPos.Neighbors();
+                bool stacked = scenario.playerArmyCount > 1;
+                for (int i = 0; i < playerExtraCount; i++)
+                {
+                    var coord = stacked ? playerPos : (i < adjacentHexes.Count ? adjacentHexes[i] : playerPos);
+                    var extraArmy = new ArmyData($"Attacker Army {i + 2}", coord, human.id);
+                    var extraCmdr = new CommanderData($"Attacker Cmdr {i + 2}", scenario.playerCommanderSpecialty, human.id);
+                    extraCmdr.level = scenario.playerCommanderLevel;
+                    extraCmdr.rank = CommanderRankExtensions.RankForLevel(scenario.playerCommanderLevel);
+                    extraArmy.commanderID = extraCmdr.id;
+                    extraArmy.homeBaseID = attackerCity.id;
+                    gameState.AddCommander(extraCmdr);
+                    foreach (var kvp in army.playerArmy)
+                    {
+                        if (kvp.Value > 0)
+                            extraArmy.AddMilitaryUnits(kvp.Key, kvp.Value);
+                    }
+                    gameState.AddArmy(extraArmy);
+                }
+            }
+
+            // 7. Create enemy (defender) army
+            var defenderArmy = new ArmyData("Defender Army", enemyPos, ai.id);
+            var defenderCmdr = new CommanderData("Defender Cmdr", scenario.enemyCommanderSpecialty, ai.id);
+            defenderCmdr.level = scenario.enemyCommanderLevel;
+            defenderCmdr.rank = CommanderRankExtensions.RankForLevel(scenario.enemyCommanderLevel);
+            defenderArmy.commanderID = defenderCmdr.id;
+            defenderArmy.homeBaseID = defenderCity.id;
+            gameState.AddCommander(defenderCmdr);
+            foreach (var kvp in army.enemyArmy)
+            {
+                if (kvp.Value > 0)
+                    defenderArmy.AddMilitaryUnits(kvp.Key, kvp.Value);
+            }
+            gameState.AddArmy(defenderArmy);
+
+            // Extra defender armies (stacking)
+            var extraDefenderArmies = new List<ArmyData>();
+            int enemyExtraCount = Math.Abs(scenario.enemyArmyCount) - 1;
+            if (enemyExtraCount > 0)
+            {
+                var adjacentHexes = enemyPos.Neighbors();
+                bool stacked = scenario.enemyArmyCount > 1;
+                for (int i = 0; i < enemyExtraCount; i++)
+                {
+                    var coord = stacked ? enemyPos : (i < adjacentHexes.Count ? adjacentHexes[i] : enemyPos);
+                    var extraArmy = new ArmyData($"Defender Army {i + 2}", coord, ai.id);
+                    var extraCmdr = new CommanderData($"Defender Cmdr {i + 2}", scenario.enemyCommanderSpecialty, ai.id);
+                    extraCmdr.level = scenario.enemyCommanderLevel;
+                    extraCmdr.rank = CommanderRankExtensions.RankForLevel(scenario.enemyCommanderLevel);
+                    extraArmy.commanderID = extraCmdr.id;
+                    extraArmy.homeBaseID = defenderCity.id;
+                    gameState.AddCommander(extraCmdr);
+                    foreach (var kvp in army.enemyArmy)
+                    {
+                        if (kvp.Value > 0)
+                            extraArmy.AddMilitaryUnits(kvp.Key, kvp.Value);
+                    }
+                    gameState.AddArmy(extraArmy);
+                    extraDefenderArmies.Add(extraArmy);
+                }
+            }
+
+            // 8. Apply entrenchment
+            if (scenario.enemyEntrenched)
+            {
+                var allDefenders = new List<ArmyData> { defenderArmy };
+                allDefenders.AddRange(extraDefenderArmies);
+                foreach (var a in allDefenders)
+                {
+                    var coverage = gameState.ComputeEntrenchmentCoverage(a);
+                    a.isEntrenched = true;
+                    a.entrenchedCoveredTiles = coverage;
+                }
+            }
+
+            // 9. Place enemy building + garrison
+            if (scenario.enemyBuilding.HasValue)
+            {
+                var buildingData = new BuildingData(scenario.enemyBuilding.Value, enemyPos, ai.id);
+                buildingData.state = BuildingState.Completed;
+                buildingData.health = buildingData.maxHealth;
+                if (scenario.garrisonArchers > 0)
+                    buildingData.AddToGarrison(MilitaryUnitType.Archer, scenario.garrisonArchers);
+                gameState.AddBuilding(buildingData);
+            }
+
+            // 10. Initialize engine — full visibility for arena
+            gameState.visibilityMode = VisibilityMode.Full;
+            GameEngine.Instance.Setup(gameState);
+            GameEngine.Instance.visionEngine.Update(0);
+
+            // 11. Build visual grid
+            gridRenderer.BuildGrid(gameState.mapData);
+
+            // 12. Set camera bounds and focus on player army
+            cameraController.SetMapBounds(7, 7);
+            cameraController.FocusOn(playerPos, 5f, false);
+
+            // 13. Subscribe to state changes
+            GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
+
+            // 14. Transition UI to gameplay
+            uiManager.OnGameStarted(gameState);
+
+            // 15. Game is now running
+            gameStarted = true;
+
+            Debug.Log("[GameSceneManager] Arena game started");
         }
 
         // ================================================================
@@ -243,6 +452,7 @@ namespace Sporefront.Visual
             if (uiManager != null)
                 uiManager.HandleStateChanges(batch);
         }
+
 
         // ================================================================
         // Tile Interaction — hover, click, drag-to-move (#13)

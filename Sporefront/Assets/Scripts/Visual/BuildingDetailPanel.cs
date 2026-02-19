@@ -22,6 +22,8 @@ namespace Sporefront.Visual
         // ================================================================
 
         public event Action<Guid, BuildingType, HexCoordinate, int> OnUpgradeRequested;
+        public event Action<Guid> OnCancelUpgradeRequested;
+        public event Action<Guid> OnCancelDemolishRequested;
 
         // ================================================================
         // State
@@ -74,27 +76,32 @@ namespace Sporefront.Visual
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Close);
 
-            // Main panel — centered 400x500
+            // Main panel — centered 480x620
             panel = UIHelper.CreatePanel(backdrop.transform, "BuildingDetailPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, UIConstants.ModalSmallW, UIConstants.ModalMediumH);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalDetailW, UIConstants.ModalDetailH);
+
+            // Click sink — absorbs pointer clicks inside the panel so they don't
+            // propagate up to the backdrop's close-on-click Button
+            var panelBtn = panel.AddComponent<Button>();
+            panelBtn.transition = Selectable.Transition.None;
 
             // ScrollView inside panel
             var scroll = UIHelper.CreateScrollView(panel.transform, "DetailScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 40); // Space for close button
+            scrollRT.offsetMin = new Vector2(0, 48); // Space for close button
             scrollRT.offsetMax = Vector2.zero;
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Close);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody, Close);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 46);
 
             backdrop.SetActive(false);
         }
@@ -138,7 +145,7 @@ namespace Sporefront.Visual
             // Check if structural fingerprint matches — if so, only update dynamic values
             if (hasCachedFingerprint && FingerprintMatches(building))
             {
-                IncrementalUpdate(building);
+                IncrementalUpdate(building, gameState);
                 return;
             }
 
@@ -174,7 +181,7 @@ namespace Sporefront.Visual
             hasCachedFingerprint = true;
         }
 
-        private void IncrementalUpdate(BuildingData building)
+        private void IncrementalUpdate(BuildingData building, GameState gameState)
         {
             // Update HP bar
             if (hpFill != null && building.maxHealth > 0)
@@ -211,6 +218,54 @@ namespace Sporefront.Visual
             {
                 trainingState.villagerQueueLabel.text = $"Villager queue: {building.villagerTrainingQueue.Count} item(s)";
             }
+
+            // Update military training progress bars
+            if (trainingState.trainingProgressFills != null && building.trainingQueue != null)
+            {
+                for (int i = 0; i < trainingState.trainingProgressFills.Count && i < building.trainingQueue.Count; i++)
+                {
+                    var entry = building.trainingQueue[i];
+                    float pct = Mathf.Clamp01((float)entry.GetProgress(gameState.currentTime,
+                        building.GetTrainingSpeedMultiplier()));
+                    var fillRT = trainingState.trainingProgressFills[i].GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(pct, 1);
+
+                    if (i < trainingState.trainingProgressLabels.Count)
+                        trainingState.trainingProgressLabels[i].text = $"{(int)(pct * 100)}%";
+
+                    if (i < trainingState.trainingTimeLabels.Count)
+                    {
+                        double baseTime = entry.unitType.TrainingTime() * entry.quantity;
+                        double totalTime = baseTime / building.GetTrainingSpeedMultiplier();
+                        double elapsed = gameState.currentTime - entry.startTime;
+                        double remaining = System.Math.Max(0, totalTime - elapsed);
+                        trainingState.trainingTimeLabels[i].text = $"~{UIHelper.FormatTime(remaining)}";
+                    }
+                }
+            }
+
+            // Update villager training progress bars
+            if (trainingState.villagerProgressFills != null && building.villagerTrainingQueue != null)
+            {
+                for (int i = 0; i < trainingState.villagerProgressFills.Count && i < building.villagerTrainingQueue.Count; i++)
+                {
+                    var entry = building.villagerTrainingQueue[i];
+                    float pct = Mathf.Clamp01((float)entry.GetProgress(gameState.currentTime));
+                    var fillRT = trainingState.villagerProgressFills[i].GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(pct, 1);
+
+                    if (i < trainingState.villagerProgressLabels.Count)
+                        trainingState.villagerProgressLabels[i].text = $"{(int)(pct * 100)}%";
+
+                    if (i < trainingState.villagerTimeLabels.Count)
+                    {
+                        double totalTime = VillagerTrainingEntry.TrainingTimePerVillager * entry.quantity;
+                        double elapsed = gameState.currentTime - entry.startTime;
+                        double remaining = System.Math.Max(0, totalTime - elapsed);
+                        trainingState.villagerTimeLabels[i].text = $"~{UIHelper.FormatTime(remaining)}";
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -243,23 +298,32 @@ namespace Sporefront.Visual
             constructionProgressFill = null;
             upgradeProgressFill = null;
 
+            // Adjust scroll content spacing
+            var contentVLG = contentRT.GetComponent<VerticalLayoutGroup>();
+            if (contentVLG != null)
+            {
+                contentVLG.spacing = UIConstants.SectionCardSpacing;
+                contentVLG.padding = new RectOffset(12, 12, 12, 12);
+            }
+
             var player = gameState.GetPlayer(localPlayerID);
 
             // Header
             var header = UIHelper.CreateLabel(contentRT,
                 $"{building.buildingType.DisplayName()} Lv.{building.level}",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 32;
+            headerLE.preferredHeight = 36;
 
-            // HP bar
-            BuildHPBar(building);
+            // Status / HP card
+            var statusCard = UIHelper.CreateSectionCard(contentRT, "StatusCard", "Status");
+            BuildHPBar(building, statusCard.transform);
 
             // State info
             if (building.state != BuildingState.Completed)
             {
-                var stateLabel = UIHelper.CreateLabel(contentRT, $"State: {building.state}");
+                var stateLabel = UIHelper.CreateLabel(statusCard.transform, $"State: {building.state}");
                 var stateLE = stateLabel.gameObject.AddComponent<LayoutElement>();
                 stateLE.preferredHeight = 20;
 
@@ -270,7 +334,7 @@ namespace Sporefront.Visual
                         : building.upgradeProgress;
                     int pctInt = Mathf.Clamp((int)(progress * 100), 0, 100);
 
-                    var (bg, fill, pctLabel) = UIHelper.CreateProgressBarWithLabel(contentRT, 16f,
+                    var (bg, fill, pctLabel) = UIHelper.CreateProgressBarWithLabel(statusCard.transform, 16f,
                         SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
                     pctLabel.text = $"{pctInt}%";
                     var fillRT = fill.GetComponent<RectTransform>();
@@ -291,57 +355,87 @@ namespace Sporefront.Visual
                         : building.GetRemainingUpgradeTime(currentTime);
                     if (remaining.HasValue)
                     {
-                        var etaLabel = UIHelper.CreateLabel(contentRT,
+                        var etaLabel = UIHelper.CreateLabel(statusCard.transform,
                             $"~{UIHelper.FormatTime(remaining.Value)} remaining",
                             UIConstants.FontSmall, SporefrontColors.InkLight);
                         var etaLE = etaLabel.gameObject.AddComponent<LayoutElement>();
                         etaLE.preferredHeight = 18;
                     }
+
+                    // Cancel button for upgrading buildings
+                    if (building.state == BuildingState.Upgrading &&
+                        building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                    {
+                        var capturedID = building.id;
+                        var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Upgrade (50% refund)",
+                            SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                            {
+                                OnCancelUpgradeRequested?.Invoke(capturedID);
+                            });
+                        var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                        cancelLE.preferredHeight = 30;
+                    }
+                }
+
+                // Cancel button for demolishing buildings
+                if (building.state == BuildingState.Demolishing &&
+                    building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                {
+                    var capturedID = building.id;
+                    var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Demolish",
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        {
+                            OnCancelDemolishRequested?.Invoke(capturedID);
+                        });
+                    var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                    cancelLE.preferredHeight = 30;
                 }
             }
-
-            UIHelper.CreateDivider(contentRT);
 
             // Training section (military buildings + CC)
             if (building.IsOperational)
             {
+                var trainingCard = UIHelper.CreateSectionCard(contentRT, "TrainingCard");
+                var trainingCardRT = (RectTransform)trainingCard.transform;
                 trainingState = BuildingTrainingSection.BuildTraining(
-                    contentRT, building, gameState, player, localPlayerID);
-                UIHelper.CreateDivider(contentRT);
+                    trainingCardRT, building, gameState, player, localPlayerID);
 
                 // Market section
                 if (building.buildingType == BuildingType.Market)
                 {
+                    var marketCard = UIHelper.CreateSectionCard(contentRT, "MarketCard");
+                    var marketCardRT = (RectTransform)marketCard.transform;
                     marketState = BuildingMarketSection.Build(
-                        contentRT, building, gameState, player, localPlayerID,
+                        marketCardRT, building, gameState, player, localPlayerID,
                         currentBuildingID, () => Rebuild(GameEngine.Instance.gameState));
-                    UIHelper.CreateDivider(contentRT);
                 }
 
                 // Unit upgrades section (military production buildings)
                 var availableUpgrades = UnitUpgradeTypeExtensions.UpgradesForBuilding(building.buildingType);
                 if (availableUpgrades.Count > 0)
                 {
+                    var upgradesCard = UIHelper.CreateSectionCard(contentRT, "UnitUpgradesCard");
+                    var upgradesCardRT = (RectTransform)upgradesCard.transform;
                     BuildingUnitUpgradesSection.Build(
-                        contentRT, building, gameState, player, localPlayerID,
+                        upgradesCardRT, building, gameState, player, localPlayerID,
                         currentBuildingID, availableUpgrades);
-                    UIHelper.CreateDivider(contentRT);
                 }
 
                 // Garrison section
-                BuildingTrainingSection.BuildGarrison(contentRT, building);
-                UIHelper.CreateDivider(contentRT);
+                var garrisonCard = UIHelper.CreateSectionCard(contentRT, "GarrisonCard");
+                var garrisonCardRT = (RectTransform)garrisonCard.transform;
+                BuildingTrainingSection.BuildGarrison(garrisonCardRT, building);
 
                 // Deploy section
-                BuildingTrainingSection.BuildDeploy(contentRT, building, gameState, localPlayerID);
-                UIHelper.CreateDivider(contentRT);
+                var deployCard = UIHelper.CreateSectionCard(contentRT, "DeployCard");
+                var deployCardRT = (RectTransform)deployCard.transform;
+                BuildingTrainingSection.BuildDeploy(deployCardRT, building, gameState, localPlayerID);
 
                 // Home base section
                 int? homeBaseCapacity = building.GetArmyHomeBaseCapacity();
                 if (homeBaseCapacity.HasValue || building.buildingType == BuildingType.CityCenter)
                 {
                     BuildHomeBaseSection(building, gameState);
-                    UIHelper.CreateDivider(contentRT);
                 }
 
                 // Upgrade section
@@ -356,11 +450,11 @@ namespace Sporefront.Visual
         // HP Bar
         // ================================================================
 
-        private void BuildHPBar(BuildingData building)
+        private void BuildHPBar(BuildingData building, Transform parent)
         {
             if (building.maxHealth <= 0) return;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 18f, 4f);
+            var row = UIHelper.CreateHorizontalRow(parent, 18f, 4f);
 
             hpLabel = UIHelper.CreateLabel(row.transform,
                 $"HP: {(int)building.health}/{(int)building.maxHealth}", 11);
@@ -387,17 +481,13 @@ namespace Sporefront.Visual
         {
             if (!building.CanUpgrade) return;
 
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Upgrade",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
+            var card = UIHelper.CreateSectionCard(contentRT, "UpgradeCard", "Upgrade");
 
             var cost = building.GetUpgradeCost();
             bool canAfford = player != null && player.CanAfford(cost);
             int nextLevel = building.level + 1;
 
-            var infoLabel = UIHelper.CreateLabel(contentRT,
+            var infoLabel = UIHelper.CreateLabel(card.transform,
                 $"Lv.{building.level} -> Lv.{nextLevel}  Cost: {UIHelper.FormatCost(cost)}", 12,
                 canAfford ? UIHelper.BodyTextColor : SporefrontColors.SporeRed);
             infoLabel.supportRichText = true;
@@ -408,7 +498,7 @@ namespace Sporefront.Visual
             var capturedType = building.buildingType;
             var capturedCoord = building.coordinate;
             var capturedLevel = building.level;
-            var upgradeBtn = UIHelper.CreateButton(contentRT, "Upgrade",
+            var upgradeBtn = UIHelper.CreateButton(card.transform, "Upgrade",
                 canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
                 canAfford ? UIHelper.ButtonText : SporefrontColors.InkLight, 12, () =>
                 {
@@ -421,7 +511,7 @@ namespace Sporefront.Visual
             // Upgrade progress
             if (building.state == BuildingState.Upgrading)
             {
-                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
+                var (bg, fill) = UIHelper.CreateProgressBar(card.transform, 14f,
                     SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
@@ -438,11 +528,7 @@ namespace Sporefront.Visual
 
         private void BuildHomeBaseSection(BuildingData building, GameState gameState)
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Home Base",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
+            var card = UIHelper.CreateSectionCard(contentRT, "HomeBaseCard", "Home Base");
 
             int? capacity = building.GetArmyHomeBaseCapacity();
             int count = gameState.GetArmyCountForHomeBase(building.id);
@@ -451,14 +537,14 @@ namespace Sporefront.Visual
                 ? $"Army Capacity: {count}/{capacity.Value}"
                 : $"Army Capacity: {count} (Unlimited)";
 
-            var capLabel = UIHelper.CreateLabel(contentRT, capacityText, 12, SporefrontColors.InkMid);
+            var capLabel = UIHelper.CreateLabel(card.transform, capacityText, 12, SporefrontColors.InkMid);
             var capLE = capLabel.gameObject.AddComponent<LayoutElement>();
             capLE.preferredHeight = 20;
 
             var armies = gameState.GetArmiesForHomeBase(building.id);
             if (armies.Count == 0)
             {
-                var emptyLabel = UIHelper.CreateLabel(contentRT, "No armies based here", 11,
+                var emptyLabel = UIHelper.CreateLabel(card.transform, "No armies based here", 11,
                     SporefrontColors.InkFaded);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 18;
@@ -467,7 +553,7 @@ namespace Sporefront.Visual
             {
                 foreach (var army in armies)
                 {
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
+                    var row = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
                     var nameLabel = UIHelper.CreateLabel(row.transform,
                         army.name ?? "Army", 12, SporefrontColors.InkDark);

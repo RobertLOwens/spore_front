@@ -1,7 +1,8 @@
 // ============================================================================
 // FILE: Visual/TileInfoPanel.cs
-// PURPOSE: Right-side tile details panel with contextual info (#14)
+// PURPOSE: Right-side tile details panel with contextual info
 //          Shows terrain, buildings, armies, villagers, resources, actions
+//          Merged: absorbs EntityListPanel's inline action buttons
 // ============================================================================
 
 using System;
@@ -9,7 +10,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using Sporefront.Data;
+using Sporefront.Engine;
 using Sporefront.Models;
+using Sporefront.Commands;
 
 namespace Sporefront.Visual
 {
@@ -28,6 +31,7 @@ namespace Sporefront.Visual
         public event Action<Guid, Guid> OnGatherRequested; // villagerGroupID, resourcePointID
         public event Action<Guid> OnHuntRequested; // resourcePointID — opens GatherPanel in hunt mode
         public event Action<Guid, HexCoordinate, bool> OnMoveEntityToTile; // entityID, destination, isArmy
+        public event Action<Guid, HexCoordinate> OnAttackEntityToTile; // armyID, target coordinate
 
         // ================================================================
         // State
@@ -38,6 +42,7 @@ namespace Sporefront.Visual
         private HexCoordinate? currentCoord;
         private Guid localPlayerID;
         private bool showingMoveSelection;
+        private bool showingAttackSelection;
         private GameState cachedGameState;
 
         // Cached references for incremental updates
@@ -51,6 +56,7 @@ namespace Sporefront.Visual
         private int cachedArmyCount;
         private int cachedVillagerCount;
         private bool cachedHasResource;
+        private int cachedArmyStateHash;
 
         // ================================================================
         // Initialization
@@ -84,6 +90,7 @@ namespace Sporefront.Visual
             currentCoord = coord;
             localPlayerID = playerID;
             showingMoveSelection = false;
+            showingAttackSelection = false;
             hasCachedFingerprint = false;
             Rebuild(gameState);
             panel.SetActive(true);
@@ -93,6 +100,7 @@ namespace Sporefront.Visual
         {
             currentCoord = null;
             showingMoveSelection = false;
+            showingAttackSelection = false;
             panel.SetActive(false);
         }
 
@@ -101,7 +109,7 @@ namespace Sporefront.Visual
             if (!currentCoord.HasValue || !panel.activeSelf) return;
 
             // Skip full rebuild if structure hasn't changed
-            if (hasCachedFingerprint && !showingMoveSelection && TileFingerprintMatches(gameState))
+            if (hasCachedFingerprint && !showingMoveSelection && !showingAttackSelection && TileFingerprintMatches(gameState))
             {
                 IncrementalTileUpdate(gameState);
                 return;
@@ -128,13 +136,18 @@ namespace Sporefront.Visual
 
             buildingHPFill = null;
 
-            // Move selection view — show entity list instead of normal content
+            // Move/Attack selection views — show entity list instead of normal content
             var panelImg = panel.GetComponent<Image>();
             if (showingMoveSelection)
             {
-                // Subtle tint to distinguish sub-flow
                 panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeTeal, 0.06f);
                 BuildMoveSelectionView(gameState, coord);
+                return;
+            }
+            if (showingAttackSelection)
+            {
+                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeRed, 0.06f);
+                BuildAttackSelectionView(gameState, coord);
                 return;
             }
             panelImg.color = UIHelper.PanelBg;
@@ -145,7 +158,7 @@ namespace Sporefront.Visual
 
             // 1. Header: terrain + coordinate
             var header = UIHelper.CreateLabel(contentRT, $"{tile.terrain} ({coord.q},{coord.r})",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 30;
 
@@ -171,7 +184,7 @@ namespace Sporefront.Visual
             var villagers = gameState.GetVillagerGroups(coord);
             if (villagers != null && villagers.Count > 0)
             {
-                BuildVillagersSection(villagers, coord);
+                BuildVillagersSection(villagers, coord, gameState);
                 UIHelper.CreateDivider(contentRT);
             }
 
@@ -187,18 +200,40 @@ namespace Sporefront.Visual
             if (building == null && gameState.CanBuildAt(coord, localPlayerID))
             {
                 var buildBtn = UIHelper.CreateButton(contentRT, "Build Here",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, -1,
+                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnBuildRequested?.Invoke(coord));
                 var btnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredHeight = 32;
+                btnLE.preferredHeight = 38;
             }
 
             // 7. "Move Here" — destination-first move flow
             var moveHereBtn = UIHelper.CreateButton(contentRT, "Move Here",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, -1,
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
                 () => { showingMoveSelection = true; Rebuild(cachedGameState); });
             var moveHereBtnLE = moveHereBtn.gameObject.AddComponent<LayoutElement>();
-            moveHereBtnLE.preferredHeight = 32;
+            moveHereBtnLE.preferredHeight = 38;
+
+            // 8. "Attack Here" — destination-first attack flow (when tile has enemy entities)
+            bool hasEnemyEntities = false;
+            if (armies != null)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.ownerID.HasValue && army.ownerID.Value != localPlayerID)
+                    {
+                        hasEnemyEntities = true;
+                        break;
+                    }
+                }
+            }
+            if (hasEnemyEntities)
+            {
+                var attackHereBtn = UIHelper.CreateButton(contentRT, "Attack Here",
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody,
+                    () => { showingAttackSelection = true; Rebuild(cachedGameState); });
+                var attackHereBtnLE = attackHereBtn.gameObject.AddComponent<LayoutElement>();
+                attackHereBtnLE.preferredHeight = 38;
+            }
 
             // Cache fingerprint for incremental refresh
             CacheTileFingerprint(gameState);
@@ -207,6 +242,23 @@ namespace Sporefront.Visual
         // ================================================================
         // Fingerprint & Incremental Update
         // ================================================================
+
+        private int ComputeArmyStateHash(GameState gameState)
+        {
+            var coord = currentCoord.Value;
+            var armies = gameState.GetArmies(coord);
+            if (armies == null || armies.Count == 0) return 0;
+            int hash = 17;
+            foreach (var army in armies)
+            {
+                hash = hash * 31 + (army.isInCombat ? 1 : 0);
+                hash = hash * 31 + (army.isEntrenched ? 2 : 0);
+                hash = hash * 31 + (army.isEntrenching ? 4 : 0);
+                hash = hash * 31 + (army.isRetreating ? 8 : 0);
+                hash = hash * 31 + army.GetTotalUnits();
+            }
+            return hash;
+        }
 
         private bool TileFingerprintMatches(GameState gameState)
         {
@@ -231,6 +283,18 @@ namespace Sporefront.Visual
                 if (building.level != cachedBuildingLevel) return false;
             }
 
+            // Check army combat/entrench/retreat state changes
+            if (ComputeArmyStateHash(gameState) != cachedArmyStateHash) return false;
+
+            // Force rebuild when any army is entrenching (progress bar needs updates)
+            if (armies != null)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.isEntrenching) return false;
+                }
+            }
+
             return true;
         }
 
@@ -247,6 +311,7 @@ namespace Sporefront.Visual
             cachedVillagerCount = villagers != null ? villagers.Count : 0;
             var rp = gameState.GetResourcePoint(coord);
             cachedHasResource = rp != null && !rp.IsDepleted();
+            cachedArmyStateHash = ComputeArmyStateHash(gameState);
             hasCachedFingerprint = true;
         }
 
@@ -275,26 +340,26 @@ namespace Sporefront.Visual
             string displayName = building.buildingType.DisplayName();
 
             var label = UIHelper.CreateLabel(contentRT,
-                $"{displayName} Lv.{building.level}", -1, null, TextAnchor.MiddleLeft, true);
+                $"{displayName} Lv.{building.level}", UIConstants.FontBody, null, TextAnchor.MiddleLeft, true);
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
-            labelLE.preferredHeight = 24;
+            labelLE.preferredHeight = 30;
 
             // State
             string stateStr = building.state.ToString();
-            var stateLabel = UIHelper.CreateLabel(contentRT, stateStr);
+            var stateLabel = UIHelper.CreateLabel(contentRT, stateStr, UIConstants.FontBody);
             var stateLE = stateLabel.gameObject.AddComponent<LayoutElement>();
-            stateLE.preferredHeight = 20;
+            stateLE.preferredHeight = 24;
 
             // HP bar
             if (building.maxHealth > 0)
             {
-                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 12f,
+                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
                     SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
                 float hpPct = (float)(building.health / building.maxHealth);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
-                barLE.preferredHeight = 12;
+                barLE.preferredHeight = 14;
                 buildingHPFill = fill;
             }
 
@@ -302,10 +367,10 @@ namespace Sporefront.Visual
             if (isOwned && building.IsOperational)
             {
                 var detailBtn = UIHelper.CreateButton(contentRT, "Details",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12,
+                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnBuildingDetailRequested?.Invoke(building.id));
                 var btnLE = detailBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredHeight = 28;
+                btnLE.preferredHeight = 34;
             }
         }
 
@@ -315,7 +380,7 @@ namespace Sporefront.Visual
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 22;
+            headerLE.preferredHeight = 28;
 
             foreach (var army in armies)
             {
@@ -323,75 +388,164 @@ namespace Sporefront.Visual
                 string status = UIHelper.FormatArmyStatus(army);
                 int total = army.GetTotalUnits();
 
-                var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
+                // Row 1: Name + status + unit count
+                var nameRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
-                var nameLabel = UIHelper.CreateLabel(row.transform,
-                    $"{army.name}{status} ({total})", 12);
+                var nameLabel = UIHelper.CreateLabel(nameRow.transform,
+                    $"{army.name}{status} ({total})", UIConstants.FontBody);
                 nameLabel.supportRichText = true;
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.flexibleWidth = 1;
-                nameLE.preferredHeight = 26;
+                nameLE.preferredHeight = 30;
+
+                // Entrenchment progress bar
+                if (army.isEntrenching && army.entrenchmentStartTime.HasValue)
+                {
+                    double currentTime = gameState.currentTime;
+                    double elapsed = currentTime - army.entrenchmentStartTime.Value;
+                    double buildTime = GameConfig.Entrenchment.BuildTime;
+                    float progress = Mathf.Clamp01((float)(elapsed / buildTime));
+                    double remaining = buildTime - elapsed;
+
+                    var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
+                        SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                    var fillRT = fill.GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(progress, 1);
+                    var barLE = bg.gameObject.AddComponent<LayoutElement>();
+                    barLE.preferredHeight = 14;
+
+                    var timeLabel = UIHelper.CreateLabel(contentRT,
+                        $"Entrenching: {UIHelper.FormatTime(remaining)}", UIConstants.FontCaption,
+                        SporefrontColors.SporeAmber);
+                    var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
+                    timeLE.preferredHeight = 18;
+                }
 
                 if (isOwned)
                 {
-                    if (!army.isInCombat)
+                    // Row 2: Action buttons
+                    var btnRow = UIHelper.CreateHorizontalRow(contentRT, 34f, 3f);
+
+                    // Entrench
+                    if (!army.isEntrenched && !army.isEntrenching && !army.isInCombat)
                     {
-                        var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                            SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11,
-                            () => OnArmyMoveRequested?.Invoke(army.id));
-                        var moveBtnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
-                        moveBtnLE.preferredWidth = 44;
-                        moveBtnLE.preferredHeight = 26;
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Dig In", () =>
+                        {
+                            var cmd = new EntrenchCommand(localPlayerID, capturedArmyID);
+                            UIManager.ExecutePlayerCommand(cmd);
+                        });
                     }
 
-                    var detailBtn = UIHelper.CreateButton(row.transform, "Info",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11,
-                        () => OnArmyDetailRequested?.Invoke(army.id));
-                    var btnLE = detailBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 40;
-                    btnLE.preferredHeight = 26;
+                    // Retreat
+                    if (army.isInCombat)
+                    {
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Retreat", () =>
+                        {
+                            var cmd = new RetreatCommand(localPlayerID, capturedArmyID);
+                            UIManager.ExecutePlayerCommand(cmd);
+                        });
+                    }
+
+                    // Move
+                    if (!army.isInCombat)
+                    {
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Move", () =>
+                            OnArmyMoveRequested?.Invoke(capturedArmyID));
+                    }
+
+                    // Garrison — at owned operational building with garrison capacity
+                    if (!army.isInCombat)
+                    {
+                        var building = gameState.GetBuilding(army.coordinate);
+                        if (building != null && building.ownerID.HasValue &&
+                            building.ownerID.Value == localPlayerID && building.IsOperational &&
+                            building.GetGarrisonCapacity() > 0)
+                        {
+                            var capturedBuildingID = building.id;
+                            var capturedArmyID = army.id;
+                            CreateActionButton(btnRow.transform, "Garrison", () =>
+                            {
+                                var cmd = new GarrisonArmyCommand(localPlayerID, capturedArmyID, capturedBuildingID);
+                                UIManager.ExecutePlayerCommand(cmd);
+                            });
+                        }
+                    }
+
+                    // Attack
+                    if (!army.isInCombat && !army.isRetreating)
+                    {
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Attack", () =>
+                            OnAttackRequested?.Invoke(capturedArmyID, army.coordinate));
+                    }
+
+                    // Info
+                    {
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Info", () =>
+                            OnArmyDetailRequested?.Invoke(capturedArmyID));
+                    }
                 }
                 else if (army.ownerID.HasValue && army.ownerID.Value != localPlayerID)
                 {
-                    // Enemy army — Attack button for local player's armies
-                    var attackBtn = UIHelper.CreateButton(row.transform, "Atk",
-                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 11,
-                        () => OnAttackRequested?.Invoke(army.id, army.coordinate));
-                    var btnLE = attackBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 36;
-                    btnLE.preferredHeight = 26;
+                    // Enemy army — label tag (use "Attack Here" button for destination-first flow)
+                    var enemyTag = UIHelper.CreateLabel(nameRow.transform, "Enemy",
+                        UIConstants.FontCaption, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+                    var tagLE = enemyTag.gameObject.AddComponent<LayoutElement>();
+                    tagLE.preferredWidth = 48;
+                    tagLE.preferredHeight = 30;
                 }
             }
         }
 
-        private void BuildVillagersSection(List<VillagerGroupData> groups, HexCoordinate coord)
+        private void BuildVillagersSection(List<VillagerGroupData> groups, HexCoordinate coord, GameState gameState)
         {
             var sectionHeader = UIHelper.CreateLabel(contentRT, "Villagers",
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 22;
+            headerLE.preferredHeight = 28;
 
             foreach (var group in groups)
             {
                 bool isOwned = group.ownerID.HasValue && group.ownerID.Value == localPlayerID;
                 string task = group.currentTask != null ? group.currentTask.DisplayName : "Idle";
 
-                var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
+                var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
 
                 var label = UIHelper.CreateLabel(row.transform,
-                    $"{group.villagerCount}x — {task}", 12);
+                    $"{group.villagerCount}x — {task}", UIConstants.FontBody);
                 var labelLE = label.gameObject.AddComponent<LayoutElement>();
                 labelLE.flexibleWidth = 1;
 
                 if (isOwned)
                 {
+                    var capturedGroupID = group.id;
+
                     var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11,
-                        () => OnMoveRequested?.Invoke(group.id, coord));
-                    var btnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 44;
-                    btnLE.preferredHeight = 24;
+                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                        () => OnMoveRequested?.Invoke(capturedGroupID, coord));
+                    var moveBtnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
+                    moveBtnLE.preferredWidth = 50;
+                    moveBtnLE.preferredHeight = 28;
+
+                    // Cancel task button
+                    if (group.currentTask != null && !group.currentTask.IsIdle)
+                    {
+                        var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
+                            SporefrontColors.InkMid, UIHelper.HudTextColor, UIConstants.FontBody,
+                            () =>
+                            {
+                                var cmd = new StopGatheringCommand(localPlayerID, capturedGroupID);
+                                UIManager.ExecutePlayerCommand(cmd);
+                            });
+                        var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                        cancelLE.preferredWidth = 56;
+                        cancelLE.preferredHeight = 28;
+                    }
                 }
             }
         }
@@ -399,10 +553,10 @@ namespace Sporefront.Visual
         private void BuildResourceSection(ResourcePointData rp, GameState gameState)
         {
             var label = UIHelper.CreateLabel(contentRT,
-                $"Resource: {rp.resourceType} ({rp.remainingAmount})", -1, null,
+                $"Resource: {rp.resourceType} ({rp.remainingAmount})", UIConstants.FontBody, null,
                 TextAnchor.MiddleLeft);
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
-            labelLE.preferredHeight = 22;
+            labelLE.preferredHeight = 26;
 
             bool isHuntable = rp.resourceType.IsHuntable() && rp.currentHealth > 0;
 
@@ -412,14 +566,64 @@ namespace Sporefront.Visual
                 var capturedRPID = rp.id;
                 var huntBtn = UIHelper.CreateButton(contentRT, "Hunt",
                     SporefrontColors.SporeRed,
-                    UIHelper.HudTextColor, 12,
+                    UIHelper.HudTextColor, UIConstants.FontBody,
                     () => OnHuntRequested?.Invoke(capturedRPID));
                 var btnLE = huntBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredHeight = 28;
+                btnLE.preferredHeight = 34;
+            }
+            else if (rp.resourceType.RequiresCamp())
+            {
+                // Camp-required resources: check camp coverage via ResourceEngine
+                bool hasCoverage = GameEngine.Instance.resourceEngine.HasCampCoverage(
+                    rp.coordinate, rp.resourceType, gameState);
+
+                if (hasCoverage)
+                {
+                    // Find nearest idle villager owned by this player (no distance restriction)
+                    var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+                    VillagerGroupData nearest = null;
+                    int nearestDist = int.MaxValue;
+                    if (villagers != null)
+                    {
+                        foreach (var vg in villagers)
+                        {
+                            if (vg.currentTask != null && !vg.currentTask.IsIdle) continue;
+                            int dist = vg.coordinate.Distance(rp.coordinate);
+                            if (dist < nearestDist)
+                            {
+                                nearestDist = dist;
+                                nearest = vg;
+                            }
+                        }
+                    }
+
+                    if (nearest != null)
+                    {
+                        var capturedVG = nearest;
+                        var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
+                            SporefrontColors.SporeGreen,
+                            UIHelper.HudTextColor, UIConstants.FontBody,
+                            () => OnGatherRequested?.Invoke(capturedVG.id, rp.id));
+                        var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
+                        btnLE.preferredHeight = 34;
+                    }
+                }
+                else
+                {
+                    // Show "Needs [Camp Type]" label
+                    string campName = rp.resourceType == ResourcePointType.Trees
+                        ? "Lumber Camp"
+                        : "Mining Camp";
+                    var needsLabel = UIHelper.CreateLabel(contentRT,
+                        $"Needs {campName}", UIConstants.FontBody, SporefrontColors.InkFaded,
+                        TextAnchor.MiddleLeft);
+                    var needsLE = needsLabel.gameObject.AddComponent<LayoutElement>();
+                    needsLE.preferredHeight = 26;
+                }
             }
             else
             {
-                // Gather button if local player has villagers nearby
+                // Non-camp resources (Farmland, Forage, Carcasses): nearby idle villager check
                 var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
                 if (villagers != null)
                 {
@@ -430,10 +634,10 @@ namespace Sporefront.Visual
                         {
                             var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
                                 SporefrontColors.SporeGreen,
-                                UIHelper.HudTextColor, 12,
+                                UIHelper.HudTextColor, UIConstants.FontBody,
                                 () => OnGatherRequested?.Invoke(vg.id, rp.id));
                             var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
-                            btnLE.preferredHeight = 28;
+                            btnLE.preferredHeight = 34;
                             break;
                         }
                     }
@@ -454,7 +658,7 @@ namespace Sporefront.Visual
             arrowLE.preferredHeight = 28;
 
             var header = UIHelper.CreateLabel(headerRow.transform, $"Move to ({coord.q},{coord.r})",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.flexibleWidth = 1;
             headerLE.preferredHeight = 30;
@@ -475,23 +679,23 @@ namespace Sporefront.Visual
                             UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
-                        shLE.preferredHeight = 22;
+                        shLE.preferredHeight = 28;
                         hasArmies = true;
                     }
 
                     int total = army.GetTotalUnits();
                     var ac = army.coordinate;
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
+                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
                     var nameLabel = UIHelper.CreateLabel(row.transform,
-                        $"{army.name} ({total}) at ({ac.q},{ac.r})", 12);
+                        $"{army.name} ({total}) at ({ac.q},{ac.r})", UIConstants.FontBody);
                     var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                     nameLE.flexibleWidth = 1;
-                    nameLE.preferredHeight = 26;
+                    nameLE.preferredHeight = 30;
 
                     var capturedID = army.id;
                     var selectBtn = UIHelper.CreateButton(row.transform, "Select",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11,
+                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
                         () =>
                         {
                             OnMoveEntityToTile?.Invoke(capturedID, coord, true);
@@ -499,8 +703,8 @@ namespace Sporefront.Visual
                             Rebuild(cachedGameState);
                         });
                     var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 50;
-                    btnLE.preferredHeight = 26;
+                    btnLE.preferredWidth = 56;
+                    btnLE.preferredHeight = 30;
                 }
             }
 
@@ -518,22 +722,22 @@ namespace Sporefront.Visual
                             UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
-                        shLE.preferredHeight = 22;
+                        shLE.preferredHeight = 28;
                         hasVillagers = true;
                     }
 
                     var gc = group.coordinate;
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
+                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
                     var nameLabel = UIHelper.CreateLabel(row.transform,
-                        $"Villagers ({group.villagerCount}) at ({gc.q},{gc.r})", 12);
+                        $"Villagers ({group.villagerCount}) at ({gc.q},{gc.r})", UIConstants.FontBody);
                     var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                     nameLE.flexibleWidth = 1;
-                    nameLE.preferredHeight = 26;
+                    nameLE.preferredHeight = 30;
 
                     var capturedID = group.id;
                     var selectBtn = UIHelper.CreateButton(row.transform, "Select",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11,
+                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
                         () =>
                         {
                             OnMoveEntityToTile?.Invoke(capturedID, coord, false);
@@ -541,19 +745,104 @@ namespace Sporefront.Visual
                             Rebuild(cachedGameState);
                         });
                     var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 50;
-                    btnLE.preferredHeight = 26;
+                    btnLE.preferredWidth = 56;
+                    btnLE.preferredHeight = 30;
                 }
             }
 
             if (!hasArmies && !hasVillagers)
             {
-                var emptyLabel = UIHelper.CreateLabel(contentRT, "No movable entities", -1, null,
-                    TextAnchor.MiddleCenter);
+                var emptyLabel = UIHelper.CreateLabel(contentRT, "No movable entities",
+                    UIConstants.FontBody, null, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 30;
             }
+        }
 
+        private void BuildAttackSelectionView(GameState gameState, HexCoordinate coord)
+        {
+            // Breadcrumb header with back arrow
+            var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
+
+            var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                () => { showingAttackSelection = false; Rebuild(cachedGameState); });
+            var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
+            arrowLE.preferredWidth = 28;
+            arrowLE.preferredHeight = 28;
+
+            var header = UIHelper.CreateLabel(headerRow.transform, $"Attack ({coord.q},{coord.r})",
+                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+            var headerLE = header.gameObject.AddComponent<LayoutElement>();
+            headerLE.flexibleWidth = 1;
+            headerLE.preferredHeight = 30;
+
+            UIHelper.CreateDivider(contentRT);
+
+            // List player's armies that can attack
+            var armies = gameState.GetArmiesForPlayer(localPlayerID);
+            bool hasArmies = false;
+            if (armies != null && armies.Count > 0)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.isInCombat || army.isRetreating) continue;
+                    if (!hasArmies)
+                    {
+                        var sectionHeader = UIHelper.CreateLabel(contentRT, "Your Armies",
+                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                            TextAnchor.MiddleLeft, true);
+                        var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
+                        shLE.preferredHeight = 28;
+                        hasArmies = true;
+                    }
+
+                    int total = army.GetTotalUnits();
+                    var ac = army.coordinate;
+                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
+
+                    var nameLabel = UIHelper.CreateLabel(row.transform,
+                        $"{army.name} ({total}) at ({ac.q},{ac.r})", UIConstants.FontBody);
+                    var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+                    nameLE.flexibleWidth = 1;
+                    nameLE.preferredHeight = 30;
+
+                    var capturedID = army.id;
+                    var selectBtn = UIHelper.CreateButton(row.transform, "Select",
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody,
+                        () =>
+                        {
+                            OnAttackEntityToTile?.Invoke(capturedID, coord);
+                            showingAttackSelection = false;
+                            Rebuild(cachedGameState);
+                        });
+                    var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
+                    btnLE.preferredWidth = 56;
+                    btnLE.preferredHeight = 30;
+                }
+            }
+
+            if (!hasArmies)
+            {
+                var emptyLabel = UIHelper.CreateLabel(contentRT, "No available armies",
+                    UIConstants.FontBody, null, TextAnchor.MiddleCenter);
+                var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
+                emptyLE.preferredHeight = 30;
+            }
+        }
+
+        // ================================================================
+        // Helpers
+        // ================================================================
+
+        private Button CreateActionButton(Transform parent, string text, Action onClick)
+        {
+            var btn = UIHelper.CreateButton(parent, text,
+                SporefrontColors.InkMid, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
+            var le = btn.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = 56;
+            le.preferredHeight = 34;
+            return btn;
         }
     }
 }

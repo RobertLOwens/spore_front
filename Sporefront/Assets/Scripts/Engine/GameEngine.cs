@@ -251,6 +251,10 @@ namespace Sporefront.Engine
             // Resource gathering updates (2x per second)
             if (adjustedTime - lastResourceUpdate >= resourceUpdateInterval)
             {
+                // Process gather arrivals (villagers reaching resource points)
+                var gatherArrivalChanges = resourceEngine.ProcessGatherArrivals();
+                allChanges.AddRange(gatherArrivalChanges);
+
                 var resourceChanges = resourceEngine.Update(adjustedTime);
                 allChanges.AddRange(resourceChanges);
                 lastResourceUpdate = adjustedTime;

@@ -22,6 +22,7 @@ namespace Sporefront.Visual
 
         private bool _isSelected;
         private bool _isHovered;
+        private VisibilityLevel _visibilityLevel = VisibilityLevel.Visible;
 
         private MeshRenderer fillRenderer;
         private MeshRenderer borderRenderer;
@@ -96,6 +97,15 @@ namespace Sporefront.Visual
             UpdateVisuals();
         }
 
+        public void SetVisibility(VisibilityLevel level)
+        {
+            if (_visibilityLevel == level) return;
+            _visibilityLevel = level;
+            UpdateVisuals();
+        }
+
+        public VisibilityLevel CurrentVisibility => _visibilityLevel;
+
         // ================================================================
         // Visual Update
         // ================================================================
@@ -104,9 +114,21 @@ namespace Sporefront.Visual
         {
             Color color = baseColor;
 
+            // Apply fog darkening based on visibility level
+            switch (_visibilityLevel)
+            {
+                case VisibilityLevel.Unexplored:
+                    color = Color.Lerp(color, Color.black, 0.85f);
+                    break;
+                case VisibilityLevel.Explored:
+                    color = Color.Lerp(color, Color.black, 0.5f);
+                    break;
+                // Visible: full baseColor, no change
+            }
+
             // Selection visuals delegated to SelectionRenderer with glow effect (#15)
-            // Only apply hover tinting here
-            if (_isHovered && !_isSelected)
+            // Only apply hover tinting here; suppress hover on non-visible tiles
+            if (_isHovered && !_isSelected && _visibilityLevel == VisibilityLevel.Visible)
             {
                 // Subtle brighten on hover
                 color = Color.Lerp(color, Color.white, 0.15f);

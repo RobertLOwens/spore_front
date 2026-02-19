@@ -20,6 +20,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         public event Action OnNotificationClicked;
+        public event Action OnCombatLogClicked;
         public event Action OnSettingsClicked;
         public event Action OnMainMenuClicked;
 
@@ -72,13 +73,13 @@ namespace Sporefront.Visual
             row.childAlignment = TextAnchor.MiddleLeft;
 
             // Resource labels (full names, wider)
-            woodLabel = CreateResourceLabel(row.transform, "Wood", 160);
+            woodLabel = CreateResourceLabel(row.transform, "Wood", 200);
             UIHelper.AddTooltip(woodLabel.gameObject, "Wood: gathered from trees");
-            foodLabel = CreateResourceLabel(row.transform, "Food", 160);
+            foodLabel = CreateResourceLabel(row.transform, "Food", 200);
             UIHelper.AddTooltip(foodLabel.gameObject, "Food: gathered from farms and bushes");
-            stoneLabel = CreateResourceLabel(row.transform, "Stone", 160);
+            stoneLabel = CreateResourceLabel(row.transform, "Stone", 200);
             UIHelper.AddTooltip(stoneLabel.gameObject, "Stone: mined from quarries");
-            oreLabel = CreateResourceLabel(row.transform, "Ore", 160);
+            oreLabel = CreateResourceLabel(row.transform, "Ore", 200);
             UIHelper.AddTooltip(oreLabel.gameObject, "Ore: mined from deposits");
 
             // Spacer
@@ -141,8 +142,10 @@ namespace Sporefront.Visual
             var player = gameState.GetPlayer(localPlayerID);
             if (player == null) return;
 
+            double foodConsumption = gameState.GetFoodConsumptionRate(localPlayerID).rate;
+
             UpdateResourceLabel(woodLabel, player, ResourceType.Wood);
-            UpdateResourceLabel(foodLabel, player, ResourceType.Food);
+            UpdateResourceLabel(foodLabel, player, ResourceType.Food, foodConsumption);
             UpdateResourceLabel(stoneLabel, player, ResourceType.Stone);
             UpdateResourceLabel(oreLabel, player, ResourceType.Ore);
 
@@ -308,6 +311,17 @@ namespace Sporefront.Visual
             var csf = ellipsisDropdown.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+            // Combat Log button
+            var combatLogBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Combat Log",
+                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                14, () =>
+                {
+                    ellipsisDropdown.SetActive(false);
+                    OnCombatLogClicked?.Invoke();
+                });
+            var clLE = combatLogBtn.gameObject.AddComponent<LayoutElement>();
+            clLE.preferredHeight = 36;
+
             // Settings button
             var settingsBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Settings",
                 SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
@@ -344,19 +358,32 @@ namespace Sporefront.Visual
             return label;
         }
 
-        private void UpdateResourceLabel(Text label, PlayerState player, ResourceType type)
+        private void UpdateResourceLabel(Text label, PlayerState player, ResourceType type,
+            double foodConsumption = 0)
         {
             int amount = player.GetResource(type);
             double rate = player.GetCollectionRate(type);
             string name = type.DisplayName();
 
-            string rateStr = "";
-            if (rate > 0.01)
-                rateStr = $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>+{rate:F1}</color>";
-            else if (rate < -0.01)
-                rateStr = $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed)}>{rate:F1}</color>";
+            string amberHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber);
+            string redHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed);
+            string neutralHex = ColorUtility.ToHtmlStringRGB(UIHelper.HudTextColor);
 
-            label.text = $"{name} {amount}{rateStr}";
+            // Always show gather rate with appropriate color
+            string rateStr;
+            if (rate > 0.01)
+                rateStr = $" <color=#{amberHex}>+{rate:F1}</color>";
+            else if (rate < -0.01)
+                rateStr = $" <color=#{redHex}>{rate:F1}</color>";
+            else
+                rateStr = $" <color=#{neutralHex}>+0.0</color>";
+
+            // For food, append consumption rate
+            string consumptionStr = "";
+            if (type == ResourceType.Food && foodConsumption > 0.01)
+                consumptionStr = $" <color=#{redHex}>-{foodConsumption:F1}</color>";
+
+            label.text = $"{name} {amount}{rateStr}{consumptionStr}";
             label.supportRichText = true;
         }
     }

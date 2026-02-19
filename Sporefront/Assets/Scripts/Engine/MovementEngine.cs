@@ -139,7 +139,7 @@ namespace Sporefront.Engine
                 army.coordinate = targetCoord;
                 gameState.mapData.UpdateArmyPosition(army.id, targetCoord);
                 army.pathIndex += 1;
-                army.movementProgress = 0.0;
+                army.movementProgress -= 1.0;
 
                 changes.Add(new ArmyMovedChange
                 {
@@ -214,7 +214,7 @@ namespace Sporefront.Engine
                 group.coordinate = targetCoord;
                 gameState.mapData.UpdateVillagerGroupPosition(group.id, targetCoord);
                 group.pathIndex += 1;
-                group.movementProgress = 0.0;
+                group.movementProgress -= 1.0;
 
                 changes.Add(new VillagerGroupMovedChange
                 {

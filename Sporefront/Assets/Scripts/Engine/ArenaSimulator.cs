@@ -70,6 +70,16 @@ namespace Sporefront.Engine
     public static class ArenaSimulator
     {
         /// <summary>
+        /// Run a single headless combat simulation synchronously (for "Play Arena").
+        /// </summary>
+        public static SimulationResult RunSingleSync(
+            ArenaArmyConfiguration armyConfig,
+            ArenaScenarioConfig scenarioConfig)
+        {
+            return RunSingleSimulation(armyConfig, scenarioConfig);
+        }
+
+        /// <summary>
         /// Run N headless combat simulations with the given configuration.
         /// Executes on a background thread and calls onComplete when done.
         /// </summary>

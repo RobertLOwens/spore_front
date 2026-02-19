@@ -67,7 +67,7 @@ namespace Sporefront.Visual
         public static readonly Color HudBg = new Color(
             SporefrontColors.InkDark.r,
             SporefrontColors.InkDark.g,
-            SporefrontColors.InkDark.b, 0.9f);
+            SporefrontColors.InkDark.b, 1.0f);
 
         public static readonly Color ButtonBg = SporefrontColors.ParchmentDark;
         public static readonly Color ButtonText = SporefrontColors.InkBlack;
@@ -132,6 +132,51 @@ namespace Sporefront.Visual
                 0,
                 SpriteMeshType.FullRect,
                 new Vector4(border, border, border, border));
+        }
+
+        // ================================================================
+        // Section Card
+        // ================================================================
+
+        /// <summary>
+        /// Creates a lightly-tinted card panel with a VerticalLayoutGroup and optional bold header.
+        /// Returns the VLG so callers can add children inside the card.
+        /// </summary>
+        public static VerticalLayoutGroup CreateSectionCard(Transform parent, string name, string headerText = null)
+        {
+            var cardColor = new Color(
+                SporefrontColors.ParchmentDark.r,
+                SporefrontColors.ParchmentDark.g,
+                SporefrontColors.ParchmentDark.b, 0.5f);
+
+            var card = CreatePanel(parent, name, cardColor, SmallCornerRadius);
+            var cardLE = card.AddComponent<LayoutElement>();
+            cardLE.flexibleWidth = 1;
+
+            var vlg = card.AddComponent<VerticalLayoutGroup>();
+            int pad = (int)UIConstants.SectionCardPadding;
+            vlg.padding = new RectOffset(pad, pad, pad, pad);
+            vlg.spacing = UIConstants.SectionCardSpacing;
+            vlg.childAlignment = TextAnchor.UpperLeft;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+
+            var csf = card.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (!string.IsNullOrEmpty(headerText))
+            {
+                var header = CreateLabel(card.transform, headerText,
+                    UIConstants.FontSubheader, HeaderTextColor,
+                    TextAnchor.MiddleLeft, true);
+                header.fontStyle = FontStyle.Bold;
+                var headerLE = header.gameObject.AddComponent<LayoutElement>();
+                headerLE.preferredHeight = 22;
+            }
+
+            return vlg;
         }
 
         // ================================================================
@@ -470,6 +515,8 @@ namespace Sporefront.Visual
         /// </summary>
         public static string FormatArmyStatus(ArmyData army)
         {
+            if (army.isEntrenching)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[E...]</color>";
             if (army.isEntrenched)
                 return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeTeal)}>[E]</color>";
             if (army.isInCombat)

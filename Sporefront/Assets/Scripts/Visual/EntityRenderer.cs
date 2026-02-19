@@ -28,12 +28,13 @@ namespace Sporefront.Visual
         private Mesh smallCircleMesh; // villagers (6 segments)
         private Mesh triangleMesh;  // resource nodes
         private Mesh barMesh;       // progress/HP bars
+        private Mesh entrenchRingMesh; // entrenchment ring around armies
 
         private Material sharedMaterial;
 
         private const float BuildingSize = 0.30f;  // ~30% of hex outer radius
-        private const float ArmySize = 0.22f;      // ~22%
-        private const float VillagerSize = 0.15f;   // ~15%
+        private const float ArmySize = 0.28f;      // ~28%
+        private const float VillagerSize = 0.20f;   // ~20%
         private const float ResourceSize = 0.18f;   // ~18%
         private const float ZPosition = -0.05f;     // in front of tiles/borders/selection/paths
 
@@ -58,9 +59,17 @@ namespace Sporefront.Visual
             new Dictionary<Guid, MovementInterpolationState>();
         private Dictionary<Guid, GameObject> timerLabels = new Dictionary<Guid, GameObject>();
         private HashSet<Guid> activelyMovingEntities = new HashSet<Guid>();
+        private Dictionary<Guid, double> smoothedETAs = new Dictionary<Guid, double>();
 
         // Building progress/HP bar state
         private Dictionary<Guid, BuildingBarVisuals> buildingBars = new Dictionary<Guid, BuildingBarVisuals>();
+
+        // Entrenchment ring state
+        private Dictionary<Guid, GameObject> entrenchRings = new Dictionary<Guid, GameObject>();
+
+        // Fog of war filtering
+        private Guid fogLocalPlayerID;
+        private bool fogEnabled;
 
         // ================================================================
         // Initialization
@@ -70,6 +79,16 @@ namespace Sporefront.Visual
         {
             CreateSharedMeshes();
             sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+        }
+
+        // ================================================================
+        // Fog of War Context
+        // ================================================================
+
+        public void SetFogContext(Guid localPlayerID, bool enabled)
+        {
+            fogLocalPlayerID = localPlayerID;
+            fogEnabled = enabled;
         }
 
         // ================================================================
@@ -97,6 +116,9 @@ namespace Sporefront.Visual
                 movementStates.Remove(id);
                 timerLabels.Remove(id); // child GO destroyed with parent
                 buildingBars.Remove(id); // child GOs destroyed with parent
+                if (entrenchRings.TryGetValue(id, out var ring) && ring != null)
+                    Destroy(ring);
+                entrenchRings.Remove(id);
             }
 
             // Update existing or create new
@@ -154,6 +176,44 @@ namespace Sporefront.Visual
                         changed = true;
                     }
 
+                    // Update entrenchment ring
+                    if (current.isEntrenched != desired.isEntrenched ||
+                        current.isEntrenching != desired.isEntrenching)
+                    {
+                        bool hadRing = current.isEntrenched || current.isEntrenching;
+                        bool needsRing = desired.isEntrenched || desired.isEntrenching;
+
+                        if (!needsRing && hadRing)
+                        {
+                            // Remove ring
+                            if (entrenchRings.TryGetValue(id, out var oldRing) && oldRing != null)
+                                Destroy(oldRing);
+                            entrenchRings.Remove(id);
+                        }
+                        else if (needsRing && !hadRing)
+                        {
+                            // Add ring
+                            CreateEntrenchRing(id, go, desired.isEntrenched);
+                        }
+                        else if (needsRing)
+                        {
+                            // Update ring color (e.g. entrenching → entrenched)
+                            if (entrenchRings.TryGetValue(id, out var ringGO) && ringGO != null)
+                            {
+                                Color ringColor = desired.isEntrenched
+                                    ? SporefrontColors.SporeTeal : SporefrontColors.SporeAmber;
+                                var ringMR = ringGO.GetComponent<MeshRenderer>();
+                                if (ringMR != null)
+                                {
+                                    var mpb = new MaterialPropertyBlock();
+                                    mpb.SetColor("_Color", ringColor);
+                                    ringMR.SetPropertyBlock(mpb);
+                                }
+                            }
+                        }
+                        changed = true;
+                    }
+
                     if (changed)
                         currentStates[id] = desired;
                 }
@@ -176,11 +236,21 @@ namespace Sporefront.Visual
             desiredStates.Clear();
             activelyMovingEntities.Clear();
 
+            // Cache local player for fog checks
+            PlayerState localPlayer = fogEnabled ? gameState.GetPlayer(fogLocalPlayerID) : null;
+
             // Collect buildings
             foreach (var kvp in gameState.buildings)
             {
                 var building = kvp.Value;
                 if (building.state == BuildingState.Planning) continue;
+
+                // Fog filter: own buildings always shown; enemy buildings hidden on Unexplored
+                if (localPlayer != null && (!building.ownerID.HasValue || building.ownerID.Value != fogLocalPlayerID))
+                {
+                    var level = localPlayer.GetVisibilityLevel(building.coordinate);
+                    if (level == VisibilityLevel.Unexplored) continue;
+                }
 
                 var coord = building.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
@@ -202,6 +272,13 @@ namespace Sporefront.Visual
             foreach (var kvp in gameState.armies)
             {
                 var army = kvp.Value;
+
+                // Fog filter: own armies always shown; enemy armies only when tile is Visible
+                if (localPlayer != null && (!army.ownerID.HasValue || army.ownerID.Value != fogLocalPlayerID))
+                {
+                    if (!localPlayer.IsVisible(army.coordinate)) continue;
+                }
+
                 var coord = army.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
                     entitiesPerTile[coord] = new List<EntityPlacement>();
@@ -213,7 +290,9 @@ namespace Sporefront.Visual
                     id = army.id,
                     type = EntityVisualType.Army,
                     color = color,
-                    label = null
+                    label = null,
+                    isEntrenched = army.isEntrenched,
+                    isEntrenching = army.isEntrenching
                 });
             }
 
@@ -221,6 +300,13 @@ namespace Sporefront.Visual
             foreach (var kvp in gameState.villagerGroups)
             {
                 var group = kvp.Value;
+
+                // Fog filter: own villagers always shown; enemy villagers only when tile is Visible
+                if (localPlayer != null && (!group.ownerID.HasValue || group.ownerID.Value != fogLocalPlayerID))
+                {
+                    if (!localPlayer.IsVisible(group.coordinate)) continue;
+                }
+
                 var coord = group.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
                     entitiesPerTile[coord] = new List<EntityPlacement>();
@@ -245,6 +331,13 @@ namespace Sporefront.Visual
                 if (resource.IsDepleted()) continue;
                 if (resource.resourceType == ResourcePointType.DeerCarcass ||
                     resource.resourceType == ResourcePointType.BoarCarcass) continue;
+
+                // Fog filter: resources hidden on Unexplored, shown on Explored/Visible
+                if (localPlayer != null)
+                {
+                    var level = localPlayer.GetVisibilityLevel(resource.coordinate);
+                    if (level == VisibilityLevel.Unexplored) continue;
+                }
 
                 var coord = resource.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
@@ -298,20 +391,16 @@ namespace Sporefront.Visual
                     AddDesiredState(r, tileCenter, offset);
                 }
 
-                // Armies offset upper-left / upper-right
+                // Armies at tile center
                 for (int i = 0; i < armies.Count; i++)
                 {
-                    float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
-                    float yOff = 0.3f * HexMetrics.IsometricYScale;
-                    AddDesiredState(armies[i], tileCenter, new Vector2(xOff, yOff));
+                    AddDesiredState(armies[i], tileCenter, Vector2.zero);
                 }
 
-                // Villagers offset lower-left / lower-right
+                // Villagers at tile center
                 for (int i = 0; i < villagers.Count; i++)
                 {
-                    float xOff = (i % 2 == 0) ? -0.3f : 0.3f;
-                    float yOff = -0.3f * HexMetrics.IsometricYScale;
-                    AddDesiredState(villagers[i], tileCenter, new Vector2(xOff, yOff));
+                    AddDesiredState(villagers[i], tileCenter, Vector2.zero);
                 }
             }
 
@@ -339,15 +428,42 @@ namespace Sporefront.Visual
                     desiredStates[army.id] = desired;
 
                     int remainingTiles = army.currentPath.Count - army.pathIndex;
-                    movementStates[army.id] = new MovementInterpolationState
+
+                    // Compute next tile position for cross-tile extrapolation
+                    Vector3 nextPos = Vector3.zero;
+                    if (army.pathIndex + 1 < army.currentPath.Count)
                     {
-                        fromPosition = fromPos,
-                        toPosition = toPos,
-                        lastEngineProgress = army.movementProgress,
-                        lastEngineSpeed = army.movementSpeed,
-                        lastUpdateTime = now,
-                        remainingTiles = remainingTiles
-                    };
+                        var nextCoord = army.currentPath[army.pathIndex + 1];
+                        var nextCenter = HexMetrics.HexToWorldPosition(nextCoord);
+                        nextPos = new Vector3(nextCenter.x + typeOffset.x, nextCenter.y + typeOffset.y, ZPosition);
+                    }
+
+                    // Only reset interpolation baseline when engine movement data actually changed
+                    bool engineUnchanged = movementStates.TryGetValue(army.id, out var existingState)
+                        && existingState.lastEngineProgress == army.movementProgress
+                        && existingState.fromPosition == fromPos
+                        && existingState.toPosition == toPos;
+
+                    if (engineUnchanged)
+                    {
+                        existingState.lastEngineSpeed = army.movementSpeed;
+                        existingState.remainingTiles = remainingTiles;
+                        existingState.nextTilePosition = nextPos;
+                        movementStates[army.id] = existingState;
+                    }
+                    else
+                    {
+                        movementStates[army.id] = new MovementInterpolationState
+                        {
+                            fromPosition = fromPos,
+                            toPosition = toPos,
+                            lastEngineProgress = army.movementProgress,
+                            lastEngineSpeed = army.movementSpeed,
+                            lastUpdateTime = now,
+                            remainingTiles = remainingTiles,
+                            nextTilePosition = nextPos
+                        };
+                    }
                 }
             }
 
@@ -371,15 +487,42 @@ namespace Sporefront.Visual
                     desiredStates[group.id] = desired;
 
                     int remainingTiles = group.currentPath.Count - group.pathIndex;
-                    movementStates[group.id] = new MovementInterpolationState
+
+                    // Compute next tile position for cross-tile extrapolation
+                    Vector3 nextPos = Vector3.zero;
+                    if (group.pathIndex + 1 < group.currentPath.Count)
                     {
-                        fromPosition = fromPos,
-                        toPosition = toPos,
-                        lastEngineProgress = group.movementProgress,
-                        lastEngineSpeed = group.movementSpeed,
-                        lastUpdateTime = now,
-                        remainingTiles = remainingTiles
-                    };
+                        var nextCoord = group.currentPath[group.pathIndex + 1];
+                        var nextCenter = HexMetrics.HexToWorldPosition(nextCoord);
+                        nextPos = new Vector3(nextCenter.x + typeOffset.x, nextCenter.y + typeOffset.y, ZPosition);
+                    }
+
+                    // Only reset interpolation baseline when engine movement data actually changed
+                    bool engineUnchanged = movementStates.TryGetValue(group.id, out var existingState)
+                        && existingState.lastEngineProgress == group.movementProgress
+                        && existingState.fromPosition == fromPos
+                        && existingState.toPosition == toPos;
+
+                    if (engineUnchanged)
+                    {
+                        existingState.lastEngineSpeed = group.movementSpeed;
+                        existingState.remainingTiles = remainingTiles;
+                        existingState.nextTilePosition = nextPos;
+                        movementStates[group.id] = existingState;
+                    }
+                    else
+                    {
+                        movementStates[group.id] = new MovementInterpolationState
+                        {
+                            fromPosition = fromPos,
+                            toPosition = toPos,
+                            lastEngineProgress = group.movementProgress,
+                            lastEngineSpeed = group.movementSpeed,
+                            lastUpdateTime = now,
+                            remainingTiles = remainingTiles,
+                            nextTilePosition = nextPos
+                        };
+                    }
                 }
             }
 
@@ -393,6 +536,7 @@ namespace Sporefront.Visual
             foreach (var id in toRemove)
             {
                 movementStates.Remove(id);
+                smoothedETAs.Remove(id);
                 if (timerLabels.TryGetValue(id, out var timerGO) && timerGO != null)
                     Destroy(timerGO);
                 timerLabels.Remove(id);
@@ -410,7 +554,9 @@ namespace Sporefront.Visual
                 worldPosition = new Vector3(
                     tileCenter.x + offset.x,
                     tileCenter.y + offset.y,
-                    ZPosition)
+                    ZPosition),
+                isEntrenched = placement.isEntrenched,
+                isEntrenching = placement.isEntrenching
             };
         }
 
@@ -436,37 +582,42 @@ namespace Sporefront.Visual
                 // Predict current progress based on elapsed time since last engine update
                 double elapsed = now - state.lastUpdateTime;
                 double predictedProgress = state.lastEngineProgress + state.lastEngineSpeed * elapsed * gameSpeed;
-                predictedProgress = System.Math.Min(predictedProgress, 1.0);
 
-                // SmoothStep ease-in/ease-out on predicted progress
-                float t = (float)predictedProgress;
-                t = t * t * (3f - 2f * t);
-                Vector3 targetPos = Vector3.Lerp(state.fromPosition, state.toPosition, t);
+                // Cross-tile extrapolation: continue into next segment instead of clamping
+                Vector3 targetPos;
+                if (predictedProgress > 1.0 && state.nextTilePosition != Vector3.zero)
+                {
+                    float overflow = Mathf.Min((float)(predictedProgress - 1.0), 1f);
+                    targetPos = Vector3.Lerp(state.toPosition, state.nextTilePosition, overflow);
+                }
+                else
+                {
+                    predictedProgress = System.Math.Min(predictedProgress, 1.0);
+                    targetPos = Vector3.Lerp(state.fromPosition, state.toPosition, (float)predictedProgress);
+                }
 
-                // Frame-rate-independent exponential smoothing
-                float smoothFactor = 1f - Mathf.Exp(-12f * dt);
-                go.transform.position = Vector3.Lerp(go.transform.position, targetPos, smoothFactor);
+                go.transform.position = targetPos;
+
+                // Compute smoothed ETA
+                double displayProgress = System.Math.Min(predictedProgress, 1.0);
+                double tilesLeft = (state.remainingTiles - 1) + (1.0 - displayProgress);
+                double rawETA = state.lastEngineSpeed > 0 ? tilesLeft / state.lastEngineSpeed : 0;
+
+                if (!smoothedETAs.TryGetValue(id, out double prevSmoothed) || prevSmoothed <= 0)
+                    prevSmoothed = rawETA;
+
+                double expectedETA = prevSmoothed - dt * gameSpeed;
+                double blended = expectedETA + (rawETA - expectedETA) * 0.05;
+                if (blended < 0) blended = rawETA;
+                smoothedETAs[id] = blended;
 
                 // Update/create timer label
-                UpdateTimerLabel(id, go, state, predictedProgress);
+                UpdateTimerLabel(id, go, blended);
             }
         }
 
-        private void UpdateTimerLabel(Guid id, GameObject entityGO, MovementInterpolationState state, double currentProgress)
+        private void UpdateTimerLabel(Guid id, GameObject entityGO, double etaSeconds)
         {
-            if (state.lastEngineSpeed <= 0)
-            {
-                // Remove timer if speed is zero
-                if (timerLabels.TryGetValue(id, out var existing) && existing != null)
-                    Destroy(existing);
-                timerLabels.Remove(id);
-                return;
-            }
-
-            // ETA = (remaining tiles - 1 + (1 - progress)) / speed
-            double tilesLeft = (state.remainingTiles - 1) + (1.0 - currentProgress);
-            double etaSeconds = tilesLeft / state.lastEngineSpeed;
-
             if (etaSeconds < 0.5)
             {
                 // About to arrive — hide timer
@@ -561,6 +712,12 @@ namespace Sporefront.Visual
                 CreateBuildingBars(state.id, go);
             }
 
+            // Entrenchment ring for armies
+            if (state.type == EntityVisualType.Army && (state.isEntrenched || state.isEntrenching))
+            {
+                CreateEntrenchRing(state.id, go, state.isEntrenched);
+            }
+
             entityVisuals[state.id] = go;
             currentStates[state.id] = state;
         }
@@ -584,6 +741,28 @@ namespace Sporefront.Visual
 
             var meshRenderer = labelGO.GetComponent<MeshRenderer>();
             meshRenderer.sortingOrder = 7;
+        }
+
+        private void CreateEntrenchRing(Guid id, GameObject parent, bool isEntrenched)
+        {
+            Color ringColor = isEntrenched ? SporefrontColors.SporeTeal : SporefrontColors.SporeAmber;
+
+            var ringGO = new GameObject("EntrenchRing");
+            ringGO.transform.SetParent(parent.transform, false);
+            ringGO.transform.localPosition = new Vector3(0f, 0f, 0.005f);
+
+            var mf = ringGO.AddComponent<MeshFilter>();
+            mf.sharedMesh = entrenchRingMesh;
+
+            var mr = ringGO.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = sharedMaterial;
+            mr.sortingOrder = 5; // below the army circle (6)
+
+            var mpb = new MaterialPropertyBlock();
+            mpb.SetColor("_Color", ringColor);
+            mr.SetPropertyBlock(mpb);
+
+            entrenchRings[id] = ringGO;
         }
 
         // ================================================================
@@ -745,6 +924,7 @@ namespace Sporefront.Visual
             smallCircleMesh = CreateCircleMesh(VillagerSize, 6);
             triangleMesh = CreateTriangleMesh(ResourceSize);
             barMesh = CreateBarMesh(BarHeight);
+            entrenchRingMesh = CreateRingMesh(ArmySize + 0.06f, ArmySize + 0.12f, 16);
         }
 
         private Mesh CreateDiamondMesh(float size)
@@ -837,6 +1017,37 @@ namespace Sporefront.Visual
             return mesh;
         }
 
+        private Mesh CreateRingMesh(float innerRadius, float outerRadius, int segments)
+        {
+            var mesh = new Mesh { name = "Ring" };
+            var vertices = new Vector3[segments * 2];
+            var triangles = new int[segments * 6];
+            float yScale = HexMetrics.IsometricYScale;
+
+            for (int i = 0; i < segments; i++)
+            {
+                float angle = (360f / segments) * i * Mathf.Deg2Rad;
+                float cos = Mathf.Cos(angle);
+                float sin = Mathf.Sin(angle);
+                vertices[i * 2] = new Vector3(cos * innerRadius, sin * innerRadius * yScale, 0f);
+                vertices[i * 2 + 1] = new Vector3(cos * outerRadius, sin * outerRadius * yScale, 0f);
+
+                int next = (i + 1) % segments;
+                int ti = i * 6;
+                triangles[ti]     = i * 2;
+                triangles[ti + 1] = i * 2 + 1;
+                triangles[ti + 2] = next * 2 + 1;
+                triangles[ti + 3] = i * 2;
+                triangles[ti + 4] = next * 2 + 1;
+                triangles[ti + 5] = next * 2;
+            }
+
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
         // ================================================================
         // Helpers
         // ================================================================
@@ -904,8 +1115,10 @@ namespace Sporefront.Visual
             entityVisuals.Clear();
             currentStates.Clear();
             movementStates.Clear();
+            smoothedETAs.Clear();
             timerLabels.Clear();
             buildingBars.Clear();
+            entrenchRings.Clear();
         }
 
         // ================================================================
@@ -926,6 +1139,8 @@ namespace Sporefront.Visual
             public EntityVisualType type;
             public Color color;
             public string label;
+            public bool isEntrenched;
+            public bool isEntrenching;
         }
 
         private struct EntityRenderState
@@ -935,6 +1150,8 @@ namespace Sporefront.Visual
             public Color color;
             public string label;
             public Vector3 worldPosition;
+            public bool isEntrenched;
+            public bool isEntrenching;
         }
 
         private struct MovementInterpolationState
@@ -945,6 +1162,7 @@ namespace Sporefront.Visual
             public double lastEngineSpeed;
             public double lastUpdateTime;
             public int remainingTiles;
+            public Vector3 nextTilePosition;
         }
 
         private struct BuildingBarVisuals

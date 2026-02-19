@@ -1,6 +1,7 @@
 // ============================================================================
 // FILE: Visual/ActionPanel.cs
 // PURPOSE: Build menu with castle/fort rotation (#19) + move/attack target modes
+//          Centered modal with Economic/Military category grouping
 // ============================================================================
 
 using System;
@@ -40,6 +41,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
+        private GameObject buildBackdrop;
         private GameObject buildPanel;
         private GameObject targetBanner;
         private RectTransform buildContentRT;
@@ -81,7 +83,7 @@ namespace Sporefront.Visual
             CurrentMode = ActionMode.BuildSelect;
             buildRotation = 0;
             RebuildBuildMenu(gameState);
-            buildPanel.SetActive(true);
+            buildBackdrop.SetActive(true);
             targetBanner.SetActive(false);
         }
 
@@ -91,7 +93,7 @@ namespace Sporefront.Visual
             moveEntityID = entityID;
             moveIsArmy = isArmy;
 
-            buildPanel.SetActive(false);
+            buildBackdrop.SetActive(false);
             SetTargetBanner(isArmy ? "Click destination for army" : "Click destination for villagers");
             targetBanner.SetActive(true);
         }
@@ -101,7 +103,7 @@ namespace Sporefront.Visual
             CurrentMode = ActionMode.AttackTarget;
             attackArmyID = armyID;
 
-            buildPanel.SetActive(false);
+            buildBackdrop.SetActive(false);
             SetTargetBanner("Click target to attack");
             targetBanner.SetActive(true);
         }
@@ -109,7 +111,7 @@ namespace Sporefront.Visual
         public void Cancel()
         {
             CurrentMode = ActionMode.None;
-            buildPanel.SetActive(false);
+            buildBackdrop.SetActive(false);
             targetBanner.SetActive(false);
             OnCancelled?.Invoke();
         }
@@ -150,44 +152,50 @@ namespace Sporefront.Visual
 
         private void CreateBuildPanel(Transform canvasTransform)
         {
-            buildPanel = UIHelper.CreatePanel(canvasTransform, "BuildPanel", UIHelper.PanelBg);
+            // Full-screen backdrop with click-to-dismiss
+            buildBackdrop = UIHelper.CreatePanel(canvasTransform, "BuildBackdrop",
+                new Color(0, 0, 0, 0.4f));
+            var bdRT = buildBackdrop.GetComponent<RectTransform>();
+            UIHelper.StretchFull(bdRT);
+            var bdBtn = buildBackdrop.AddComponent<Button>();
+            bdBtn.transition = Selectable.Transition.None;
+            bdBtn.onClick.AddListener(Cancel);
+
+            // Centered modal panel
+            buildPanel = UIHelper.CreatePanel(buildBackdrop.transform, "BuildPanel", UIHelper.PanelBg);
             var rt = buildPanel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 0.3f);
-            rt.anchorMax = new Vector2(0, 0.7f);
-            rt.pivot = new Vector2(0, 0.5f);
-            rt.offsetMin = new Vector2(250, 0); // Right of entity list
-            rt.offsetMax = new Vector2(550, 0);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalBuildMenuW, UIConstants.ModalBuildMenuH);
 
             // Header
-            var headerRow = UIHelper.CreateHorizontalRow(buildPanel.transform, 32f, 4f);
-            var headerRT = headerRow.GetComponent<RectTransform>();
+            var header = UIHelper.CreateLabel(buildPanel.transform, "Build",
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleCenter, true);
+            var headerRT = header.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
             headerRT.anchorMax = new Vector2(1, 1);
             headerRT.pivot = new Vector2(0.5f, 1);
-            headerRT.sizeDelta = new Vector2(0, 32);
-
-            var title = UIHelper.CreateLabel(headerRow.transform, "Build",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var titleLE = title.gameObject.AddComponent<LayoutElement>();
-            titleLE.flexibleWidth = 1;
-
-            var closeBtn = UIHelper.CreateButton(headerRow.transform, "X",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12,
-                () => Cancel());
-            var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
-            closeBtnLE.preferredWidth = 28;
-            closeBtnLE.preferredHeight = 28;
+            headerRT.offsetMin = new Vector2(12, -40);
+            headerRT.offsetMax = new Vector2(-12, -6);
 
             // Scroll area for building list
             var scroll = UIHelper.CreateScrollView(buildPanel.transform, "BuildScroll", out buildContentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 0);
-            scrollRT.offsetMax = new Vector2(0, -36);
+            scrollRT.offsetMin = new Vector2(0, 48); // Space for close button
+            scrollRT.offsetMax = new Vector2(0, -44); // Space for header
 
-            buildPanel.SetActive(false);
+            // Close button at bottom
+            var closeBtn = UIHelper.CreateButton(buildPanel.transform, "Close",
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody, Cancel);
+            var closeBtnRT = closeBtn.GetComponent<RectTransform>();
+            closeBtnRT.anchorMin = new Vector2(0, 0);
+            closeBtnRT.anchorMax = new Vector2(1, 0);
+            closeBtnRT.pivot = new Vector2(0.5f, 0);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 46);
+
+            buildBackdrop.SetActive(false);
         }
 
         private void RebuildBuildMenu(GameState gameState)
@@ -196,86 +204,148 @@ namespace Sporefront.Visual
             for (int i = buildContentRT.childCount - 1; i >= 0; i--)
                 Destroy(buildContentRT.GetChild(i).gameObject);
 
+            // Adjust scroll content spacing
+            var contentVLG = buildContentRT.GetComponent<VerticalLayoutGroup>();
+            if (contentVLG != null)
+            {
+                contentVLG.spacing = UIConstants.SectionCardSpacing;
+                contentVLG.padding = new RectOffset(12, 12, 8, 8);
+            }
+
             var player = gameState.GetPlayer(localPlayerID);
             if (player == null) return;
 
-            // List buildable building types
+            int currentCC = gameState.GetCityCenterLevel(localPlayerID);
+
+            // Partition building types by category
+            var economicTypes = new List<BuildingType>();
+            var militaryTypes = new List<BuildingType>();
             var buildingTypes = (BuildingType[])Enum.GetValues(typeof(BuildingType));
             foreach (var bt in buildingTypes)
             {
-                if (bt == BuildingType.Road) continue; // Skip road for now
+                if (bt == BuildingType.Road) continue;
+                if (bt.Category() == BuildingCategory.Economic)
+                    economicTypes.Add(bt);
+                else
+                    militaryTypes.Add(bt);
+            }
 
-                var cost = bt.BuildCost();
-                bool canAfford = player.CanAfford(cost);
-                int requiredCC = bt.RequiredCityCenterLevel();
-                int currentCC = gameState.GetCityCenterLevel(localPlayerID);
-                bool meetsLevel = currentCC >= requiredCC;
-                bool available = canAfford && meetsLevel;
+            // Economic section
+            if (economicTypes.Count > 0)
+            {
+                var econCard = UIHelper.CreateSectionCard(buildContentRT, "EconomicCard", "Economic");
+                foreach (var bt in economicTypes)
+                    BuildBuildingEntry(econCard.transform, bt, player, currentCC);
+            }
 
-                var row = UIHelper.CreatePanel(buildContentRT, bt.ToString(), Color.clear);
-                var rowLE = row.AddComponent<LayoutElement>();
-                rowLE.preferredHeight = 44;
+            // Military section
+            if (militaryTypes.Count > 0)
+            {
+                var milCard = UIHelper.CreateSectionCard(buildContentRT, "MilitaryCard", "Military");
+                foreach (var bt in militaryTypes)
+                    BuildBuildingEntry(milCard.transform, bt, player, currentCC);
+            }
+        }
 
-                var vlg = row.AddComponent<VerticalLayoutGroup>();
-                vlg.spacing = 2;
-                vlg.padding = new RectOffset(4, 4, 2, 2);
-                vlg.childForceExpandWidth = true;
-                vlg.childForceExpandHeight = false;
+        private void BuildBuildingEntry(Transform parent, BuildingType bt, PlayerState player, int currentCC)
+        {
+            var cost = bt.BuildCost();
+            bool canAfford = player.CanAfford(cost);
+            int requiredCC = bt.RequiredCityCenterLevel();
+            bool meetsLevel = currentCC >= requiredCC;
+            bool available = canAfford && meetsLevel;
 
-                // Name + cost row
-                var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+            // Card background — lighter for available, muted for unavailable
+            var cardBg = available
+                ? new Color(SporefrontColors.ParchmentLight.r, SporefrontColors.ParchmentLight.g,
+                    SporefrontColors.ParchmentLight.b, 0.6f)
+                : new Color(SporefrontColors.ParchmentDark.r, SporefrontColors.ParchmentDark.g,
+                    SporefrontColors.ParchmentDark.b, 0.35f);
 
-                var nameLabel = UIHelper.CreateLabel(nameRow.transform,
-                    bt.DisplayName(), 12, available ? UIHelper.BodyTextColor : SporefrontColors.InkFaded);
-                var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                nameLE.flexibleWidth = 1;
+            var card = UIHelper.CreatePanel(parent, bt.ToString(), cardBg, UIHelper.SmallCornerRadius);
+            var cardLE = card.AddComponent<LayoutElement>();
+            cardLE.preferredHeight = 72;
 
-                // Cost string
-                string costStr = UIHelper.FormatCost(cost);
-                var costLabel = UIHelper.CreateLabel(nameRow.transform, costStr, 10,
-                    canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
-                costLabel.supportRichText = true;
-                var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
-                costLE.preferredWidth = 120;
+            var vlg = card.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 2;
+            vlg.padding = new RectOffset(8, 8, 4, 4);
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
 
-                // Build button row
-                var btnRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+            // Row 1: Name + CC level badge
+            var nameRow = UIHelper.CreateHorizontalRow(card.transform, 22f, 4f);
+            var nameLabel = UIHelper.CreateLabel(nameRow.transform,
+                bt.DisplayName(), UIConstants.FontBody,
+                available ? UIHelper.HeaderTextColor : SporefrontColors.InkFaded,
+                TextAnchor.MiddleLeft, false);
+            nameLabel.fontStyle = FontStyle.Bold;
+            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLE.flexibleWidth = 1;
 
-                // Rotation control for multi-hex buildings (#19)
-                if (bt.HexSize() > 1 || bt.RequiresRotation())
+            if (requiredCC > 1)
+            {
+                var badgeColor = meetsLevel ? SporefrontColors.SporeTeal : SporefrontColors.SporeRed;
+                var badge = UIHelper.CreateLabel(nameRow.transform,
+                    $"CC {requiredCC}", UIConstants.FontCaption, badgeColor);
+                badge.fontStyle = FontStyle.Bold;
+                var badgeLE = badge.gameObject.AddComponent<LayoutElement>();
+                badgeLE.preferredWidth = 40;
+            }
+
+            // Row 2: Cost
+            string costStr = UIHelper.FormatCost(cost);
+            var costLabel = UIHelper.CreateLabel(card.transform, costStr, UIConstants.FontSmall,
+                canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
+            costLabel.supportRichText = true;
+            var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
+            costLE.preferredHeight = 18;
+
+            // Row 3: Rotate + Build buttons
+            var btnRow = UIHelper.CreateHorizontalRow(card.transform, 26f, 4f);
+
+            // Spacer to push buttons right
+            var spacer = new GameObject("Spacer", typeof(RectTransform));
+            spacer.transform.SetParent(btnRow.transform, false);
+            var spacerLE = spacer.AddComponent<LayoutElement>();
+            spacerLE.flexibleWidth = 1;
+
+            // Rotation control for multi-hex buildings (#19)
+            if (bt.HexSize() > 1 || bt.RequiresRotation())
+            {
+                var rotateBtn = UIHelper.CreateButton(btnRow.transform, "Rotate",
+                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontCaption, null);
+                var rotBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
+                rotBtnLE.preferredWidth = 52;
+
+                var capturedType = bt;
+                rotateBtn.onClick.AddListener(() =>
                 {
-                    var rotateBtn = UIHelper.CreateButton(btnRow.transform, "Rot",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, 10, null);
-                    var rotBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
-                    rotBtnLE.preferredWidth = 36;
+                    buildRotation = (buildRotation + 1) % 6;
+                    UpdateBuildPreview(capturedType);
+                });
+            }
 
-                    var capturedType = bt;
-                    rotateBtn.onClick.AddListener(() =>
-                    {
-                        buildRotation = (buildRotation + 1) % 6;
-                        UpdateBuildPreview(capturedType);
-                    });
-                }
+            // Build button
+            var buildBtn = UIHelper.CreateButton(btnRow.transform, "Build",
+                available ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
+                available ? UIHelper.HudTextColor : SporefrontColors.InkLight,
+                UIConstants.FontSmall, null);
+            buildBtn.interactable = available;
+            var buildBtnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
+            buildBtnLE.preferredWidth = 60;
 
-                // Build button
-                var buildBtn = UIHelper.CreateButton(btnRow.transform, "Build",
-                    available ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
-                    available ? UIHelper.HudTextColor : SporefrontColors.InkLight, 11, null);
-                buildBtn.interactable = available;
-                var buildBtnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
-                buildBtnLE.preferredWidth = 50;
-
-                if (available && buildCoord.HasValue)
+            if (available && buildCoord.HasValue)
+            {
+                var capturedType = bt;
+                var capturedCoord = buildCoord.Value;
+                var capturedRotation = buildRotation;
+                buildBtn.onClick.AddListener(() =>
                 {
-                    var capturedType = bt;
-                    var capturedCoord = buildCoord.Value;
-                    var capturedRotation = buildRotation;
-                    buildBtn.onClick.AddListener(() =>
-                    {
-                        OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, capturedRotation);
-                        Cancel();
-                    });
-                }
+                    OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, capturedRotation);
+                    Cancel();
+                });
             }
         }
 

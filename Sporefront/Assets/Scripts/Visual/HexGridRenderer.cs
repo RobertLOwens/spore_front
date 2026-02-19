@@ -126,6 +126,29 @@ namespace Sporefront.Visual
             // since hover changes every frame — MaterialPropertyBlock is cheap
         }
 
+        /// <summary>
+        /// Apply initial fog of war to all tiles based on player visibility.
+        /// Called once at game start.
+        /// </summary>
+        public void ApplyInitialFog(PlayerState player)
+        {
+            foreach (var kvp in tileViews)
+            {
+                var level = player.GetVisibilityLevel(kvp.Key);
+                kvp.Value.SetVisibility(level);
+            }
+        }
+
+        /// <summary>
+        /// Update fog on a single tile.
+        /// </summary>
+        public void UpdateTileFog(HexCoordinate coord, VisibilityLevel level)
+        {
+            HexTileView view;
+            if (tileViews.TryGetValue(coord, out view))
+                view.SetVisibility(level);
+        }
+
         // ================================================================
         // Shared Asset Creation
         // ================================================================

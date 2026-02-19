@@ -37,7 +37,6 @@ namespace Sporefront.Visual
     public enum MapType { Arabia, Random, Arena }
     public enum MapSize { Small, Medium, Large, Huge }
     public enum ResourceDensity { Sparse, Normal, Abundant }
-    public enum VisibilityMode { Normal, Full }
 
     [Serializable]
     public struct ArenaConfig

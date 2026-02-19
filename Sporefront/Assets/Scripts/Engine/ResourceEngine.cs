@@ -488,7 +488,7 @@ namespace Sporefront.Engine
 
         // MARK: - Camp Coverage
 
-        private bool HasCampCoverage(HexCoordinate coordinate, ResourcePointType resourceType, GameState state)
+        public bool HasCampCoverage(HexCoordinate coordinate, ResourcePointType resourceType, GameState state)
         {
             string requiredCampType = GetRequiredCampType(resourceType);
             if (requiredCampType == null)
@@ -582,6 +582,58 @@ namespace Sporefront.Engine
             }
 
             return reachable;
+        }
+
+        // MARK: - Gather Arrival Processing
+
+        /// <summary>
+        /// Checks all villager groups with GatheringResourceTask that have arrived
+        /// at the resource coordinate (no path remaining). Starts gathering for them.
+        /// </summary>
+        public List<StateChange> ProcessGatherArrivals()
+        {
+            if (gameState == null) return new List<StateChange>();
+
+            var changes = new List<StateChange>();
+            var groups = new List<VillagerGroupData>(gameState.villagerGroups.Values);
+
+            foreach (var group in groups)
+            {
+                var gatherTask = group.currentTask as GatheringResourceTask;
+                if (gatherTask == null) continue;
+                if (group.currentPath != null) continue; // Still en route
+
+                // Already registered in gatheringAssignments means StartGathering was called
+                if (gatheringAssignments.ContainsKey(group.id)) continue;
+
+                var resourcePointID = gatherTask.ResourcePointID;
+                var resource = gameState.GetResourcePoint(resourcePointID);
+                if (resource == null)
+                {
+                    group.ClearTask();
+                    continue;
+                }
+
+                if (!group.coordinate.Equals(resource.coordinate)) continue;
+
+                // Arrived at resource — start gathering
+                bool success = StartGathering(group.id, resourcePointID);
+                if (success)
+                {
+                    changes.Add(new VillagerGroupTaskChangedChange
+                    {
+                        groupID = group.id,
+                        task = "gathering",
+                        targetCoordinate = resource.coordinate
+                    });
+                }
+                else
+                {
+                    group.ClearTask();
+                }
+            }
+
+            return changes;
         }
 
         // MARK: - Collection Rate Management
