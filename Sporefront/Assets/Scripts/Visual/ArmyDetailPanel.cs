@@ -37,6 +37,22 @@ namespace Sporefront.Visual
         private CanvasGroup backdropCG;
         private Coroutine fadeCoroutine;
 
+        // Cached references for incremental updates
+        private Image staminaFillImage;
+        private Text staminaLabel;
+        private Image entrenchFillImage;
+        private Text entrenchTimeLabel;
+
+        // Structural fingerprint
+        private Guid cachedArmyID;
+        private int cachedTotalUnits;
+        private bool cachedIsInCombat;
+        private bool cachedIsEntrenched;
+        private bool cachedIsEntrenching;
+        private bool cachedIsRetreating;
+        private bool cachedHasPath;
+        private Guid? cachedCommanderID;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -108,10 +124,81 @@ namespace Sporefront.Visual
         public void Refresh(GameState gameState)
         {
             if (!currentArmyID.HasValue || !backdrop.activeSelf) return;
+            var army = gameState.GetArmy(currentArmyID.Value);
+            if (army == null) { Close(); return; }
+
+            // Check fingerprint — if structure unchanged, do incremental update only
+            if (FingerprintMatches(army))
+            {
+                IncrementalUpdate(army, gameState);
+                return;
+            }
             Rebuild(gameState);
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        // ================================================================
+        // Fingerprint & Incremental Update
+        // ================================================================
+
+        private bool FingerprintMatches(ArmyData army)
+        {
+            return army.id == cachedArmyID
+                && army.GetTotalUnits() == cachedTotalUnits
+                && army.isInCombat == cachedIsInCombat
+                && army.isEntrenched == cachedIsEntrenched
+                && army.isEntrenching == cachedIsEntrenching
+                && army.isRetreating == cachedIsRetreating
+                && (army.currentPath != null && army.currentPath.Count > 0) == cachedHasPath
+                && army.commanderID == cachedCommanderID;
+        }
+
+        private void CacheFingerprint(ArmyData army)
+        {
+            cachedArmyID = army.id;
+            cachedTotalUnits = army.GetTotalUnits();
+            cachedIsInCombat = army.isInCombat;
+            cachedIsEntrenched = army.isEntrenched;
+            cachedIsEntrenching = army.isEntrenching;
+            cachedIsRetreating = army.isRetreating;
+            cachedHasPath = army.currentPath != null && army.currentPath.Count > 0;
+            cachedCommanderID = army.commanderID;
+        }
+
+        private void IncrementalUpdate(ArmyData army, GameState gameState)
+        {
+            // Update stamina bar fill
+            if (staminaFillImage != null && army.commanderID.HasValue)
+            {
+                var commander = gameState.GetCommander(army.commanderID.Value);
+                if (commander != null)
+                {
+                    float pct = (float)(commander.stamina / CommanderData.MaxStamina);
+                    var fillRT = staminaFillImage.GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
+
+                    if (staminaLabel != null)
+                        staminaLabel.text = $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}";
+                }
+            }
+
+            // Update entrenchment progress bar
+            if (entrenchFillImage != null && army.isEntrenching && army.entrenchmentStartTime.HasValue)
+            {
+                double elapsed = gameState.currentTime - army.entrenchmentStartTime.Value;
+                double buildTime = GameConfig.Entrenchment.BuildTime;
+                float progress = Mathf.Clamp01((float)(elapsed / buildTime));
+                var fillRT = entrenchFillImage.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(progress, 1);
+
+                if (entrenchTimeLabel != null)
+                {
+                    double remaining = buildTime - elapsed;
+                    entrenchTimeLabel.text = $"Entrenching: {UIHelper.FormatTime(remaining)}";
+                }
+            }
+        }
 
         // ================================================================
         // Rebuild
@@ -126,6 +213,10 @@ namespace Sporefront.Visual
             // Clear
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
+            staminaFillImage = null;
+            staminaLabel = null;
+            entrenchFillImage = null;
+            entrenchTimeLabel = null;
 
             bool isOwned = army.ownerID.HasValue && army.ownerID.Value == localPlayerID;
 
@@ -163,12 +254,25 @@ namespace Sporefront.Visual
                 fillRT.anchorMax = new Vector2(progress, 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
                 barLE.preferredHeight = 14;
+                entrenchFillImage = fill;
 
                 var timeLabel = UIHelper.CreateLabel(contentRT,
                     $"Entrenching: {UIHelper.FormatTime(remaining)}", UIConstants.FontCaption,
                     SporefrontColors.SporeAmber, TextAnchor.MiddleCenter);
                 var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
                 timeLE.preferredHeight = 18;
+                entrenchTimeLabel = timeLabel;
+            }
+
+            if (army.isEntrenched)
+            {
+                int defBonus = (int)(GameConfig.Entrenchment.DefenseBonus * 100);
+                int covered = army.entrenchedCoveredTiles != null ? army.entrenchedCoveredTiles.Count : 0;
+                var entrenchLabel = UIHelper.CreateLabel(contentRT,
+                    $"Entrenched: +{defBonus}% Defense | Covering {covered} tiles",
+                    UIConstants.FontCaption, SporefrontColors.SporeTeal, TextAnchor.MiddleCenter);
+                var entrenchLE = entrenchLabel.gameObject.AddComponent<LayoutElement>();
+                entrenchLE.preferredHeight = 20;
             }
 
             UIHelper.CreateDivider(contentRT);
@@ -189,7 +293,7 @@ namespace Sporefront.Visual
             }
 
             // Stamina bar
-            BuildStaminaBar(army);
+            BuildStaminaBar(army, gameState);
             UIHelper.CreateDivider(contentRT);
 
             // Pending reinforcements
@@ -202,6 +306,8 @@ namespace Sporefront.Visual
             // Actions (owned armies only)
             if (isOwned)
                 BuildActionsSection(army, gameState);
+
+            CacheFingerprint(army);
         }
 
         // ================================================================
@@ -279,23 +385,39 @@ namespace Sporefront.Visual
         // Stamina
         // ================================================================
 
-        private void BuildStaminaBar(ArmyData army)
+        private void BuildStaminaBar(ArmyData army, GameState gameState)
         {
             var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
 
-            var label = UIHelper.CreateLabel(row.transform,
-                $"Stamina: {(int)army.currentStamina}/{(int)army.maxStamina}", 12);
-            var labelLE = label.gameObject.AddComponent<LayoutElement>();
-            labelLE.preferredWidth = 130;
+            CommanderData commander = null;
+            if (army.commanderID.HasValue)
+                commander = gameState.GetCommander(army.commanderID.Value);
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
-            float pct = army.maxStamina > 0 ? (float)(army.currentStamina / army.maxStamina) : 0f;
-            var fillRT = fill.GetComponent<RectTransform>();
-            fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
-            var barLE = bg.gameObject.AddComponent<LayoutElement>();
-            barLE.flexibleWidth = 1;
-            barLE.preferredHeight = 14;
+            if (commander != null)
+            {
+                var label = UIHelper.CreateLabel(row.transform,
+                    $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}", 12);
+                var labelLE = label.gameObject.AddComponent<LayoutElement>();
+                labelLE.preferredWidth = 130;
+                staminaLabel = label;
+
+                var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
+                    SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+                float pct = (float)(commander.stamina / CommanderData.MaxStamina);
+                var fillRT = fill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
+                var barLE = bg.gameObject.AddComponent<LayoutElement>();
+                barLE.flexibleWidth = 1;
+                barLE.preferredHeight = 14;
+                staminaFillImage = fill;
+            }
+            else
+            {
+                var label = UIHelper.CreateLabel(row.transform,
+                    "No Commander", 12, SporefrontColors.InkFaded);
+                var labelLE = label.gameObject.AddComponent<LayoutElement>();
+                labelLE.flexibleWidth = 1;
+            }
         }
 
         // ================================================================
@@ -391,7 +513,7 @@ namespace Sporefront.Visual
             }
 
             // Retreat
-            if (army.isInCombat)
+            if (!army.isRetreating)
             {
                 var retreatBtn = UIHelper.CreateButton(row.transform, "Retreat",
                     SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>

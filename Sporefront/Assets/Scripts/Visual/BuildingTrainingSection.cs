@@ -176,7 +176,7 @@ namespace Sporefront.Visual
                 {
                     var cmd = new TrainMilitaryCommand(localPlayerID, capturedBuildingID,
                         capturedUT, selectedQty);
-                    GameEngine.Instance.ExecuteCommand(cmd);
+                    UIManager.ExecutePlayerCommand(cmd);
                 });
             var trainBtnLE = trainButton.gameObject.AddComponent<LayoutElement>();
             trainBtnLE.preferredWidth = 50;
@@ -263,7 +263,7 @@ namespace Sporefront.Visual
                 SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, () =>
                 {
                     var cmd = new TrainVillagerCommand(localPlayerID, capturedBuildingID, selectedQty);
-                    GameEngine.Instance.ExecuteCommand(cmd);
+                    UIManager.ExecutePlayerCommand(cmd);
                 });
             var trainBtnLE = trainButton.gameObject.AddComponent<LayoutElement>();
             trainBtnLE.preferredWidth = 50;
@@ -455,7 +455,7 @@ namespace Sporefront.Visual
                     SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
                     {
                         var cmd = new DeployArmyCommand(localPlayerID, capturedBuildingID, capturedGarrison);
-                        GameEngine.Instance.ExecuteCommand(cmd);
+                        UIManager.ExecutePlayerCommand(cmd);
                     });
                 var armyBtnLE = deployArmyBtn.gameObject.AddComponent<LayoutElement>();
                 armyBtnLE.preferredWidth = 110;
@@ -472,7 +472,7 @@ namespace Sporefront.Visual
                     {
                         var cmd = new DeployVillagersCommand(localPlayerID, capturedBuildingID,
                             capturedVillagerCount);
-                        GameEngine.Instance.ExecuteCommand(cmd);
+                        UIManager.ExecutePlayerCommand(cmd);
                     });
                 var vilBtnLE = deployVilBtn.gameObject.AddComponent<LayoutElement>();
                 vilBtnLE.preferredWidth = 130;

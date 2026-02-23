@@ -369,18 +369,27 @@ namespace Sporefront.Visual
             cmdLE.flexibleWidth = 1;
             cmdLE.preferredHeight = 18;
 
-            // Row 3: Stamina bar
+            // Row 3: Stamina bar (commander stamina)
             var staminaRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
 
+            string staminaText = "—";
+            float staminaPct = 0f;
+            if (army.commanderID.HasValue)
+            {
+                var commander = gameState.GetCommander(army.commanderID.Value);
+                if (commander != null)
+                {
+                    staminaText = $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}";
+                    staminaPct = Mathf.Clamp01((float)(commander.stamina / CommanderData.MaxStamina));
+                }
+            }
+
             var staminaLabel = UIHelper.CreateLabel(staminaRow.transform,
-                $"Stamina: {(int)army.currentStamina}/{(int)army.maxStamina}", 10,
-                SporefrontColors.InkLight);
+                staminaText, 10, SporefrontColors.InkLight);
             var staminaTextLE = staminaLabel.gameObject.AddComponent<LayoutElement>();
             staminaTextLE.preferredWidth = 100;
             staminaTextLE.preferredHeight = 16;
 
-            float staminaPct = army.maxStamina > 0
-                ? Mathf.Clamp01((float)(army.currentStamina / army.maxStamina)) : 0f;
             Color staminaColor = staminaPct > 0.5f ? SporefrontColors.SporeTeal :
                 staminaPct > 0.25f ? SporefrontColors.SporeAmber : SporefrontColors.SporeRed;
 

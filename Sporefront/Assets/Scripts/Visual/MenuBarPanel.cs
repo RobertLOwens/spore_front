@@ -23,6 +23,7 @@ namespace Sporefront.Visual
         public event Action OnResourcesClicked;
         public event Action OnResearchClicked;
         public event Action OnTrainingClicked;
+        public event Action OnCombatClicked;
 
         // ================================================================
         // State
@@ -67,6 +68,8 @@ namespace Sporefront.Visual
             UIHelper.AddTooltip(researchBtn.gameObject, "Research tree and progress");
             var trainingBtn = CreateNavButton(row.transform, "Training", () => OnTrainingClicked?.Invoke());
             UIHelper.AddTooltip(trainingBtn.gameObject, "Active training queues");
+            var combatBtn = CreateNavButton(row.transform, "Combat", () => OnCombatClicked?.Invoke());
+            UIHelper.AddTooltip(combatBtn.gameObject, "Combat log and history");
 
             panel.SetActive(false);
         }

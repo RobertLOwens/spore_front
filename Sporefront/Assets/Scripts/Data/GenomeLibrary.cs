@@ -109,8 +109,9 @@ namespace Sporefront.Data
                 string json = File.ReadAllText(filePath);
                 return JsonUtility.FromJson<AIGenome>(json);
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                DebugLog.Log($"GenomeLibrary: Failed to load genome {id}: {e.Message}");
                 return null;
             }
         }
@@ -128,8 +129,9 @@ namespace Sporefront.Data
             {
                 files = Directory.GetFiles(genomesDirectoryPath, "*.json");
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                DebugLog.Log($"GenomeLibrary: Failed to list genome files: {e.Message}");
                 return genomes;
             }
 
@@ -142,9 +144,9 @@ namespace Sporefront.Data
                     if (genome != null)
                         genomes.Add(genome);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
-                    // Skip corrupt files
+                    DebugLog.Log($"GenomeLibrary: Skipping corrupt genome file {file}: {e.Message}");
                 }
             }
 
@@ -237,9 +239,9 @@ namespace Sporefront.Data
                             DebugLog.Log($"GenomeLibrary: Migrated legacy genome from {Path.GetFileName(file)}");
                         }
                     }
-                    catch (Exception)
+                    catch (Exception e)
                     {
-                        // Skip corrupt legacy files
+                        DebugLog.Log($"GenomeLibrary: Skipping corrupt legacy file {file}: {e.Message}");
                     }
                 }
 

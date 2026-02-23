@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Sporefront.Commands;
 using Sporefront.Data;
 using Sporefront.Models;
 
@@ -46,6 +47,25 @@ namespace Sporefront.Engine
             {
                 var armyChanges = UpdateArmyMovement(army, currentTime);
                 changes.AddRange(armyChanges);
+            }
+
+            // Commander stamina regeneration (idle-only)
+            foreach (var commander in gameState.commanders.Values)
+            {
+                bool isIdle = true;
+                if (commander.assignedArmyID.HasValue)
+                {
+                    var army = gameState.GetArmy(commander.assignedArmyID.Value);
+                    if (army != null)
+                    {
+                        isIdle = (army.currentPath == null || army.pathIndex >= army.currentPath.Count)
+                                 && !army.isInCombat;
+                    }
+                }
+                if (isIdle)
+                    commander.RegenerateStamina(currentTime);
+                else
+                    commander.lastStaminaUpdateTime = currentTime;
             }
 
             // Update villager group movements
@@ -97,8 +117,9 @@ namespace Sporefront.Engine
             // Normalize: default army speed (1.6) = base speed, slower units reduce speed proportionally
             double speedMultiplier = 1.6 / slowestUnitSpeed;
 
+            bool onRoad = gameState.mapData.GetBuildingID(targetCoord) != null;
             double speed;
-            if (gameState.mapData.GetBuildingID(targetCoord) != null)
+            if (onRoad)
             {
                 // On road
                 speed = baseMovementSpeed * speedMultiplier;
@@ -111,6 +132,23 @@ namespace Sporefront.Engine
             if (army.isRetreating)
             {
                 speed *= retreatSpeedBonus;
+            }
+
+            // Apply research bonuses for march/retreat/road speed
+            if (army.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(army.ownerID.Value);
+                if (owner != null)
+                {
+                    speed *= owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.MilitaryMarchSpeed.ToString());
+                    if (army.isRetreating)
+                        speed *= owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.MilitaryRetreatSpeed.ToString());
+                    if (onRoad)
+                        speed *= owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.RoadSpeed.ToString());
+                }
             }
 
             // Apply commander logistics bonus
@@ -140,6 +178,11 @@ namespace Sporefront.Engine
                 gameState.mapData.UpdateArmyPosition(army.id, targetCoord);
                 army.pathIndex += 1;
                 army.movementProgress -= 1.0;
+                if (army.commanderID.HasValue)
+                {
+                    var commander = gameState.GetCommander(army.commanderID.Value);
+                    if (commander != null) commander.DrainStamina(GameConfig.Stamina.MovementCostPerTile);
+                }
 
                 changes.Add(new ArmyMovedChange
                 {
@@ -157,6 +200,15 @@ namespace Sporefront.Engine
                     army.movementSpeed = 0.0;
                     bool wasRetreating = army.isRetreating;
                     army.isRetreating = false;
+
+                    // Execute pending attack command on arrival
+                    if (army.pendingAttackTarget.HasValue)
+                    {
+                        HexCoordinate attackTarget = army.pendingAttackTarget.Value;
+                        army.pendingAttackTarget = null;
+                        var attackCmd = new AttackCommand(army.ownerID ?? Guid.Empty, army.id, attackTarget);
+                        GameEngine.Instance.ExecuteCommand(attackCmd);
+                    }
 
                     // Clean up empty armies that finished retreating (commander returns home)
                     if (wasRetreating && army.IsEmpty())
@@ -197,6 +249,15 @@ namespace Sporefront.Engine
             else
             {
                 speed = baseMovementSpeed * villagerMultiplier * terrainSpeedMultiplier;
+            }
+
+            // Apply VillagerMarchSpeed research bonus
+            if (group.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(group.ownerID.Value);
+                if (owner != null)
+                    speed *= owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.VillagerMarchSpeed.ToString());
             }
 
             // Store speed for visual interpolation
@@ -265,15 +326,30 @@ namespace Sporefront.Engine
                 // Calculate movement speed for reinforcements
                 var targetCoord = reinforcement.path[reinforcement.pathIndex];
                 double reinforcementMultiplier = GameConfig.Movement.ReinforcementSpeedMultiplier;
+                bool reinforceOnRoad = gameState.mapData.GetBuildingID(targetCoord) != null;
                 double speed;
 
-                if (gameState.mapData.GetBuildingID(targetCoord) != null)
+                if (reinforceOnRoad)
                 {
                     speed = baseMovementSpeed * reinforcementMultiplier;
                 }
                 else
                 {
                     speed = baseMovementSpeed * reinforcementMultiplier * terrainSpeedMultiplier;
+                }
+
+                // Apply research bonuses for march/road speed
+                if (army.ownerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(army.ownerID.Value);
+                    if (owner != null)
+                    {
+                        speed *= owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.MilitaryMarchSpeed.ToString());
+                        if (reinforceOnRoad)
+                            speed *= owner.GetResearchBonusMultiplier(
+                                ResearchBonusType.RoadSpeed.ToString());
+                    }
                 }
 
                 // Apply commander logistics bonus to reinforcement speed
@@ -417,6 +493,7 @@ namespace Sporefront.Engine
             army.movementProgress = 0.0;
             army.movementSpeed = 0.0;
             army.isRetreating = false;
+            army.pendingAttackTarget = null;
         }
 
         /// <summary>

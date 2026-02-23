@@ -32,7 +32,7 @@ namespace Sporefront.Data
 
         public const double MaxStamina = 100.0;
         public const double StaminaCostPerCommand = 5.0;
-        public const double StaminaRegenPerSecond = 1.0 / 60.0;
+        public const double StaminaRegenPerSecond = GameConfig.Stamina.IdleRegenPerSecond;
 
         public string portraitColorHex = "#0000FF";
 
@@ -108,6 +108,11 @@ namespace Sporefront.Data
             if (!HasEnoughStamina(cost)) return false;
             stamina = Math.Max(0, stamina - cost);
             return true;
+        }
+
+        public void DrainStamina(double amount)
+        {
+            stamina = Math.Max(0, stamina - amount);
         }
 
         public void RegenerateStamina(double currentTime)

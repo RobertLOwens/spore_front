@@ -106,4 +106,41 @@ namespace Sporefront.Commands
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
     }
+
+    public class CancelResearchCommand : BaseEngineCommand
+    {
+        public CancelResearchCommand(Guid playerID) : base(playerID) { }
+
+        public override EngineCommandResult Validate(GameState state)
+        {
+            var player = state.GetPlayer(PlayerID);
+            if (player == null)
+                return EngineCommandResult.Failure("Player not found.");
+
+            if (!player.IsResearchActive())
+                return EngineCommandResult.Failure("No active research to cancel.");
+
+            return EngineCommandResult.Success(null);
+        }
+
+        public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
+        {
+            var validation = Validate(state);
+            if (!validation.Succeeded)
+                return validation;
+
+            var player = state.GetPlayer(PlayerID);
+            string cancelledType = player.activeResearchType;
+
+            player.CancelActiveResearch();
+
+            changeBuilder.Add(new ResearchCancelledChange
+            {
+                playerID = PlayerID,
+                researchType = cancelledType
+            });
+
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
+        }
+    }
 }

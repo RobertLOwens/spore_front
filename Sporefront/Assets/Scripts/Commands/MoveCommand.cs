@@ -38,6 +38,17 @@ namespace Sporefront.Commands
                 if (army.isInCombat)
                     return EngineCommandResult.Failure("Army is currently in combat");
 
+                // Check army has a commander
+                if (!army.commanderID.HasValue)
+                    return EngineCommandResult.Failure("Army requires a commander to move");
+
+                // Check commander stamina
+                var commander = state.GetCommander(army.commanderID.Value);
+                if (commander == null)
+                    return EngineCommandResult.Failure("Commander not found");
+                if (!commander.HasEnoughStamina())
+                    return EngineCommandResult.Failure("Commander lacks stamina to issue this order");
+
                 // Check stacking limit at destination
                 var armiesAtDestination = state.GetArmies(destination);
                 if (armiesAtDestination.Count >= GameConfig.Stacking.MaxEntitiesPerTile)
@@ -64,6 +75,14 @@ namespace Sporefront.Commands
                 if (army == null)
                     return EngineCommandResult.Failure("Army not found");
 
+                // Consume commander stamina
+                if (army.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(army.commanderID.Value);
+                    if (commander != null)
+                        commander.ConsumeStamina();
+                }
+
                 HexCoordinate fromCoordinate = army.coordinate;
 
                 // Cancel entrenchment if entrenching or entrenched
@@ -87,6 +106,7 @@ namespace Sporefront.Commands
                 army.currentPath = path;
                 army.pathIndex = 0;
                 army.movementProgress = 0.0;
+                army.pendingAttackTarget = null;
 
                 // Emit movement state change
                 changeBuilder.Add(new ArmyMovedChange

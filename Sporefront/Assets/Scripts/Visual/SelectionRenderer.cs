@@ -25,6 +25,12 @@ namespace Sporefront.Visual
         private List<LineRenderer> previewOutlines = new List<LineRenderer>();
         private List<LineRenderer> previewGlows = new List<LineRenderer>();
 
+        // Entity highlight
+        private LineRenderer entityOutlineRenderer;
+        private LineRenderer entityGlowRenderer;
+        private float entityAnimationPhase;
+        private Color entityHighlightColor;
+
         // ================================================================
         // Public API
         // ================================================================
@@ -92,22 +98,65 @@ namespace Sporefront.Visual
             previewGlows.Clear();
         }
 
+        public void ShowEntityHighlight(HexCoordinate coord, Color color)
+        {
+            entityHighlightColor = color;
+            EnsureEntityRenderers();
+
+            Vector3 center = HexMetrics.HexToWorldPosition(coord);
+            var points = GetHexOutlinePoints(center);
+
+            ApplyPoints(entityOutlineRenderer, points);
+            entityOutlineRenderer.startWidth = 0.025f;
+            entityOutlineRenderer.endWidth = 0.025f;
+            entityOutlineRenderer.startColor = color;
+            entityOutlineRenderer.endColor = color;
+            entityOutlineRenderer.enabled = true;
+
+            ApplyPoints(entityGlowRenderer, points);
+            entityGlowRenderer.startWidth = 0.06f;
+            entityGlowRenderer.endWidth = 0.06f;
+            var glowColor = new Color(color.r, color.g, color.b, 0.4f);
+            entityGlowRenderer.startColor = glowColor;
+            entityGlowRenderer.endColor = glowColor;
+            entityGlowRenderer.enabled = true;
+        }
+
+        public void HideEntityHighlight()
+        {
+            if (entityOutlineRenderer != null) entityOutlineRenderer.enabled = false;
+            if (entityGlowRenderer != null) entityGlowRenderer.enabled = false;
+        }
+
         // ================================================================
         // Animation
         // ================================================================
 
         private void Update()
         {
-            if (glowRenderer == null || !glowRenderer.enabled) return;
+            if (glowRenderer != null && glowRenderer.enabled)
+            {
+                animationPhase += Time.deltaTime * 3f;
+                float alpha = 0.25f + 0.15f * Mathf.Sin(animationPhase);
+                var color = new Color(
+                    SporefrontColors.SporeAmber.r,
+                    SporefrontColors.SporeAmber.g,
+                    SporefrontColors.SporeAmber.b, alpha);
+                glowRenderer.startColor = color;
+                glowRenderer.endColor = color;
+            }
 
-            animationPhase += Time.deltaTime * 3f;
-            float alpha = 0.25f + 0.15f * Mathf.Sin(animationPhase);
-            var color = new Color(
-                SporefrontColors.SporeAmber.r,
-                SporefrontColors.SporeAmber.g,
-                SporefrontColors.SporeAmber.b, alpha);
-            glowRenderer.startColor = color;
-            glowRenderer.endColor = color;
+            if (entityGlowRenderer != null && entityGlowRenderer.enabled)
+            {
+                entityAnimationPhase += Time.deltaTime * 3.5f;
+                float alpha = 0.25f + 0.15f * Mathf.Sin(entityAnimationPhase);
+                var color = new Color(
+                    entityHighlightColor.r,
+                    entityHighlightColor.g,
+                    entityHighlightColor.b, alpha);
+                entityGlowRenderer.startColor = color;
+                entityGlowRenderer.endColor = color;
+            }
         }
 
         // ================================================================
@@ -123,6 +172,17 @@ namespace Sporefront.Visual
             if (glowRenderer == null)
                 glowRenderer = CreateLineRenderer("SelectionGlow",
                     SporefrontColors.SporeAmber, 0.06f, -0.016f);
+        }
+
+        private void EnsureEntityRenderers()
+        {
+            if (entityOutlineRenderer == null)
+                entityOutlineRenderer = CreateLineRenderer("EntityOutline",
+                    SporefrontColors.SporeTeal, 0.025f, -0.015f);
+
+            if (entityGlowRenderer == null)
+                entityGlowRenderer = CreateLineRenderer("EntityGlow",
+                    SporefrontColors.SporeTeal, 0.06f, -0.016f);
         }
 
         private LineRenderer CreateLineRenderer(string name, Color color, float width, float zPos)
@@ -171,6 +231,7 @@ namespace Sporefront.Visual
         private void OnDestroy()
         {
             ClearBuildPreview();
+            HideEntityHighlight();
         }
     }
 }

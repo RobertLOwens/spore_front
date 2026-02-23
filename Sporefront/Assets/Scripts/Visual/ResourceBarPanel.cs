@@ -60,13 +60,13 @@ namespace Sporefront.Visual
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(0, -60);
+            rt.offsetMin = new Vector2(0, -80);
             rt.offsetMax = new Vector2(0, 0);
 
             gameObject.transform.SetParent(panel.transform, false);
 
             // Horizontal layout
-            var row = UIHelper.CreateHorizontalRow(panel.transform, 60f, 16f);
+            var row = UIHelper.CreateHorizontalRow(panel.transform, 80f, 16f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
             row.padding = new RectOffset(16, 16, 0, 0);
@@ -88,17 +88,17 @@ namespace Sporefront.Visual
             spacer.GetComponent<LayoutElement>().flexibleWidth = 1;
 
             // Population
-            popLabel = UIHelper.CreateLabel(row.transform, "Pop: -/-", 16,
+            popLabel = UIHelper.CreateLabel(row.transform, "Pop: -/-", 20,
                 UIHelper.HudTextColor, TextAnchor.MiddleRight);
-            popLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(140, 60);
+            popLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(160, 80);
             var popLE = popLabel.gameObject.AddComponent<LayoutElement>();
-            popLE.preferredWidth = 140;
+            popLE.preferredWidth = 160;
 
             // Starvation warning (hidden by default)
-            starvationLabel = UIHelper.CreateLabel(row.transform, "STARVING", 16,
+            starvationLabel = UIHelper.CreateLabel(row.transform, "STARVING", 20,
                 SporefrontColors.SporeRed, TextAnchor.MiddleRight);
             starvationLabel.fontStyle = FontStyle.Bold;
-            starvationLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 60);
+            starvationLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 80);
             var starvLE = starvationLabel.gameObject.AddComponent<LayoutElement>();
             starvLE.preferredWidth = 100;
             starvationLabel.gameObject.SetActive(false);
@@ -107,7 +107,7 @@ namespace Sporefront.Visual
             speedLabel = UIHelper.CreateLabel(row.transform, "", UIConstants.FontBody,
                 SporefrontColors.SporeAmber, TextAnchor.MiddleRight);
             speedLabel.fontStyle = FontStyle.Bold;
-            speedLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(60, 60);
+            speedLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(60, 80);
             var speedLE = speedLabel.gameObject.AddComponent<LayoutElement>();
             speedLE.preferredWidth = 60;
             speedLabel.gameObject.SetActive(false);
@@ -298,7 +298,7 @@ namespace Sporefront.Visual
             rt.anchorMin = new Vector2(1, 1);
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(1, 1);
-            rt.anchoredPosition = new Vector2(-8, -64);
+            rt.anchoredPosition = new Vector2(-8, -84);
             rt.sizeDelta = new Vector2(160, 0);
 
             // Vertical layout
@@ -349,10 +349,10 @@ namespace Sporefront.Visual
 
         private Text CreateResourceLabel(Transform parent, string name, float width)
         {
-            var label = UIHelper.CreateLabel(parent, $"{name} ---", 16,
+            var label = UIHelper.CreateLabel(parent, $"{name} ---", 20,
                 UIHelper.HudTextColor, TextAnchor.MiddleLeft);
             var labelRT = label.GetComponent<RectTransform>();
-            labelRT.sizeDelta = new Vector2(width, 60);
+            labelRT.sizeDelta = new Vector2(width, 80);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
             return label;

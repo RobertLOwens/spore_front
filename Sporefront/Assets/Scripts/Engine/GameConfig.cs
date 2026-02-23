@@ -66,31 +66,31 @@ namespace Sporefront.Engine
 
         public static class Vision
         {
-            public const int BaseUnitRange = 3;
+            public const int BaseUnitRange = 2;
             public const int BaseVillagerRange = 2;
 
             public static readonly Dictionary<Models.BuildingType, int> BuildingRanges = new Dictionary<Models.BuildingType, int>
             {
-                { Models.BuildingType.CityCenter, 5 },
-                { Models.BuildingType.Tower, 6 },
-                { Models.BuildingType.Castle, 5 },
-                { Models.BuildingType.WoodenFort, 4 },
-                { Models.BuildingType.Barracks, 3 },
-                { Models.BuildingType.ArcheryRange, 3 },
-                { Models.BuildingType.Stable, 3 },
-                { Models.BuildingType.SiegeWorkshop, 3 },
-                { Models.BuildingType.LumberCamp, 2 },
-                { Models.BuildingType.MiningCamp, 2 },
+                { Models.BuildingType.CityCenter, 1 },
+                { Models.BuildingType.Tower, 1 },
+                { Models.BuildingType.Castle, 1 },
+                { Models.BuildingType.WoodenFort, 1 },
+                { Models.BuildingType.Barracks, 1 },
+                { Models.BuildingType.ArcheryRange, 1 },
+                { Models.BuildingType.Stable, 1 },
+                { Models.BuildingType.SiegeWorkshop, 1 },
+                { Models.BuildingType.LumberCamp, 1 },
+                { Models.BuildingType.MiningCamp, 1 },
                 { Models.BuildingType.Farm, 1 },
-                { Models.BuildingType.Mill, 2 },
-                { Models.BuildingType.Warehouse, 2 },
-                { Models.BuildingType.Blacksmith, 2 },
-                { Models.BuildingType.Market, 2 },
-                { Models.BuildingType.Neighborhood, 2 },
-                { Models.BuildingType.University, 3 },
-                { Models.BuildingType.Library, 3 },
+                { Models.BuildingType.Mill, 1 },
+                { Models.BuildingType.Warehouse, 1 },
+                { Models.BuildingType.Blacksmith, 1 },
+                { Models.BuildingType.Market, 1 },
+                { Models.BuildingType.Neighborhood, 1 },
+                { Models.BuildingType.University, 1 },
+                { Models.BuildingType.Library, 1 },
                 { Models.BuildingType.Wall, 1 },
-                { Models.BuildingType.Gate, 2 },
+                { Models.BuildingType.Gate, 1 },
                 { Models.BuildingType.Road, 1 }
             };
         }
@@ -126,6 +126,12 @@ namespace Sporefront.Engine
             public const double RationingReductionScaling = 0.005;
             public const double RationingReductionCap = 0.5;
             public const double EnduranceRegenScaling = 0.02;
+
+            // XP rewards
+            public const int XPPerKill = 1;
+            public const int XPPerCombatParticipation = 5;
+            public const int XPPerVictory = 10;
+            public const int XPPerBuildingDestroyed = 25;
         }
 
         public static class Entrenchment
@@ -134,6 +140,13 @@ namespace Sporefront.Engine
             public const int WoodCost = 100;
             public const double DefenseBonus = 0.10;
             public const double CheckInterval = 0.5;
+        }
+
+        public static class Stamina
+        {
+            public const double MovementCostPerTile = 1.0;
+            public const double CombatCostPerRound = 3.0;
+            public const double IdleRegenPerSecond = 1.0 / 300.0;
         }
 
         public static class Stacking
@@ -174,6 +187,30 @@ namespace Sporefront.Engine
             public const double Tier3CostMultiplier = 8.0;
 
             public const double CheckInterval = 1.0;
+        }
+
+        public static class BuildingHealth
+        {
+            public const double Wall = 600.0;
+            public const double Gate = 400.0;
+            public const double Military = 500.0;
+            public const double Civilian = 200.0;
+        }
+
+        public static class Demolition
+        {
+            public const double TimeMultiplier = 0.5;
+            public const double DemolisherSpeedBonus = 0.5;
+            public const double RefundMultiplier = 0.25;
+        }
+
+        public static class MapDimensions
+        {
+            public const int Small = 25;
+            public const int Medium = 35;
+            public const int Large = 50;
+            public const int Huge = 65;
+            public const int Arena = 7;
         }
 
         public static class AI

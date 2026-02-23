@@ -57,6 +57,10 @@ namespace Sporefront.Visual
         private Guid localPlayerID;
         private Text rotationLabel;
 
+        // Entrenchment confirmation state
+        private bool showingEntrenchConfirm;
+        private HexCoordinate pendingConfirmTarget;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -82,6 +86,7 @@ namespace Sporefront.Visual
             buildCoord = coord;
             CurrentMode = ActionMode.BuildSelect;
             buildRotation = 0;
+            if (rotationLabel != null) rotationLabel.text = "Rotation: 0";
             RebuildBuildMenu(gameState);
             buildBackdrop.SetActive(true);
             targetBanner.SetActive(false);
@@ -111,6 +116,7 @@ namespace Sporefront.Visual
         public void Cancel()
         {
             CurrentMode = ActionMode.None;
+            showingEntrenchConfirm = false;
             buildBackdrop.SetActive(false);
             targetBanner.SetActive(false);
             OnCancelled?.Invoke();
@@ -125,23 +131,84 @@ namespace Sporefront.Visual
         /// </summary>
         public bool HandleTargetClick(HexCoordinate coord)
         {
+            // If already showing entrench confirmation, ignore map clicks
+            if (showingEntrenchConfirm)
+                return true;
+
             if (CurrentMode == ActionMode.MoveTarget)
             {
+                // Check if army is entrenched — warn before proceeding
+                if (moveIsArmy && IsEntityEntrenched(moveEntityID))
+                {
+                    pendingConfirmTarget = coord;
+                    ShowEntrenchConfirmation(true);
+                    return true;
+                }
+
                 var cmd = new MoveCommand(localPlayerID, moveEntityID, coord, moveIsArmy);
-                GameEngine.Instance.ExecuteCommand(cmd);
+                UIManager.ExecutePlayerCommand(cmd);
                 Cancel();
                 return true;
             }
 
             if (CurrentMode == ActionMode.AttackTarget)
             {
+                // Check if army is entrenched — warn before proceeding
+                if (IsEntityEntrenched(attackArmyID))
+                {
+                    pendingConfirmTarget = coord;
+                    ShowEntrenchConfirmation(false);
+                    return true;
+                }
+
                 var cmd = new AttackCommand(localPlayerID, attackArmyID, coord);
-                GameEngine.Instance.ExecuteCommand(cmd);
+                UIManager.ExecutePlayerCommand(cmd);
                 Cancel();
                 return true;
             }
 
             return false;
+        }
+
+        private bool IsEntityEntrenched(Guid entityID)
+        {
+            var army = GameEngine.Instance.gameState?.GetArmy(entityID);
+            return army != null && (army.isEntrenched || army.isEntrenching);
+        }
+
+        private void ShowEntrenchConfirmation(bool isMove)
+        {
+            showingEntrenchConfirm = true;
+            // Rebuild the banner with confirmation UI
+            RebuildTargetBanner(isMove);
+        }
+
+        private void ConfirmEntrenchAction()
+        {
+            showingEntrenchConfirm = false;
+
+            if (CurrentMode == ActionMode.MoveTarget)
+            {
+                var cmd = new MoveCommand(localPlayerID, moveEntityID, pendingConfirmTarget, moveIsArmy);
+                UIManager.ExecutePlayerCommand(cmd);
+            }
+            else if (CurrentMode == ActionMode.AttackTarget)
+            {
+                var cmd = new AttackCommand(localPlayerID, attackArmyID, pendingConfirmTarget);
+                UIManager.ExecutePlayerCommand(cmd);
+            }
+
+            Cancel();
+        }
+
+        private void CancelEntrenchConfirm()
+        {
+            showingEntrenchConfirm = false;
+            // Restore original target banner
+            string msg = CurrentMode == ActionMode.MoveTarget
+                ? (moveIsArmy ? "Click destination for army" : "Click destination for villagers")
+                : "Click target to attack";
+            RebuildTargetBannerDefault(msg);
         }
 
         public bool IsActive => CurrentMode != ActionMode.None;
@@ -177,13 +244,23 @@ namespace Sporefront.Visual
             headerRT.offsetMin = new Vector2(12, -40);
             headerRT.offsetMax = new Vector2(-12, -6);
 
+            // Rotation label (between header and scroll)
+            rotationLabel = UIHelper.CreateLabel(buildPanel.transform, "Rotation: 0",
+                UIConstants.FontSmall, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+            var rotLabelRT = rotationLabel.GetComponent<RectTransform>();
+            rotLabelRT.anchorMin = new Vector2(0, 1);
+            rotLabelRT.anchorMax = new Vector2(1, 1);
+            rotLabelRT.pivot = new Vector2(0.5f, 1);
+            rotLabelRT.offsetMin = new Vector2(12, -58);
+            rotLabelRT.offsetMax = new Vector2(-12, -42);
+
             // Scroll area for building list
             var scroll = UIHelper.CreateScrollView(buildPanel.transform, "BuildScroll", out buildContentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
             scrollRT.offsetMin = new Vector2(0, 48); // Space for close button
-            scrollRT.offsetMax = new Vector2(0, -44); // Space for header
+            scrollRT.offsetMax = new Vector2(0, -60); // Space for header + rotation label
 
             // Close button at bottom
             var closeBtn = UIHelper.CreateButton(buildPanel.transform, "Close",
@@ -264,18 +341,20 @@ namespace Sporefront.Visual
 
             var card = UIHelper.CreatePanel(parent, bt.ToString(), cardBg, UIHelper.SmallCornerRadius);
             var cardLE = card.AddComponent<LayoutElement>();
-            cardLE.preferredHeight = 72;
+            cardLE.preferredHeight = 90;
 
             var vlg = card.AddComponent<VerticalLayoutGroup>();
             vlg.spacing = 2;
-            vlg.padding = new RectOffset(8, 8, 4, 4);
+            vlg.padding = new RectOffset(8, 8, 5, 5);
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
 
             // Row 1: Name + CC level badge
-            var nameRow = UIHelper.CreateHorizontalRow(card.transform, 22f, 4f);
+            var nameRow = UIHelper.CreateHorizontalRow(card.transform, 26f, 4f);
+            var nameRowLE = nameRow.gameObject.AddComponent<LayoutElement>();
+            nameRowLE.preferredHeight = 26;
             var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                 bt.DisplayName(), UIConstants.FontBody,
                 available ? UIHelper.HeaderTextColor : SporefrontColors.InkFaded,
@@ -283,6 +362,7 @@ namespace Sporefront.Visual
             nameLabel.fontStyle = FontStyle.Bold;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
+            nameLE.preferredHeight = 26;
 
             if (requiredCC > 1)
             {
@@ -300,10 +380,12 @@ namespace Sporefront.Visual
                 canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
             costLabel.supportRichText = true;
             var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
-            costLE.preferredHeight = 18;
+            costLE.preferredHeight = 20;
 
             // Row 3: Rotate + Build buttons
-            var btnRow = UIHelper.CreateHorizontalRow(card.transform, 26f, 4f);
+            var btnRow = UIHelper.CreateHorizontalRow(card.transform, 28f, 4f);
+            var btnRowLE = btnRow.gameObject.AddComponent<LayoutElement>();
+            btnRowLE.preferredHeight = 28;
 
             // Spacer to push buttons right
             var spacer = new GameObject("Spacer", typeof(RectTransform));
@@ -323,6 +405,7 @@ namespace Sporefront.Visual
                 rotateBtn.onClick.AddListener(() =>
                 {
                     buildRotation = (buildRotation + 1) % 6;
+                    if (rotationLabel != null) rotationLabel.text = $"Rotation: {buildRotation}";
                     UpdateBuildPreview(capturedType);
                 });
             }
@@ -360,8 +443,12 @@ namespace Sporefront.Visual
         // Target Banner UI
         // ================================================================
 
+        private Transform bannerParent;
+
         private void CreateTargetBanner(Transform canvasTransform)
         {
+            bannerParent = canvasTransform;
+
             targetBanner = UIHelper.CreatePanel(canvasTransform, "TargetBanner", UIHelper.HudBg);
             var rt = targetBanner.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0.3f, 1);
@@ -370,13 +457,37 @@ namespace Sporefront.Visual
             rt.offsetMin = new Vector2(0, -80);
             rt.offsetMax = new Vector2(0, -44);
 
+            BuildDefaultBannerContent("Click destination");
+
+            targetBanner.SetActive(false);
+        }
+
+        private void ClearBannerContent()
+        {
+            for (int i = targetBanner.transform.childCount - 1; i >= 0; i--)
+                Destroy(targetBanner.transform.GetChild(i).gameObject);
+
+            // Remove any layout group added by confirmation mode
+            var vlg = targetBanner.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null) Destroy(vlg);
+        }
+
+        private void BuildDefaultBannerContent(string message)
+        {
+            ClearBannerContent();
+
+            var rt = targetBanner.GetComponent<RectTransform>();
+            rt.offsetMin = new Vector2(0, -80);
+            rt.offsetMax = new Vector2(0, -44);
+            targetBanner.GetComponent<Image>().color = UIHelper.HudBg;
+
             var row = UIHelper.CreateHorizontalRow(targetBanner.transform, 36f, 8f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
             row.padding = new RectOffset(12, 12, 0, 0);
             row.childAlignment = TextAnchor.MiddleCenter;
 
-            var label = UIHelper.CreateLabel(row.transform, "Click destination", 14,
+            var label = UIHelper.CreateLabel(row.transform, message, 14,
                 UIHelper.HudTextColor, TextAnchor.MiddleCenter);
             label.gameObject.name = "BannerText";
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
@@ -387,14 +498,62 @@ namespace Sporefront.Visual
                 () => Cancel());
             var btnLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
             btnLE.preferredWidth = 60;
+        }
 
-            targetBanner.SetActive(false);
+        private void RebuildTargetBannerDefault(string message)
+        {
+            BuildDefaultBannerContent(message);
+        }
+
+        private void RebuildTargetBanner(bool isMove)
+        {
+            ClearBannerContent();
+
+            // Expand banner for confirmation content
+            var rt = targetBanner.GetComponent<RectTransform>();
+            rt.offsetMin = new Vector2(0, -120);
+            rt.offsetMax = new Vector2(0, -44);
+            targetBanner.GetComponent<Image>().color =
+                Color.Lerp(UIHelper.HudBg, SporefrontColors.SporeAmber, 0.15f);
+
+            var vlg = targetBanner.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(12, 12, 6, 6);
+            vlg.spacing = 4;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+
+            // Warning text
+            string action = isMove ? "Moving" : "Attacking";
+            var warnLabel = UIHelper.CreateLabel(targetBanner.transform,
+                $"{action} will abandon your entrenched position!",
+                13, SporefrontColors.SporeAmber, TextAnchor.MiddleCenter, true);
+            var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
+            warnLE.preferredHeight = 24;
+
+            // Buttons row
+            var btnRow = UIHelper.CreateHorizontalRow(targetBanner.transform, 32f, 8f);
+            btnRow.childAlignment = TextAnchor.MiddleCenter;
+
+            var confirmBtn = UIHelper.CreateButton(btnRow.transform, "Confirm",
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12,
+                () => ConfirmEntrenchAction());
+            var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+            confirmLE.preferredWidth = 80;
+            confirmLE.preferredHeight = 30;
+
+            var cancelBtn = UIHelper.CreateButton(btnRow.transform, "Cancel",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12,
+                () => CancelEntrenchConfirm());
+            var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+            cancelLE.preferredWidth = 80;
+            cancelLE.preferredHeight = 30;
         }
 
         private void SetTargetBanner(string message)
         {
-            var label = targetBanner.GetComponentInChildren<Text>();
-            if (label != null) label.text = message;
+            BuildDefaultBannerContent(message);
         }
 
     }

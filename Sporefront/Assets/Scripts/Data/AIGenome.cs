@@ -139,8 +139,9 @@ namespace Sporefront.Data
                 string json = File.ReadAllText(path);
                 return JsonUtility.FromJson<AIGenome>(json);
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                DebugLog.Log($"AIGenome: Failed to load best genome for {mapType}: {e.Message}");
                 return null;
             }
         }

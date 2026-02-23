@@ -118,8 +118,18 @@ namespace Sporefront.Engine
             if (gameState == null) return new List<StateChange>();
             var changes = new List<StateChange>();
 
+            // Look up owner's BuildingSpeed research bonus
+            double speedMultiplier = 1.0;
+            if (building.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(building.ownerID.Value);
+                if (owner != null)
+                    speedMultiplier = owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.BuildingSpeed.ToString());
+            }
+
             double previousProgress = building.constructionProgress;
-            bool completed = building.UpdateConstruction(currentTime);
+            bool completed = building.UpdateConstruction(currentTime, speedMultiplier);
 
             // Only emit progress change if it changed significantly
             if (Math.Abs(building.constructionProgress - previousProgress) > progressChangeThreshold)
@@ -133,6 +143,18 @@ namespace Sporefront.Engine
 
             if (completed)
             {
+                // Apply BuildingHP research bonus
+                if (building.ownerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(building.ownerID.Value);
+                    if (owner != null)
+                    {
+                        double hpMultiplier = owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.BuildingHP.ToString());
+                        building.ApplyBuildingHPBonus(hpMultiplier);
+                    }
+                }
+
                 // Find and release any villagers assigned to build this building
                 var builderChanges = ReleaseBuilders(building.id, gameState);
                 changes.AddRange(builderChanges);
@@ -178,8 +200,18 @@ namespace Sporefront.Engine
         {
             var changes = new List<StateChange>();
 
+            // Look up owner's BuildingSpeed research bonus
+            double speedMultiplier = 1.0;
+            if (building.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(building.ownerID.Value);
+                if (owner != null)
+                    speedMultiplier = owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.BuildingSpeed.ToString());
+            }
+
             double previousProgress = building.upgradeProgress;
-            bool completed = building.UpdateUpgrade(currentTime);
+            bool completed = building.UpdateUpgrade(currentTime, speedMultiplier);
 
             // Only emit progress change if it changed significantly
             if (Math.Abs(building.upgradeProgress - previousProgress) > progressChangeThreshold)
@@ -193,6 +225,18 @@ namespace Sporefront.Engine
 
             if (completed)
             {
+                // Apply BuildingHP research bonus after upgrade
+                if (building.ownerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(building.ownerID.Value);
+                    if (owner != null)
+                    {
+                        double hpMultiplier = owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.BuildingHP.ToString());
+                        building.ApplyBuildingHPBonus(hpMultiplier);
+                    }
+                }
+
                 changes.Add(new BuildingUpgradeCompletedChange
                 {
                     buildingID = building.id,

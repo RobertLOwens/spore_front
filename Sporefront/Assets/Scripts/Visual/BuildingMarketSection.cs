@@ -139,7 +139,7 @@ namespace Sporefront.Visual
                     if (inputs.Count == 0) return;
                     var cmd = new MarketTradeCommand(capturedLocalPlayerID, capturedBuildingID.Value,
                         inputs, capturedState2.tradeOutputType);
-                    GameEngine.Instance.ExecuteCommand(cmd);
+                    UIManager.ExecutePlayerCommand(cmd);
                 });
             var tradeBtnLE = tradeBtn.gameObject.AddComponent<LayoutElement>();
             tradeBtnLE.preferredHeight = 32;

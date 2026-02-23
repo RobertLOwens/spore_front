@@ -118,10 +118,10 @@ namespace Sporefront.Visual
             switch (_visibilityLevel)
             {
                 case VisibilityLevel.Unexplored:
-                    color = Color.Lerp(color, Color.black, 0.85f);
+                    color = Color.Lerp(color, SporefrontColors.InkBlack, 0.82f);
                     break;
                 case VisibilityLevel.Explored:
-                    color = Color.Lerp(color, Color.black, 0.5f);
+                    color = Color.Lerp(color, SporefrontColors.InkDark, 0.35f);
                     break;
                 // Visible: full baseColor, no change
             }

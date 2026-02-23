@@ -24,6 +24,8 @@ namespace Sporefront.Visual
 
         public event Action<Guid, BuildingType, HexCoordinate, int> OnVillagerSelected; // vgID, type, coord, rotation
         public event Action OnClose;
+        public event Action<Guid, HexCoordinate> OnPreviewPathRequested; // villagerGroupID, buildCoordinate
+        public event Action OnPreviewPathCleared;
 
         // ================================================================
         // State
@@ -36,6 +38,8 @@ namespace Sporefront.Visual
         private BuildingType pendingBuildingType;
         private HexCoordinate pendingCoordinate;
         private int pendingRotation;
+        private Guid? previewedVillagerID;
+        private GameState cachedGameState;
 
         // Walking time estimate: distance / (BaseSpeed * VillagerSpeedMultiplier) seconds
         private const double WalkSecondsPerTile = 1.0 / (GameConfig.Movement.BaseSpeed * GameConfig.Movement.VillagerSpeedMultiplier);
@@ -100,12 +104,14 @@ namespace Sporefront.Visual
             pendingBuildingType = buildingType;
             pendingCoordinate = coordinate;
             pendingRotation = rotation;
+            previewedVillagerID = null;
             Rebuild(gameState);
             panel.SetActive(true);
         }
 
         public void Hide()
         {
+            ClearPreview();
             panel.SetActive(false);
             OnClose?.Invoke();
         }
@@ -124,6 +130,8 @@ namespace Sporefront.Visual
 
         private void Rebuild(GameState gameState)
         {
+            cachedGameState = gameState;
+
             // Clear
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
@@ -155,6 +163,17 @@ namespace Sporefront.Visual
 
         private void BuildVillagerGroupList(GameState gameState)
         {
+            // Guard: if previewed villager is no longer available, reset
+            if (previewedVillagerID.HasValue)
+            {
+                bool found = false;
+                var checkGroups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+                if (checkGroups != null)
+                    foreach (var g in checkGroups)
+                        if (g.id == previewedVillagerID.Value) { found = true; break; }
+                if (!found) ClearPreview();
+            }
+
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Villager Groups",
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
@@ -183,6 +202,7 @@ namespace Sporefront.Visual
                 int distance = group.coordinate.Distance(pendingCoordinate);
                 bool isBusy = group.currentTask != null && !group.currentTask.IsIdle;
                 string taskDesc = isBusy ? group.currentTask.DisplayName : "Idle";
+                bool isSelected = previewedVillagerID.HasValue && previewedVillagerID.Value == group.id;
 
                 // Walking time estimate
                 int walkSeconds = distance > 0 ? Mathf.CeilToInt((float)(distance * WalkSecondsPerTile)) : 0;
@@ -190,7 +210,10 @@ namespace Sporefront.Visual
                     ? (walkSeconds < 60 ? $"~{walkSeconds}s" : $"~{walkSeconds / 60}m{walkSeconds % 60}s")
                     : "On-site";
 
-                var row = UIHelper.CreatePanel(contentRT, "VillagerRow", Color.clear);
+                Color rowBg = isSelected
+                    ? Color.Lerp(Color.clear, SporefrontColors.SporeAmber, 0.12f)
+                    : Color.clear;
+                var row = UIHelper.CreatePanel(contentRT, "VillagerRow", rowBg);
                 var rowLE = row.AddComponent<LayoutElement>();
                 rowLE.preferredHeight = isBusy ? 72 : 56;
 
@@ -230,13 +253,9 @@ namespace Sporefront.Visual
                 var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
 
                 var capturedGroupID = group.id;
-                var capturedType = pendingBuildingType;
-                var capturedCoord = pendingCoordinate;
-                var capturedRotation = pendingRotation;
 
                 if (isBusy)
                 {
-                    // Warning label for busy villagers
                     var warnLabel = UIHelper.CreateLabel(actionRow.transform,
                         $"Will cancel {taskDesc}", 10, SporefrontColors.SporeAmber);
                     var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
@@ -244,7 +263,6 @@ namespace Sporefront.Visual
                 }
                 else
                 {
-                    // Spacer for idle villagers
                     var spacer = new GameObject("Spacer");
                     spacer.transform.SetParent(actionRow.transform, false);
                     var spacerLE = spacer.AddComponent<LayoutElement>();
@@ -252,15 +270,45 @@ namespace Sporefront.Visual
                 }
 
                 Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.SporeGreen;
-                var selectBtn = UIHelper.CreateButton(actionRow.transform, "Select",
+                var selectBtn = UIHelper.CreateButton(actionRow.transform,
+                    isSelected ? "Selected" : "Select",
                     btnColor, UIHelper.HudTextColor, 11, () =>
                     {
-                        OnVillagerSelected?.Invoke(capturedGroupID, capturedType, capturedCoord, capturedRotation);
-                        Hide();
+                        previewedVillagerID = capturedGroupID;
+                        OnPreviewPathRequested?.Invoke(capturedGroupID, pendingCoordinate);
+                        Rebuild(cachedGameState);
                     });
                 var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 60;
+                btnLE.preferredWidth = 70;
                 btnLE.preferredHeight = 24;
+            }
+
+            // Confirm Builder button — only when a villager is previewed
+            if (previewedVillagerID.HasValue)
+            {
+                UIHelper.CreateDivider(contentRT);
+                var capturedType = pendingBuildingType;
+                var capturedCoord = pendingCoordinate;
+                var capturedRotation = pendingRotation;
+                var capturedVGID = previewedVillagerID.Value;
+                var confirmBtn = UIHelper.CreateButton(contentRT, "Confirm Builder",
+                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                    {
+                        OnVillagerSelected?.Invoke(capturedVGID, capturedType, capturedCoord, capturedRotation);
+                        ClearPreview();
+                        Hide();
+                    });
+                var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+                confirmLE.preferredHeight = 38;
+            }
+        }
+
+        private void ClearPreview()
+        {
+            if (previewedVillagerID.HasValue)
+            {
+                previewedVillagerID = null;
+                OnPreviewPathCleared?.Invoke();
             }
         }
     }

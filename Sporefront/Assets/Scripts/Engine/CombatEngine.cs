@@ -246,6 +246,26 @@ namespace Sporefront.Engine
                 var phaseChanges = ProcessCombatDamage(combat, deltaTime, state);
                 changes.AddRange(phaseChanges);
 
+                // Drain commander stamina for combat participants
+                if (combat.attackerArmies.Count > 0)
+                {
+                    var attacker = state.GetArmy(combat.attackerArmies[0].armyID);
+                    if (attacker != null && attacker.commanderID.HasValue)
+                    {
+                        var cmd = state.GetCommander(attacker.commanderID.Value);
+                        if (cmd != null) cmd.DrainStamina(GameConfig.Stamina.CombatCostPerRound);
+                    }
+                }
+                if (combat.defenderArmies.Count > 0)
+                {
+                    var defender = state.GetArmy(combat.defenderArmies[0].armyID);
+                    if (defender != null && defender.commanderID.HasValue)
+                    {
+                        var cmd = state.GetCommander(defender.commanderID.Value);
+                        if (cmd != null) cmd.DrainStamina(GameConfig.Stamina.CombatCostPerRound);
+                    }
+                }
+
                 // Check for combat end
                 if (combat.ShouldEnd)
                 {
@@ -267,11 +287,15 @@ namespace Sporefront.Engine
                         result = result
                     });
 
+                    // Grant commander XP
+                    var xpChanges = GrantCommanderCombatXP(combat, result, state);
+                    changes.AddRange(xpChanges);
+
                     // Save combat record to history (both basic and detailed)
                     CombatRecord combatRecord = CreateCombatRecord(combat, state);
-                    AddCombatRecord(combatRecord);
-
                     DetailedCombatRecord detailedRecord = CreateDetailedCombatRecord(combat, state);
+                    detailedRecord.Id = combatRecord.Id;  // Share ID for history lookup
+                    AddCombatRecord(combatRecord);
                     AddDetailedCombatRecord(detailedRecord);
 
                     // Clean up combat flags on armies
@@ -908,6 +932,18 @@ namespace Sporefront.Engine
                 damage *= siegeBuildingBonusMultiplier;
             }
 
+            // Apply BuildingBludgeonArmor research bonus (defender's bonus reduces siege damage)
+            if (building.ownerID.HasValue)
+            {
+                var defender = state.GetPlayer(building.ownerID.Value);
+                if (defender != null)
+                {
+                    double armorBonus = defender.GetResearchBonus(
+                        ResearchBonusType.BuildingBludgeonArmor.ToString());
+                    damage = Math.Max(0, damage - armorBonus);
+                }
+            }
+
             // Track damage for reporting
             combat.totalBuildingDamage += damage;
 
@@ -959,6 +995,19 @@ namespace Sporefront.Engine
                     buildingID = buildingID,
                     coordinate = building.coordinate
                 });
+
+                // Grant commander XP for building destruction
+                if (attacker.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(attacker.commanderID.Value);
+                    if (commander != null)
+                    {
+                        int xp = GameConfig.Commander.XPPerBuildingDestroyed
+                            + GameConfig.Commander.XPPerVictory;
+                        var xpChange = GrantXPToCommander(commander, xp);
+                        if (xpChange != null) changes.Add(xpChange);
+                    }
+                }
 
                 // Clean up attacker's combat flags
                 attacker.isInCombat = false;
@@ -1276,6 +1325,80 @@ namespace Sporefront.Engine
                 defenderCasualties: defenderCasualties,
                 combatDuration: combat.elapsedTime
             );
+        }
+
+        private List<StateChange> GrantCommanderCombatXP(ActiveCombat combat, CombatResultData result, GameState state)
+        {
+            var changes = new List<StateChange>();
+
+            // Calculate total kills per side
+            int attackerKills = 0;
+            if (result.defenderCasualties != null)
+                foreach (var kvp in result.defenderCasualties)
+                    attackerKills += kvp.Value;
+
+            int defenderKills = 0;
+            if (result.attackerCasualties != null)
+                foreach (var kvp in result.attackerCasualties)
+                    defenderKills += kvp.Value;
+
+            // Grant XP to attacker's lead commander
+            if (combat.attackerArmies.Count > 0)
+            {
+                var attackerArmy = state.GetArmy(combat.attackerArmies[0].armyID);
+                if (attackerArmy != null && attackerArmy.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(attackerArmy.commanderID.Value);
+                    if (commander != null)
+                    {
+                        bool isWinner = result.winnerID.HasValue && result.winnerID.Value == attackerArmy.id;
+                        int xp = attackerKills * GameConfig.Commander.XPPerKill
+                            + GameConfig.Commander.XPPerCombatParticipation
+                            + (isWinner ? GameConfig.Commander.XPPerVictory : 0);
+                        var change = GrantXPToCommander(commander, xp);
+                        if (change != null) changes.Add(change);
+                    }
+                }
+            }
+
+            // Grant XP to defender's lead commander
+            if (combat.defenderArmies.Count > 0)
+            {
+                var defenderArmy = state.GetArmy(combat.defenderArmies[0].armyID);
+                if (defenderArmy != null && defenderArmy.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(defenderArmy.commanderID.Value);
+                    if (commander != null)
+                    {
+                        bool isWinner = result.winnerID.HasValue && result.winnerID.Value == defenderArmy.id;
+                        int xp = defenderKills * GameConfig.Commander.XPPerKill
+                            + GameConfig.Commander.XPPerCombatParticipation
+                            + (isWinner ? GameConfig.Commander.XPPerVictory : 0);
+                        var change = GrantXPToCommander(commander, xp);
+                        if (change != null) changes.Add(change);
+                    }
+                }
+            }
+
+            return changes;
+        }
+
+        private CommanderXPGainedChange GrantXPToCommander(CommanderData commander, int xp)
+        {
+            if (xp <= 0) return null;
+            int oldLevel = commander.level;
+            CommanderRank oldRank = commander.rank;
+            commander.AddExperience(xp);
+            return new CommanderXPGainedChange
+            {
+                commanderID = commander.id,
+                xpGained = xp,
+                newXP = commander.experience,
+                newLevel = commander.level,
+                newRank = commander.rank,
+                didLevelUp = commander.level > oldLevel,
+                didRankUp = commander.rank.Index() > oldRank.Index()
+            };
         }
 
         private void CleanupCombatFlags(ActiveCombat combat, GameState state)
@@ -1839,6 +1962,10 @@ namespace Sporefront.Engine
                     stackCombat.activePairings[index].winnerArmyID = result.winnerID;
                     stackCombat.activePairings[index].loserArmyID = result.loserID;
 
+                    // Grant commander XP for stack pairing
+                    var stackXpChanges = GrantCommanderCombatXP(combat, result, state);
+                    changes.AddRange(stackXpChanges);
+
                     // Handle draw: both armies empty -- retreat or destroy both
                     if (!result.winnerID.HasValue && !result.loserID.HasValue)
                     {
@@ -1916,8 +2043,9 @@ namespace Sporefront.Engine
 
                     // Save records
                     CombatRecord combatRecord = CreateCombatRecord(combat, state);
-                    AddCombatRecord(combatRecord);
                     DetailedCombatRecord detailedRecord = CreateDetailedCombatRecord(combat, state);
+                    detailedRecord.Id = combatRecord.Id;  // Share ID for history lookup
+                    AddCombatRecord(combatRecord);
                     AddDetailedCombatRecord(detailedRecord);
 
                     // Clean up combat flags and remove from activeCombats

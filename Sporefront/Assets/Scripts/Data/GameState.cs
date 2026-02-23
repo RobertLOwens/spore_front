@@ -630,6 +630,14 @@ namespace Sporefront.Data
                     capacity += building.buildingType.PopulationCapacityForLevel(building.level);
                 }
             }
+
+            // Apply flat PopulationCapacity research bonus
+            var player = GetPlayer(playerID);
+            if (player != null)
+            {
+                capacity += (int)player.GetResearchBonus(
+                    ResearchBonusType.PopulationCapacity.ToString());
+            }
         }
 
         public int GetStorageCapacity(Guid playerID, ResourceType resourceType)

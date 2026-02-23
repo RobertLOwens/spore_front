@@ -68,6 +68,7 @@ namespace Sporefront.Data
         // Combat state
         public bool isInCombat;
         public Guid? combatTargetID;
+        public HexCoordinate? pendingAttackTarget;
 
         // Entrenchment state (transient)
         [System.NonSerialized] public bool isEntrenching;
@@ -84,6 +85,16 @@ namespace Sporefront.Data
         // Stamina
         public double currentStamina = 100.0;
         public double maxStamina = 100.0;
+
+        public void DrainStamina(double amount)
+        {
+            currentStamina = Math.Max(0.0, currentStamina - amount);
+        }
+
+        public void RegenerateStamina(double amount)
+        {
+            currentStamina = Math.Min(maxStamina, currentStamina + amount);
+        }
 
         public ArmyData(string name, HexCoordinate coordinate, Guid? ownerID = null)
         {

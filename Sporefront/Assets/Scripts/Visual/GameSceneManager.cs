@@ -43,6 +43,10 @@ namespace Sporefront.Visual
         private Guid? selectedEntityID;
         private bool selectedEntityIsArmy;
 
+        // Auto-save state
+        private const double AutoSaveIntervalGameTime = 300.0; // 5 minutes game time
+        private double lastAutoSaveGameTime;
+
         // ================================================================
         // Lifecycle
         // ================================================================
@@ -69,6 +73,14 @@ namespace Sporefront.Visual
 
                 HandleTileHover();
                 HandleTileInteraction();
+
+                // Auto-save check
+                if (gameState != null && !gameState.isPaused &&
+                    gameState.currentTime - lastAutoSaveGameTime >= AutoSaveIntervalGameTime)
+                {
+                    lastAutoSaveGameTime = gameState.currentTime;
+                    SaveManager.AutoSave(gameState);
+                }
             }
 
             // UI update (notification timers, etc.)
@@ -94,6 +106,7 @@ namespace Sporefront.Visual
             // 3. Listen for new game request from main menu
             uiManager.OnStartNewGame += StartNewGame;
             uiManager.OnPlayArenaGame += StartArenaGame;
+            uiManager.OnLoadGame += LoadGame;
 
             // 4. Show main menu
             uiManager.ShowMainMenu();
@@ -177,11 +190,11 @@ namespace Sporefront.Visual
         {
             switch (size)
             {
-                case MapSize.Small:  return (25, 25);
-                case MapSize.Medium: return (35, 35);
-                case MapSize.Large:  return (50, 50);
-                case MapSize.Huge:   return (65, 65);
-                default:             return (35, 35);
+                case MapSize.Small:  return (GameConfig.MapDimensions.Small, GameConfig.MapDimensions.Small);
+                case MapSize.Medium: return (GameConfig.MapDimensions.Medium, GameConfig.MapDimensions.Medium);
+                case MapSize.Large:  return (GameConfig.MapDimensions.Large, GameConfig.MapDimensions.Large);
+                case MapSize.Huge:   return (GameConfig.MapDimensions.Huge, GameConfig.MapDimensions.Huge);
+                default:             return (GameConfig.MapDimensions.Medium, GameConfig.MapDimensions.Medium);
             }
         }
 
@@ -194,13 +207,14 @@ namespace Sporefront.Visual
             var scenario = arenaConfig.scenarioConfig;
             var army = arenaConfig.armyConfig;
 
-            // 1. Create 7x7 game state
-            gameState = new GameState(7, 7);
+            // 1. Create arena game state
+            int arenaSize = GameConfig.MapDimensions.Arena;
+            gameState = new GameState(arenaSize, arenaSize);
 
             // 2. Generate arena terrain
-            for (int r = 0; r < 7; r++)
+            for (int r = 0; r < arenaSize; r++)
             {
-                for (int q = 0; q < 7; q++)
+                for (int q = 0; q < arenaSize; q++)
                 {
                     var coord = new HexCoordinate(q, r);
                     gameState.mapData.SetTile(new TileData(coord, TerrainType.Plains, 0));
@@ -373,7 +387,7 @@ namespace Sporefront.Visual
             gridRenderer.BuildGrid(gameState.mapData);
 
             // 12. Set camera bounds and focus on player army
-            cameraController.SetMapBounds(7, 7);
+            cameraController.SetMapBounds(arenaSize, arenaSize);
             cameraController.FocusOn(playerPos, 5f, false);
 
             // 13. Subscribe to state changes
@@ -386,6 +400,59 @@ namespace Sporefront.Visual
             gameStarted = true;
 
             Debug.Log("[GameSceneManager] Arena game started");
+        }
+
+        // ================================================================
+        // Load Game
+        // ================================================================
+
+        private void LoadGame(string saveID)
+        {
+            var loadedState = SaveManager.Load(saveID);
+            if (loadedState == null)
+            {
+                Debug.LogError("[GameSceneManager] Failed to load save: " + saveID);
+                return;
+            }
+
+            // Unsubscribe from previous engine events
+            if (gameStarted && GameEngine.Instance != null)
+                GameEngine.Instance.OnStateChangesProduced -= HandleStateChanges;
+
+            // Replace game state
+            gameState = loadedState;
+
+            // Initialize engine with loaded state
+            GameEngine.Instance.Setup(gameState);
+            GameEngine.Instance.visionEngine.Update(0);
+
+            // Rebuild visual grid
+            gridRenderer.BuildGrid(gameState.mapData);
+
+            // Set camera bounds
+            cameraController.SetMapBounds(gameState.mapData.width, gameState.mapData.height);
+
+            // Focus on local player's city center
+            if (gameState.localPlayerID.HasValue)
+            {
+                var cc = gameState.GetCityCenter(gameState.localPlayerID.Value);
+                if (cc != null)
+                    cameraController.FocusOn(cc.coordinate, 8f, false);
+            }
+
+            // Subscribe to state changes
+            GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
+
+            // Transition UI
+            uiManager.OnGameStarted(gameState);
+
+            // Reset auto-save timer
+            lastAutoSaveGameTime = gameState.currentTime;
+
+            // Game is now running
+            gameStarted = true;
+
+            Debug.Log($"[GameSceneManager] Loaded game from save {saveID}");
         }
 
         // ================================================================

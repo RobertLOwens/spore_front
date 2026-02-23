@@ -45,6 +45,11 @@ namespace Sporefront.Visual
         private const float BannerHeight = 50f;
         private const float BannerWidth = 300f;
 
+        // Reusable buffers to avoid per-frame allocations
+        private List<string> expiredKeysBuffer = new List<string>();
+        private List<string> keysBuffer = new List<string>();
+        private List<NotificationEntry> toRemoveBuffer = new List<NotificationEntry>();
+
         public event Action<HexCoordinate> OnNotificationClicked;
 
         // ================================================================
@@ -135,29 +140,30 @@ namespace Sporefront.Visual
             float dt = Time.deltaTime;
 
             // Update deduplication cooldowns
-            var expiredKeys = new List<string>();
-            var keys = new List<string>(deduplicationCooldowns.Keys);
-            foreach (var key in keys)
+            expiredKeysBuffer.Clear();
+            keysBuffer.Clear();
+            keysBuffer.AddRange(deduplicationCooldowns.Keys);
+            foreach (var key in keysBuffer)
             {
                 deduplicationCooldowns[key] -= dt;
                 if (deduplicationCooldowns[key] <= 0)
-                    expiredKeys.Add(key);
+                    expiredKeysBuffer.Add(key);
             }
-            foreach (var key in expiredKeys)
+            foreach (var key in expiredKeysBuffer)
                 deduplicationCooldowns.Remove(key);
 
             // Update active banners
-            var toRemove = new List<NotificationEntry>();
+            toRemoveBuffer.Clear();
             foreach (var entry in activeBanners)
             {
                 entry.elapsed += dt;
                 if (entry.elapsed >= entry.displayTime)
-                    toRemove.Add(entry);
+                    toRemoveBuffer.Add(entry);
             }
-            foreach (var entry in toRemove)
+            foreach (var entry in toRemoveBuffer)
                 RemoveBanner(entry);
 
-            if (toRemove.Count > 0) LayoutBanners();
+            if (toRemoveBuffer.Count > 0) LayoutBanners();
         }
 
         // ================================================================

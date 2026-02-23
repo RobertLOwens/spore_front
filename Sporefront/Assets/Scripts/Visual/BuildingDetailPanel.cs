@@ -24,6 +24,7 @@ namespace Sporefront.Visual
         public event Action<Guid, BuildingType, HexCoordinate, int> OnUpgradeRequested;
         public event Action<Guid> OnCancelUpgradeRequested;
         public event Action<Guid> OnCancelDemolishRequested;
+        public event Action<Guid> OnDemolishRequested;
 
         // ================================================================
         // State
@@ -440,6 +441,21 @@ namespace Sporefront.Visual
 
                 // Upgrade section
                 BuildUpgradeSection(building, player);
+
+                // Demolish button (completed, player-owned, non-CityCenter)
+                if (building.CanDemolish &&
+                    building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                {
+                    var demolishCard = UIHelper.CreateSectionCard(contentRT, "DemolishCard");
+                    var capturedID = building.id;
+                    var demolishBtn = UIHelper.CreateButton(demolishCard.transform, "Demolish",
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        {
+                            OnDemolishRequested?.Invoke(capturedID);
+                        });
+                    var demolishLE = demolishBtn.gameObject.AddComponent<LayoutElement>();
+                    demolishLE.preferredHeight = 32;
+                }
             }
 
             // Cache fingerprint for incremental refresh

@@ -112,7 +112,7 @@ namespace Sporefront.Visual
                             if (!capturedBuildingID2.HasValue) return;
                             var cmd = new UpgradeUnitCommand(localPlayerID,
                                 capturedUpgrade.ToString(), capturedBuildingID2.Value);
-                            GameEngine.Instance.ExecuteCommand(cmd);
+                            UIManager.ExecutePlayerCommand(cmd);
                         });
                     btn.interactable = canStart;
                     var btnLE = btn.gameObject.AddComponent<LayoutElement>();

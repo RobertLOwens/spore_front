@@ -144,6 +144,19 @@ namespace Sporefront.Data
     public class ResearchStartedChange : StateChange { public Guid playerID; public string researchType; public double startTime; }
     public class ResearchProgressChange : StateChange { public Guid playerID; public string researchType; public double progress; }
     public class ResearchCompletedChange : StateChange { public Guid playerID; public string researchType; }
+    public class ResearchCancelledChange : StateChange { public Guid playerID; public string researchType; }
+
+    // Commander XP Changes
+    public class CommanderXPGainedChange : StateChange
+    {
+        public Guid commanderID;
+        public int xpGained;
+        public int newXP;
+        public int newLevel;
+        public CommanderRank newRank;
+        public bool didLevelUp;
+        public bool didRankUp;
+    }
 
     // Unit Upgrade Changes
     public class UnitUpgradeStartedChange : StateChange

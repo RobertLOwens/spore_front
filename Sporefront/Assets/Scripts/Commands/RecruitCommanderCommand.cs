@@ -59,9 +59,21 @@ namespace Sporefront.Commands
 
             var player = state.GetPlayer(PlayerID);
 
-            // Deduct resources
+            // Deduct resources and emit state changes
             foreach (var kvp in RecruitCost)
+            {
+                int oldAmount = player.GetResource(kvp.Key);
                 player.RemoveResource(kvp.Key, kvp.Value);
+                int newAmount = player.GetResource(kvp.Key);
+
+                changeBuilder.Add(new ResourcesChangedChange
+                {
+                    playerID = PlayerID,
+                    resourceType = kvp.Key.ToString(),
+                    oldAmount = oldAmount,
+                    newAmount = newAmount
+                });
+            }
 
             // Create commander
             var commander = new CommanderData(

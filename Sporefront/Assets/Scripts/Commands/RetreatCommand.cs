@@ -25,9 +25,8 @@ namespace Sporefront.Commands
             if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
                 return EngineCommandResult.Failure("Army is not owned by this player");
 
-            // Army must be in combat or have a valid reason to retreat
-            if (!army.isInCombat && !army.isEntrenched && !army.isEntrenching)
-                return EngineCommandResult.Failure("Army has no reason to retreat");
+            if (army.isRetreating)
+                return EngineCommandResult.Failure("Army is already retreating");
 
             return EngineCommandResult.Success(null);
         }
@@ -91,7 +90,8 @@ namespace Sporefront.Commands
                 DebugLog.Log(string.Format("RetreatCommand: Disengaged army {0} from combat", army.name));
             }
 
-            // Set army path and mark as retreating
+            // Clear any pending attack and set army path as retreating
+            army.pendingAttackTarget = null;
             army.currentPath = path;
             army.pathIndex = 0;
             army.movementProgress = 0.0;

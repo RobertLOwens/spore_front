@@ -171,26 +171,23 @@ namespace Sporefront.Engine
         private List<HexCoordinate> GetRing(HexCoordinate center, int radius)
         {
             if (radius == 0)
-            {
                 return new List<HexCoordinate> { center };
-            }
 
             var results = new List<HexCoordinate>();
-            var hex = new HexCoordinate(center.q - radius, center.r + radius);
 
-            var directions = new HexCoordinate[]
-            {
-                new HexCoordinate(1, 0), new HexCoordinate(1, -1),
-                new HexCoordinate(0, -1), new HexCoordinate(-1, 0),
-                new HexCoordinate(-1, 1), new HexCoordinate(0, 1)
-            };
+            // Walk West from center to starting position
+            var hex = center;
+            for (int i = 0; i < radius; i++)
+                hex = hex.Neighbor(3); // West
 
-            foreach (var direction in directions)
+            // Walk around ring: after starting West (dir 3), first edge is (3+2)%6 = 5
+            for (int side = 0; side < 6; side++)
             {
+                int direction = (5 + side) % 6;
                 for (int i = 0; i < radius; i++)
                 {
                     results.Add(hex);
-                    hex = new HexCoordinate(hex.q + direction.q, hex.r + direction.r);
+                    hex = hex.Neighbor(direction);
                 }
             }
 
@@ -258,7 +255,7 @@ namespace Sporefront.Engine
 
         private void HexToCube(HexCoordinate hex, out double x, out double y, out double z)
         {
-            x = (double)hex.q;
+            x = hex.q - (hex.r - (hex.r & 1)) / 2.0;
             z = (double)hex.r;
             y = -x - z;
         }
@@ -286,8 +283,10 @@ namespace Sporefront.Engine
                 rz = -rx - ry;
             }
 
-            // Convert cube to axial
-            return new HexCoordinate((int)rx, (int)rz);
+            // Convert cube to odd-r offset
+            int finalR = (int)rz;
+            int finalQ = (int)rx + (finalR - (finalR & 1)) / 2;
+            return new HexCoordinate(finalQ, finalR);
         }
 
         // Query Methods

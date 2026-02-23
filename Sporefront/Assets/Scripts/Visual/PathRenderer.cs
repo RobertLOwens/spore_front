@@ -46,6 +46,8 @@ namespace Sporefront.Visual
         // ================================================================
 
         private Dictionary<Guid, PathVisualData> activePaths = new Dictionary<Guid, PathVisualData>();
+        private PathVisualData previewPathData;
+        private static readonly Guid PreviewSeedID = new Guid("00000000-0000-0000-0000-000000000001");
 
         // ================================================================
         // Public API
@@ -58,6 +60,23 @@ namespace Sporefront.Visual
                 if (kvp.Value.rootGO != null) Destroy(kvp.Value.rootGO);
             }
             activePaths.Clear();
+            ClearPreviewPath();
+        }
+
+        public void ShowPreviewPath(List<HexCoordinate> path, Color color)
+        {
+            ClearPreviewPath();
+            if (path == null || path.Count < 2) return;
+            previewPathData = BuildPathVisual(PreviewSeedID, path, color);
+        }
+
+        public void ClearPreviewPath()
+        {
+            if (previewPathData != null)
+            {
+                if (previewPathData.rootGO != null) Destroy(previewPathData.rootGO);
+                previewPathData = null;
+            }
         }
 
         public void UpdatePaths(GameState gameState, Guid localPlayerID)
@@ -176,7 +195,7 @@ namespace Sporefront.Visual
 
                 float fraction = ComputeEntityFraction(pathData, entityPos);
 
-                // Update strand gradients to clip behind entity
+                // Update strand gradients to clip behind entity (reuse pre-allocated Gradient objects)
                 for (int s = 0; s < pathData.strands.Length; s++)
                 {
                     if (pathData.strands[s] == null) continue;
@@ -184,7 +203,7 @@ namespace Sporefront.Visual
                     float strandAlpha = StrandAlphas[s];
                     Color baseColor = pathData.baseColor;
 
-                    var gradient = new Gradient();
+                    var gradient = pathData.strandGradients[s];
 
                     if (fraction < 0.01f)
                     {
@@ -241,7 +260,15 @@ namespace Sporefront.Visual
 
         private void BuildPath(Guid entityID, List<HexCoordinate> path, Color color, HexCoordinate destination)
         {
-            if (path == null || path.Count < 2) return;
+            var visual = BuildPathVisual(entityID, path, color);
+            if (visual == null) return;
+            visual.destination = destination;
+            activePaths[entityID] = visual;
+        }
+
+        private PathVisualData BuildPathVisual(Guid seedID, List<HexCoordinate> path, Color color)
+        {
+            if (path == null || path.Count < 2) return null;
 
             var pathGO = new GameObject("Path");
             pathGO.transform.SetParent(transform, false);
@@ -265,7 +292,7 @@ namespace Sporefront.Visual
             float totalPathLength = cumulativeDistances[hexWorldPositions.Length - 1];
 
             // Deterministic seed from entity ID
-            int seed = entityID.GetHashCode();
+            int seed = seedID.GetHashCode();
 
             // Create 5 mycelium strands
             var strands = new LineRenderer[StrandCount];
@@ -279,16 +306,21 @@ namespace Sporefront.Visual
             var arrows = CreateDirectionArrows(pathGO, hexWorldPositions,
                 cumulativeDistances, totalPathLength, color);
 
-            activePaths[entityID] = new PathVisualData
+            // Pre-allocate gradients per strand for reuse in UpdatePathStartPoints
+            var strandGradients = new Gradient[StrandCount];
+            for (int s = 0; s < StrandCount; s++)
+                strandGradients[s] = new Gradient();
+
+            return new PathVisualData
             {
                 rootGO = pathGO,
                 strands = strands,
-                destination = destination,
                 baseColor = color,
                 hexWorldPositions = hexWorldPositions,
                 cumulativeDistances = cumulativeDistances,
                 totalPathLength = totalPathLength,
-                arrows = arrows
+                arrows = arrows,
+                strandGradients = strandGradients
             };
         }
 
@@ -546,6 +578,7 @@ namespace Sporefront.Visual
             public float[] cumulativeDistances;
             public float totalPathLength;
             public List<ArrowData> arrows;
+            public Gradient[] strandGradients;
         }
 
         private struct ArrowData

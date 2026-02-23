@@ -67,7 +67,17 @@ namespace Sporefront.Engine
         {
             var changes = new List<StateChange>();
 
-            var completedEntries = building.UpdateTraining(currentTime);
+            // Look up owner's MilitaryTrainingSpeed research bonus
+            double researchMultiplier = 1.0;
+            if (building.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(building.ownerID.Value);
+                if (owner != null)
+                    researchMultiplier = owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.MilitaryTrainingSpeed.ToString());
+            }
+
+            var completedEntries = building.UpdateTraining(currentTime, researchMultiplier);
 
             foreach (var entry in completedEntries)
             {

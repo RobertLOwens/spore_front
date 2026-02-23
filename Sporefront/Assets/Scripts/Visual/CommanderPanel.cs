@@ -12,6 +12,7 @@ using UnityEngine.UI;
 using Sporefront.Data;
 using Sporefront.Engine;
 using Sporefront.Models;
+using Sporefront.Commands;
 
 namespace Sporefront.Visual
 {
@@ -36,6 +37,7 @@ namespace Sporefront.Visual
         private Guid localPlayerID;
         private Guid? selectedCommanderID;
         private bool isRecruitFlowActive;
+        private GameState cachedGameState;
 
         // Cached references for live updates
         private Image xpFill;
@@ -151,6 +153,7 @@ namespace Sporefront.Visual
 
         private void Rebuild(GameState gameState)
         {
+            cachedGameState = gameState;
             RebuildList(gameState);
             RebuildDetail(gameState);
         }
@@ -215,8 +218,9 @@ namespace Sporefront.Visual
                 clickBtn.onClick.AddListener(() =>
                 {
                     selectedCommanderID = capturedID;
+                    isRecruitFlowActive = false;
                     OnCommanderSelected?.Invoke(capturedID);
-                    // Lazy rebuild on next Refresh
+                    if (cachedGameState != null) Rebuild(cachedGameState);
                 });
             }
 
@@ -227,6 +231,7 @@ namespace Sporefront.Visual
                 SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
                 {
                     isRecruitFlowActive = true;
+                    if (cachedGameState != null) Rebuild(cachedGameState);
                 });
             var recruitLE = recruitBtn.gameObject.AddComponent<LayoutElement>();
             recruitLE.preferredHeight = 34;
@@ -533,6 +538,53 @@ namespace Sporefront.Visual
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 30;
 
+            // Cost display
+            var costText = "Cost: ";
+            var costs = RecruitCommanderCommand.RecruitCost;
+            var parts = new List<string>();
+            foreach (var kvp in costs)
+                parts.Add($"{kvp.Value} {kvp.Key}");
+            costText += string.Join(", ", parts);
+
+            // Check affordability
+            bool canAfford = true;
+            var player = cachedGameState?.GetPlayer(localPlayerID);
+            if (player != null)
+            {
+                canAfford = player.CanAfford(costs);
+
+                // Show player's current resources vs cost
+                var haveText = "You have: ";
+                var haveParts = new List<string>();
+                foreach (var kvp in costs)
+                {
+                    int have = player.GetResource(kvp.Key);
+                    string color = have >= kvp.Value ? "" : "";
+                    haveParts.Add($"{have}/{kvp.Value} {kvp.Key}");
+                }
+                haveText += string.Join(", ", haveParts);
+
+                var haveLabel = UIHelper.CreateLabel(detailContentRT, haveText, 12,
+                    canAfford ? SporefrontColors.SporeGreen : SporefrontColors.SporeRed,
+                    TextAnchor.MiddleCenter);
+                var haveLE = haveLabel.gameObject.AddComponent<LayoutElement>();
+                haveLE.preferredHeight = 20;
+            }
+
+            Color costColor = canAfford ? SporefrontColors.SporeAmber : SporefrontColors.SporeRed;
+            var costLabel = UIHelper.CreateLabel(detailContentRT, costText, 12,
+                costColor, TextAnchor.MiddleCenter);
+            var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
+            costLE.preferredHeight = 20;
+
+            if (!canAfford)
+            {
+                var warnLabel = UIHelper.CreateLabel(detailContentRT, "Insufficient resources!",
+                    12, SporefrontColors.SporeRed, TextAnchor.MiddleCenter, true);
+                var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
+                warnLE.preferredHeight = 22;
+            }
+
             var infoLabel = UIHelper.CreateLabel(detailContentRT,
                 "Choose a specialty for the new commander:", 12,
                 SporefrontColors.InkLight, TextAnchor.MiddleCenter);
@@ -546,7 +598,10 @@ namespace Sporefront.Visual
             {
                 var capturedSpec = spec;
 
-                var rowPanel = UIHelper.CreatePanel(detailContentRT, "SpecRow", SporefrontColors.ParchmentMid);
+                Color rowBg = canAfford ? SporefrontColors.ParchmentMid :
+                    new Color(SporefrontColors.ParchmentMid.r, SporefrontColors.ParchmentMid.g,
+                        SporefrontColors.ParchmentMid.b, 0.5f);
+                var rowPanel = UIHelper.CreatePanel(detailContentRT, "SpecRow", rowBg);
                 var rowLE = rowPanel.AddComponent<LayoutElement>();
                 rowLE.preferredHeight = 56;
 
@@ -561,30 +616,34 @@ namespace Sporefront.Visual
                 // Specialty name + icon
                 var nameRow = UIHelper.CreateHorizontalRow(rowPanel.transform, 20f, 4f);
 
+                Color textColor = canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded;
                 var iconLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"[{spec.Icon()}]", 12, SporefrontColors.SporeAmber);
+                    $"[{spec.Icon()}]", 12, textColor);
                 var iconLE2 = iconLabel.gameObject.AddComponent<LayoutElement>();
                 iconLE2.preferredWidth = 50;
 
                 var nameLabel = UIHelper.CreateLabel(nameRow.transform,
-                    spec.DisplayName(), 13, UIHelper.HeaderTextColor);
+                    spec.DisplayName(), 13, canAfford ? UIHelper.HeaderTextColor : SporefrontColors.InkFaded);
                 var nameLE2 = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE2.flexibleWidth = 1;
 
                 // Description
                 var descLabel = UIHelper.CreateLabel(rowPanel.transform,
-                    spec.Description(), 10, SporefrontColors.InkLight);
+                    spec.Description(), 10, canAfford ? SporefrontColors.InkLight : SporefrontColors.InkFaded);
                 var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
                 descLE.preferredHeight = 16;
 
-                // Click to recruit
-                var clickBtn = rowPanel.AddComponent<Button>();
-                clickBtn.transition = Selectable.Transition.None;
-                clickBtn.onClick.AddListener(() =>
+                // Click to recruit (only if affordable)
+                if (canAfford)
                 {
-                    isRecruitFlowActive = false;
-                    OnRecruitCommander?.Invoke(capturedSpec);
-                });
+                    var clickBtn = rowPanel.AddComponent<Button>();
+                    clickBtn.transition = Selectable.Transition.None;
+                    clickBtn.onClick.AddListener(() =>
+                    {
+                        isRecruitFlowActive = false;
+                        OnRecruitCommander?.Invoke(capturedSpec);
+                    });
+                }
             }
 
             UIHelper.CreateDivider(detailContentRT);
@@ -594,6 +653,7 @@ namespace Sporefront.Visual
                 SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12, () =>
                 {
                     isRecruitFlowActive = false;
+                    if (cachedGameState != null) Rebuild(cachedGameState);
                 });
             var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
             cancelLE.preferredHeight = 30;

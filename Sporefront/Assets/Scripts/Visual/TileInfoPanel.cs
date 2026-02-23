@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using Sporefront.Data;
@@ -32,6 +33,9 @@ namespace Sporefront.Visual
         public event Action<Guid> OnHuntRequested; // resourcePointID — opens GatherPanel in hunt mode
         public event Action<Guid, HexCoordinate, bool> OnMoveEntityToTile; // entityID, destination, isArmy
         public event Action<Guid, HexCoordinate> OnAttackEntityToTile; // armyID, target coordinate
+        public event Action OnCloseRequested;
+        public event Action<Guid, HexCoordinate, bool, bool> OnPreviewPathRequested; // entityID, destination, isArmy, isAttack
+        public event Action OnPreviewPathCleared;
 
         // ================================================================
         // State
@@ -45,8 +49,19 @@ namespace Sporefront.Visual
         private bool showingAttackSelection;
         private GameState cachedGameState;
 
+        // Entrenchment confirmation state
+        private bool showingEntrenchConfirm;
+        private Guid pendingConfirmArmyID;
+        private bool pendingConfirmIsAttack;
+
+        // Preview state
+        private Guid? previewedEntityID;
+        private bool previewIsArmy;
+
         // Cached references for incremental updates
         private Image buildingHPFill;
+        private Image entrenchmentFill;
+        private Text entrenchmentTimeLabel;
 
         // Structural fingerprint
         private bool hasCachedFingerprint;
@@ -57,6 +72,9 @@ namespace Sporefront.Visual
         private int cachedVillagerCount;
         private bool cachedHasResource;
         private int cachedArmyStateHash;
+
+        // Walking time estimate: seconds per tile for villagers
+        private const double VillagerSecsPerTile = 1.0 / (GameConfig.Movement.BaseSpeed * GameConfig.Movement.VillagerSpeedMultiplier);
 
         // ================================================================
         // Initialization
@@ -77,6 +95,17 @@ namespace Sporefront.Visual
             var scroll = UIHelper.CreateScrollView(panel.transform, "TileScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
+            scrollRT.offsetMax = new Vector2(0, -28); // leave room for close button
+
+            // Close button (top-right corner)
+            var closeBtn = UIHelper.CreateButton(panel.transform, "X",
+                SporefrontColors.InkMid, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
+            var closeBtnRT = closeBtn.GetComponent<RectTransform>();
+            closeBtnRT.anchorMin = new Vector2(1, 1);
+            closeBtnRT.anchorMax = new Vector2(1, 1);
+            closeBtnRT.pivot = new Vector2(1, 1);
+            closeBtnRT.anchoredPosition = new Vector2(-4, -4);
+            closeBtnRT.sizeDelta = new Vector2(24, 24);
 
             panel.SetActive(false);
         }
@@ -91,7 +120,9 @@ namespace Sporefront.Visual
             localPlayerID = playerID;
             showingMoveSelection = false;
             showingAttackSelection = false;
+            showingEntrenchConfirm = false;
             hasCachedFingerprint = false;
+            ClearPreview();
             Rebuild(gameState);
             panel.SetActive(true);
         }
@@ -101,6 +132,8 @@ namespace Sporefront.Visual
             currentCoord = null;
             showingMoveSelection = false;
             showingAttackSelection = false;
+            showingEntrenchConfirm = false;
+            ClearPreview();
             panel.SetActive(false);
         }
 
@@ -135,9 +168,17 @@ namespace Sporefront.Visual
                 Destroy(contentRT.GetChild(i).gameObject);
 
             buildingHPFill = null;
+            entrenchmentFill = null;
+            entrenchmentTimeLabel = null;
 
             // Move/Attack selection views — show entity list instead of normal content
             var panelImg = panel.GetComponent<Image>();
+            if (showingEntrenchConfirm)
+            {
+                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeAmber, 0.08f);
+                BuildEntrenchConfirmView(gameState, coord);
+                return;
+            }
             if (showingMoveSelection)
             {
                 panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeTeal, 0.06f);
@@ -286,15 +327,6 @@ namespace Sporefront.Visual
             // Check army combat/entrench/retreat state changes
             if (ComputeArmyStateHash(gameState) != cachedArmyStateHash) return false;
 
-            // Force rebuild when any army is entrenching (progress bar needs updates)
-            if (armies != null)
-            {
-                foreach (var army in armies)
-                {
-                    if (army.isEntrenching) return false;
-                }
-            }
-
             return true;
         }
 
@@ -320,13 +352,40 @@ namespace Sporefront.Visual
             var coord = currentCoord.Value;
             cachedGameState = gameState;
 
-            // Only update building HP bar
+            // Update building HP bar
             var building = gameState.GetBuilding(coord);
             if (building != null && building.maxHealth > 0 && buildingHPFill != null)
             {
                 float hpPct = (float)(building.health / building.maxHealth);
                 var fillRT = buildingHPFill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
+            }
+
+            // Update entrenchment progress bar
+            if (entrenchmentFill != null)
+            {
+                var armies = gameState.GetArmies(coord);
+                if (armies != null)
+                {
+                    foreach (var army in armies)
+                    {
+                        if (army.isEntrenching && army.entrenchmentStartTime.HasValue)
+                        {
+                            double elapsed = gameState.currentTime - army.entrenchmentStartTime.Value;
+                            double buildTime = GameConfig.Entrenchment.BuildTime;
+                            float progress = Mathf.Clamp01((float)(elapsed / buildTime));
+                            var fillRT = entrenchmentFill.GetComponent<RectTransform>();
+                            fillRT.anchorMax = new Vector2(progress, 1);
+
+                            if (entrenchmentTimeLabel != null)
+                            {
+                                double remaining = buildTime - elapsed;
+                                entrenchmentTimeLabel.text = $"Entrenching: {UIHelper.FormatTime(remaining)}";
+                            }
+                            break; // only one entrenching army at a time on a tile
+                        }
+                    }
+                }
             }
         }
 
@@ -413,12 +472,25 @@ namespace Sporefront.Visual
                     fillRT.anchorMax = new Vector2(progress, 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
                     barLE.preferredHeight = 14;
+                    entrenchmentFill = fill;
 
                     var timeLabel = UIHelper.CreateLabel(contentRT,
                         $"Entrenching: {UIHelper.FormatTime(remaining)}", UIConstants.FontCaption,
                         SporefrontColors.SporeAmber);
                     var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
                     timeLE.preferredHeight = 18;
+                    entrenchmentTimeLabel = timeLabel;
+                }
+
+                if (army.isEntrenched)
+                {
+                    int defBonus = (int)(GameConfig.Entrenchment.DefenseBonus * 100);
+                    int covered = army.entrenchedCoveredTiles != null ? army.entrenchedCoveredTiles.Count : 0;
+                    var entrenchLabel = UIHelper.CreateLabel(contentRT,
+                        $"Entrenched: +{defBonus}% Defense | Covering {covered} tiles",
+                        UIConstants.FontCaption, SporefrontColors.SporeTeal);
+                    var entrenchLE = entrenchLabel.gameObject.AddComponent<LayoutElement>();
+                    entrenchLE.preferredHeight = 20;
                 }
 
                 if (isOwned)
@@ -438,7 +510,7 @@ namespace Sporefront.Visual
                     }
 
                     // Retreat
-                    if (army.isInCombat)
+                    if (!army.isRetreating)
                     {
                         var capturedArmyID = army.id;
                         CreateActionButton(btnRow.transform, "Retreat", () =>
@@ -623,36 +695,64 @@ namespace Sporefront.Visual
             }
             else
             {
-                // Non-camp resources (Farmland, Forage, Carcasses): nearby idle villager check
+                // Non-camp resources (Farmland, Forage, Carcasses): find nearest idle villager
                 var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+                VillagerGroupData nearest = null;
+                int nearestDist = int.MaxValue;
                 if (villagers != null)
                 {
                     foreach (var vg in villagers)
                     {
-                        if (vg.coordinate.Distance(rp.coordinate) <= 2 &&
-                            (vg.currentTask == null || vg.currentTask.IsIdle))
+                        if (vg.currentTask != null && !vg.currentTask.IsIdle) continue;
+                        int dist = vg.coordinate.Distance(rp.coordinate);
+                        if (dist < nearestDist)
                         {
-                            var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
-                                SporefrontColors.SporeGreen,
-                                UIHelper.HudTextColor, UIConstants.FontBody,
-                                () => OnGatherRequested?.Invoke(vg.id, rp.id));
-                            var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
-                            btnLE.preferredHeight = 34;
-                            break;
+                            nearestDist = dist;
+                            nearest = vg;
                         }
                     }
                 }
+
+                var capturedRPID = rp.id;
+                var capturedVGID = nearest?.id;
+                var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
+                    SporefrontColors.SporeGreen,
+                    UIHelper.HudTextColor, UIConstants.FontBody,
+                    () => {
+                        if (capturedVGID.HasValue)
+                            OnGatherRequested?.Invoke(capturedVGID.Value, capturedRPID);
+                    });
+                var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredHeight = 34;
             }
         }
 
         private void BuildMoveSelectionView(GameState gameState, HexCoordinate coord)
         {
+            // Guard: if previewed entity is no longer in the lists, reset
+            if (previewedEntityID.HasValue)
+            {
+                bool found = false;
+                var checkArmies = gameState.GetArmiesForPlayer(localPlayerID);
+                if (checkArmies != null)
+                    foreach (var a in checkArmies)
+                        if (a.id == previewedEntityID.Value) { found = true; break; }
+                if (!found)
+                {
+                    var checkVGs = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+                    if (checkVGs != null)
+                        foreach (var v in checkVGs)
+                            if (v.id == previewedEntityID.Value) { found = true; break; }
+                }
+                if (!found) ClearPreview();
+            }
+
             // Breadcrumb header with back arrow
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
                 SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
-                () => { showingMoveSelection = false; Rebuild(cachedGameState); });
+                () => { showingMoveSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
             arrowLE.preferredHeight = 28;
@@ -665,14 +765,17 @@ namespace Sporefront.Visual
 
             UIHelper.CreateDivider(contentRT);
 
-            // Armies section
+            // Armies section — sorted by distance
             var armies = gameState.GetArmiesForPlayer(localPlayerID);
             bool hasArmies = false;
             if (armies != null && armies.Count > 0)
             {
-                foreach (var army in armies)
+                var movableArmies = armies.Where(a => !a.isInCombat).ToList();
+                movableArmies.Sort((a, b) =>
+                    a.coordinate.Distance(coord).CompareTo(b.coordinate.Distance(coord)));
+
+                foreach (var army in movableArmies)
                 {
-                    if (army.isInCombat) continue;
                     if (!hasArmies)
                     {
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Armies",
@@ -683,37 +786,20 @@ namespace Sporefront.Visual
                         hasArmies = true;
                     }
 
-                    int total = army.GetTotalUnits();
-                    var ac = army.coordinate;
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
-
-                    var nameLabel = UIHelper.CreateLabel(row.transform,
-                        $"{army.name} ({total}) at ({ac.q},{ac.r})", UIConstants.FontBody);
-                    var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                    nameLE.flexibleWidth = 1;
-                    nameLE.preferredHeight = 30;
-
-                    var capturedID = army.id;
-                    var selectBtn = UIHelper.CreateButton(row.transform, "Select",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
-                        () =>
-                        {
-                            OnMoveEntityToTile?.Invoke(capturedID, coord, true);
-                            showingMoveSelection = false;
-                            Rebuild(cachedGameState);
-                        });
-                    var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 56;
-                    btnLE.preferredHeight = 30;
+                    BuildArmyMoveRow(army, coord, false);
                 }
             }
 
-            // Villagers section
+            // Villagers section — sorted by distance
             var villagerGroups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
             bool hasVillagers = false;
             if (villagerGroups != null && villagerGroups.Count > 0)
             {
-                foreach (var group in villagerGroups)
+                var sortedGroups = villagerGroups.Where(g => g.villagerCount > 0).ToList();
+                sortedGroups.Sort((a, b) =>
+                    a.coordinate.Distance(coord).CompareTo(b.coordinate.Distance(coord)));
+
+                foreach (var group in sortedGroups)
                 {
                     if (!hasVillagers)
                     {
@@ -726,27 +812,90 @@ namespace Sporefront.Visual
                         hasVillagers = true;
                     }
 
-                    var gc = group.coordinate;
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
+                    int distance = group.coordinate.Distance(coord);
+                    bool isBusy = group.currentTask != null && !group.currentTask.IsIdle;
+                    string taskDesc = isBusy ? group.currentTask.DisplayName : "Idle";
+                    bool isSelected = previewedEntityID.HasValue && previewedEntityID.Value == group.id;
 
-                    var nameLabel = UIHelper.CreateLabel(row.transform,
-                        $"Villagers ({group.villagerCount}) at ({gc.q},{gc.r})", UIConstants.FontBody);
+                    // Walking time estimate
+                    int walkSeconds = distance > 0 ? Mathf.CeilToInt((float)(distance * VillagerSecsPerTile)) : 0;
+                    string walkTimeStr = walkSeconds > 0
+                        ? (walkSeconds < 60 ? $"~{walkSeconds}s" : $"~{walkSeconds / 60}m{walkSeconds % 60}s")
+                        : "Here";
+
+                    Color rowBg = isSelected
+                        ? Color.Lerp(Color.clear, SporefrontColors.SporeTeal, 0.12f)
+                        : Color.clear;
+                    var row = UIHelper.CreatePanel(contentRT, "VillagerRow", rowBg);
+                    var rowLE = row.AddComponent<LayoutElement>();
+                    rowLE.preferredHeight = isBusy ? 72 : 56;
+
+                    var vlg = row.AddComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(8, 8, 2, 2);
+                    vlg.childForceExpandWidth = true;
+                    vlg.childForceExpandHeight = false;
+
+                    // Line 1: Name (count) | distance
+                    var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                    var nameLabel = UIHelper.CreateLabel(nameRow.transform,
+                        $"{group.name} ({group.villagerCount})", UIConstants.FontBody,
+                        isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
                     var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                     nameLE.flexibleWidth = 1;
-                    nameLE.preferredHeight = 30;
+
+                    var distLabel = UIHelper.CreateLabel(nameRow.transform,
+                        $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.InkLight);
+                    var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
+                    distLE.preferredWidth = 55;
+
+                    // Line 2: Task status | walk time
+                    var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                    var taskLabel = UIHelper.CreateLabel(infoRow.transform,
+                        taskDesc, UIConstants.FontCaption,
+                        isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+                    var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
+                    taskLE.flexibleWidth = 1;
+
+                    var walkLabel = UIHelper.CreateLabel(infoRow.transform,
+                        walkTimeStr, UIConstants.FontCaption, SporefrontColors.InkLight);
+                    var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
+                    walkLE.preferredWidth = 55;
+
+                    // Action row
+                    var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+
+                    if (isBusy)
+                    {
+                        var warnLabel = UIHelper.CreateLabel(actionRow.transform,
+                            $"Will cancel {taskDesc}", UIConstants.FontCaption, SporefrontColors.SporeAmber);
+                        var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
+                        warnLE.flexibleWidth = 1;
+                    }
+                    else
+                    {
+                        var spacer = new GameObject("Spacer");
+                        spacer.transform.SetParent(actionRow.transform, false);
+                        var spacerLE = spacer.AddComponent<LayoutElement>();
+                        spacerLE.flexibleWidth = 1;
+                    }
 
                     var capturedID = group.id;
-                    var selectBtn = UIHelper.CreateButton(row.transform, "Select",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                    Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark;
+                    Color btnTextColor = isBusy ? UIHelper.HudTextColor : UIHelper.ButtonText;
+                    var selectBtn = UIHelper.CreateButton(actionRow.transform,
+                        isSelected ? "Selected" : "Select",
+                        btnColor, btnTextColor, UIConstants.FontBody,
                         () =>
                         {
-                            OnMoveEntityToTile?.Invoke(capturedID, coord, false);
-                            showingMoveSelection = false;
+                            previewedEntityID = capturedID;
+                            previewIsArmy = false;
+                            OnPreviewPathRequested?.Invoke(capturedID, coord, false, false);
                             Rebuild(cachedGameState);
                         });
                     var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 56;
-                    btnLE.preferredHeight = 30;
+                    btnLE.preferredWidth = 70;
+                    btnLE.preferredHeight = 24;
                 }
             }
 
@@ -757,16 +906,64 @@ namespace Sporefront.Visual
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 30;
             }
+
+            // Confirm Move button — only when an entity is previewed
+            if (previewedEntityID.HasValue)
+            {
+                UIHelper.CreateDivider(contentRT);
+                var confirmBtn = UIHelper.CreateButton(contentRT, "Confirm Move",
+                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontBody,
+                    () =>
+                    {
+                        var entityID = previewedEntityID.Value;
+                        bool isArmy = previewIsArmy;
+
+                        // Check if entrenched army — route through entrenchment confirm
+                        if (isArmy)
+                        {
+                            var army = cachedGameState.GetArmy(entityID);
+                            if (army != null && (army.isEntrenched || army.isEntrenching))
+                            {
+                                pendingConfirmArmyID = entityID;
+                                pendingConfirmIsAttack = false;
+                                showingEntrenchConfirm = true;
+                                showingMoveSelection = false;
+                                ClearPreview();
+                                Rebuild(cachedGameState);
+                                return;
+                            }
+                        }
+
+                        OnMoveEntityToTile?.Invoke(entityID, coord, isArmy);
+                        showingMoveSelection = false;
+                        ClearPreview();
+                        Rebuild(cachedGameState);
+                    });
+                var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+                confirmLE.preferredHeight = 38;
+            }
         }
 
         private void BuildAttackSelectionView(GameState gameState, HexCoordinate coord)
         {
+            // Guard: if previewed entity is no longer in the lists, reset
+            if (previewedEntityID.HasValue)
+            {
+                bool found = false;
+                var checkArmies = gameState.GetArmiesForPlayer(localPlayerID);
+                if (checkArmies != null)
+                    foreach (var a in checkArmies)
+                        if (a.id == previewedEntityID.Value && !a.isInCombat && !a.isRetreating)
+                        { found = true; break; }
+                if (!found) ClearPreview();
+            }
+
             // Breadcrumb header with back arrow
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
                 SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
-                () => { showingAttackSelection = false; Rebuild(cachedGameState); });
+                () => { showingAttackSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
             arrowLE.preferredHeight = 28;
@@ -779,14 +976,17 @@ namespace Sporefront.Visual
 
             UIHelper.CreateDivider(contentRT);
 
-            // List player's armies that can attack
+            // List player's armies that can attack — sorted by distance
             var armies = gameState.GetArmiesForPlayer(localPlayerID);
             bool hasArmies = false;
             if (armies != null && armies.Count > 0)
             {
-                foreach (var army in armies)
+                var attackableArmies = armies.Where(a => !a.isInCombat && !a.isRetreating).ToList();
+                attackableArmies.Sort((a, b) =>
+                    a.coordinate.Distance(coord).CompareTo(b.coordinate.Distance(coord)));
+
+                foreach (var army in attackableArmies)
                 {
-                    if (army.isInCombat || army.isRetreating) continue;
                     if (!hasArmies)
                     {
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Your Armies",
@@ -797,28 +997,7 @@ namespace Sporefront.Visual
                         hasArmies = true;
                     }
 
-                    int total = army.GetTotalUnits();
-                    var ac = army.coordinate;
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
-
-                    var nameLabel = UIHelper.CreateLabel(row.transform,
-                        $"{army.name} ({total}) at ({ac.q},{ac.r})", UIConstants.FontBody);
-                    var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                    nameLE.flexibleWidth = 1;
-                    nameLE.preferredHeight = 30;
-
-                    var capturedID = army.id;
-                    var selectBtn = UIHelper.CreateButton(row.transform, "Select",
-                        SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody,
-                        () =>
-                        {
-                            OnAttackEntityToTile?.Invoke(capturedID, coord);
-                            showingAttackSelection = false;
-                            Rebuild(cachedGameState);
-                        });
-                    var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 56;
-                    btnLE.preferredHeight = 30;
+                    BuildArmyMoveRow(army, coord, true);
                 }
             }
 
@@ -829,6 +1008,212 @@ namespace Sporefront.Visual
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 30;
             }
+
+            // Confirm Attack button — only when an army is previewed
+            if (previewedEntityID.HasValue)
+            {
+                UIHelper.CreateDivider(contentRT);
+                var confirmBtn = UIHelper.CreateButton(contentRT, "Confirm Attack",
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody,
+                    () =>
+                    {
+                        var armyID = previewedEntityID.Value;
+
+                        // Check if entrenched army — route through entrenchment confirm
+                        var army = cachedGameState.GetArmy(armyID);
+                        if (army != null && (army.isEntrenched || army.isEntrenching))
+                        {
+                            pendingConfirmArmyID = armyID;
+                            pendingConfirmIsAttack = true;
+                            showingEntrenchConfirm = true;
+                            showingAttackSelection = false;
+                            ClearPreview();
+                            Rebuild(cachedGameState);
+                            return;
+                        }
+
+                        OnAttackEntityToTile?.Invoke(armyID, coord);
+                        showingAttackSelection = false;
+                        ClearPreview();
+                        Rebuild(cachedGameState);
+                    });
+                var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+                confirmLE.preferredHeight = 38;
+            }
+        }
+
+        // ================================================================
+        // Shared Army Row (Move / Attack selection)
+        // ================================================================
+
+        private void BuildArmyMoveRow(ArmyData army, HexCoordinate coord, bool isAttack)
+        {
+            bool isEntrenched = army.isEntrenched || army.isEntrenching;
+            bool isMoving = army.currentPath != null && army.pathIndex < army.currentPath.Count;
+            int total = army.GetTotalUnits();
+            int distance = army.coordinate.Distance(coord);
+            bool isSelected = previewedEntityID.HasValue && previewedEntityID.Value == army.id;
+
+            // Travel time: distance / (BaseSpeed * 1.6 / SlowestUnitMoveSpeed)
+            double secsPerTile = 1.0 / (GameConfig.Movement.BaseSpeed * (1.6 / army.SlowestUnitMoveSpeed));
+            int travelSeconds = distance > 0 ? Mathf.CeilToInt((float)(distance * secsPerTile)) : 0;
+            string travelTimeStr = travelSeconds > 0
+                ? (travelSeconds < 60 ? $"~{travelSeconds}s" : $"~{travelSeconds / 60}m{travelSeconds % 60}s")
+                : "Here";
+
+            // Status
+            string status;
+            bool isBusy;
+            if (army.isEntrenching) { status = "Entrenching"; isBusy = true; }
+            else if (army.isEntrenched) { status = "Entrenched"; isBusy = true; }
+            else if (isMoving) { status = "Moving"; isBusy = true; }
+            else { status = "Idle"; isBusy = false; }
+
+            // Tinted row background when selected
+            Color rowBg = isSelected
+                ? Color.Lerp(Color.clear, isAttack ? SporefrontColors.SporeRed : SporefrontColors.SporeTeal, 0.12f)
+                : Color.clear;
+            var row = UIHelper.CreatePanel(contentRT, "ArmyRow", rowBg);
+            var rowLE = row.AddComponent<LayoutElement>();
+            rowLE.preferredHeight = isEntrenched ? 72 : 56;
+
+            var vlg = row.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 2;
+            vlg.padding = new RectOffset(8, 8, 2, 2);
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            // Line 1: Name (count) | distance
+            var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+            var nameLabel = UIHelper.CreateLabel(nameRow.transform,
+                $"{army.name} ({total})", UIConstants.FontBody,
+                isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
+            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLE.flexibleWidth = 1;
+
+            var distLabel = UIHelper.CreateLabel(nameRow.transform,
+                $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.InkLight);
+            var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
+            distLE.preferredWidth = 55;
+
+            // Line 2: Status | travel time
+            var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+            var statusLabel = UIHelper.CreateLabel(infoRow.transform,
+                status, UIConstants.FontCaption,
+                isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+            var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
+            statusLE.flexibleWidth = 1;
+
+            var timeLabel = UIHelper.CreateLabel(infoRow.transform,
+                travelTimeStr, UIConstants.FontCaption, SporefrontColors.InkLight);
+            var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = 55;
+
+            // Action row
+            var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+
+            if (isEntrenched)
+            {
+                var warnLabel = UIHelper.CreateLabel(actionRow.transform,
+                    "Will abandon entrenchment", UIConstants.FontCaption, SporefrontColors.SporeAmber);
+                var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
+                warnLE.flexibleWidth = 1;
+            }
+            else
+            {
+                var spacer = new GameObject("Spacer");
+                spacer.transform.SetParent(actionRow.transform, false);
+                var spacerLE = spacer.AddComponent<LayoutElement>();
+                spacerLE.flexibleWidth = 1;
+            }
+
+            var capturedID = army.id;
+            Color btnColor = isAttack ? SporefrontColors.SporeRed
+                : (isEntrenched ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark);
+            Color btnTextColor = isAttack || isEntrenched ? UIHelper.HudTextColor : UIHelper.ButtonText;
+            var selectBtn = UIHelper.CreateButton(actionRow.transform,
+                isSelected ? "Selected" : "Select",
+                btnColor, btnTextColor, UIConstants.FontBody,
+                () =>
+                {
+                    previewedEntityID = capturedID;
+                    previewIsArmy = true;
+                    OnPreviewPathRequested?.Invoke(capturedID, coord, true, isAttack);
+                    Rebuild(cachedGameState);
+                });
+            var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
+            btnLE.preferredWidth = 70;
+            btnLE.preferredHeight = 24;
+        }
+
+        // ================================================================
+        // Entrenchment Confirmation View
+        // ================================================================
+
+        private void BuildEntrenchConfirmView(GameState gameState, HexCoordinate coord)
+        {
+            var army = gameState.GetArmy(pendingConfirmArmyID);
+            string armyName = army != null ? army.name : "Army";
+            string action = pendingConfirmIsAttack ? "Attacking" : "Moving";
+
+            // Warning header
+            var warnHeader = UIHelper.CreateLabel(contentRT, "Abandon Entrenchment?",
+                UIConstants.FontHeader, SporefrontColors.SporeAmber, TextAnchor.MiddleCenter, true);
+            var whLE = warnHeader.gameObject.AddComponent<LayoutElement>();
+            whLE.preferredHeight = 32;
+
+            UIHelper.CreateDivider(contentRT);
+
+            // Warning message
+            var msg = UIHelper.CreateLabel(contentRT,
+                $"{action} {armyName} will abandon its entrenched position, losing all defensive bonuses.",
+                UIConstants.FontBody, UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+            var msgLE = msg.gameObject.AddComponent<LayoutElement>();
+            msgLE.preferredHeight = 50;
+
+            // Entrenchment details
+            if (army != null && army.isEntrenched)
+            {
+                int defBonus = (int)(GameConfig.Entrenchment.DefenseBonus * 100);
+                int covered = army.entrenchedCoveredTiles != null ? army.entrenchedCoveredTiles.Count : 0;
+                var detailLabel = UIHelper.CreateLabel(contentRT,
+                    $"Current bonus: +{defBonus}% Defense, covering {covered} tiles",
+                    UIConstants.FontCaption, SporefrontColors.SporeTeal, TextAnchor.MiddleCenter);
+                var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
+                detailLE.preferredHeight = 22;
+            }
+
+            UIHelper.CreateDivider(contentRT);
+
+            // Confirm button
+            var confirmBtn = UIHelper.CreateButton(contentRT, $"Confirm {(pendingConfirmIsAttack ? "Attack" : "Move")}",
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody,
+                () =>
+                {
+                    showingEntrenchConfirm = false;
+                    if (pendingConfirmIsAttack)
+                    {
+                        OnAttackEntityToTile?.Invoke(pendingConfirmArmyID, coord);
+                    }
+                    else
+                    {
+                        OnMoveEntityToTile?.Invoke(pendingConfirmArmyID, coord, true);
+                    }
+                    Rebuild(cachedGameState);
+                });
+            var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+            confirmLE.preferredHeight = 38;
+
+            // Cancel button
+            var cancelBtn = UIHelper.CreateButton(contentRT, "Cancel",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                () =>
+                {
+                    showingEntrenchConfirm = false;
+                    Rebuild(cachedGameState);
+                });
+            var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+            cancelLE.preferredHeight = 38;
         }
 
         // ================================================================
@@ -843,6 +1228,15 @@ namespace Sporefront.Visual
             le.preferredWidth = 56;
             le.preferredHeight = 34;
             return btn;
+        }
+
+        private void ClearPreview()
+        {
+            if (previewedEntityID.HasValue)
+            {
+                previewedEntityID = null;
+                OnPreviewPathCleared?.Invoke();
+            }
         }
     }
 }

@@ -1,0 +1,17 @@
+{
+    "name": "Sporefront.Runtime",
+    "rootNamespace": "Sporefront",
+    "references": [
+        "Unity.InputSystem",
+        "Newtonsoft.Json"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

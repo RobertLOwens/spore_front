@@ -30,9 +30,12 @@ namespace Sporefront.Visual
             {
                 if (_bodyFont == null)
                 {
-                    _bodyFont = Font.CreateDynamicFontFromOSFont("IM Fell English", DefaultBodyFontSize);
-                    if (_bodyFont == null)
-                        _bodyFont = Font.CreateDynamicFontFromOSFont("Arial", DefaultBodyFontSize);
+                    // Check if the font exists in available OS fonts before using it;
+                    // CreateDynamicFontFromOSFont never returns null even for missing fonts
+                    string[] osfonts = Font.GetOSInstalledFontNames();
+                    bool hasFellEnglish = System.Array.Exists(osfonts, f => f == "IM Fell English");
+                    _bodyFont = Font.CreateDynamicFontFromOSFont(
+                        hasFellEnglish ? "IM Fell English" : "Arial", DefaultBodyFontSize);
                 }
                 return _bodyFont;
             }
@@ -44,9 +47,10 @@ namespace Sporefront.Visual
             {
                 if (_headerFont == null)
                 {
-                    _headerFont = Font.CreateDynamicFontFromOSFont("MedievalSharp", DefaultHeaderFontSize);
-                    if (_headerFont == null)
-                        _headerFont = Font.CreateDynamicFontFromOSFont("Arial", DefaultHeaderFontSize);
+                    string[] osfonts = Font.GetOSInstalledFontNames();
+                    bool hasMedievalSharp = System.Array.Exists(osfonts, f => f == "MedievalSharp");
+                    _headerFont = Font.CreateDynamicFontFromOSFont(
+                        hasMedievalSharp ? "MedievalSharp" : "Arial", DefaultHeaderFontSize);
                 }
                 return _headerFont;
             }
@@ -56,8 +60,8 @@ namespace Sporefront.Visual
         // Style Constants
         // ================================================================
 
-        public const int DefaultBodyFontSize = 14;
-        public const int DefaultHeaderFontSize = 18;
+        public const int DefaultBodyFontSize = 18;
+        public const int DefaultHeaderFontSize = 23;
 
         public static readonly Color PanelBg = new Color(
             SporefrontColors.ParchmentMid.r,
@@ -79,9 +83,9 @@ namespace Sporefront.Visual
         // Rounded Corner Sprites
         // ================================================================
 
-        public const int PanelCornerRadius = 16;
-        public const int ButtonCornerRadius = 12;
-        public const int SmallCornerRadius = 6;
+        public const int PanelCornerRadius = 20;
+        public const int ButtonCornerRadius = 15;
+        public const int SmallCornerRadius = 8;
 
         private static readonly Dictionary<int, Sprite> _roundedRectCache = new Dictionary<int, Sprite>();
 

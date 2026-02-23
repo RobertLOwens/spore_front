@@ -225,6 +225,7 @@ namespace Sporefront.Visual
                     currentCategory = ResearchCategory.Economic;
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
+                    Rebuild(GameEngine.Instance.GetGameState());
                 });
 
             militaryTabBtn = UIHelper.CreateButton(tabContainer.transform, "Military",
@@ -233,6 +234,7 @@ namespace Sporefront.Visual
                     currentCategory = ResearchCategory.Military;
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
+                    Rebuild(GameEngine.Instance.GetGameState());
                 });
         }
 
