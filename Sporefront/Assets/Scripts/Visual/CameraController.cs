@@ -27,6 +27,13 @@ namespace Sporefront.Visual
         [Header("Pan")]
         public float panSpeed = 1f;
 
+        [Header("Keyboard Pan")]
+        public float keyboardPanSpeed = 4f;
+
+        [Header("Edge Pan")]
+        public float edgePanSpeed = 6f;
+        public float edgePanMargin = 15f;
+
         // ================================================================
         // State
         // ================================================================
@@ -39,6 +46,12 @@ namespace Sporefront.Visual
         private Vector3 panStartScreenPos;
         private const float PanDragThreshold = 5f; // pixels before pan starts (#13)
         private bool panThresholdMet;
+
+        // Right-click pan
+        private bool isRightClickPanning;
+        private bool rightClickPanThresholdMet;
+        private Vector3 rightClickPanOrigin;
+        private Vector3 rightClickPanStartScreenPos;
 
         // Smooth zoom
         private float targetZoom;
@@ -68,6 +81,8 @@ namespace Sporefront.Visual
         {
             HandleZoomInput();
             HandlePanInput();
+            HandleKeyboardPan();
+            HandleEdgePan();
             ApplySmoothZoom();
             ApplySmoothFocus();
             ClampPosition();
@@ -132,9 +147,14 @@ namespace Sporefront.Visual
         }
 
         /// <summary>
-        /// True when the camera is actively panning (drag threshold met). (#13)
+        /// True when the camera is actively panning via middle-mouse (drag threshold met). (#13)
         /// </summary>
         public bool IsPanning => isPanning && panThresholdMet;
+
+        /// <summary>
+        /// True when the camera is actively panning via right-click drag (threshold met).
+        /// </summary>
+        public bool IsRightClickPanning => isRightClickPanning && rightClickPanThresholdMet;
 
         private void HandlePanInput()
         {
@@ -143,13 +163,8 @@ namespace Sporefront.Visual
 
             Vector3 mousePos = mouse.position.ReadValue();
 
-            // Right mouse button or middle mouse button to pan
-            bool rightDown = mouse.rightButton.wasPressedThisFrame;
-            bool middleDown = mouse.middleButton.wasPressedThisFrame;
-            bool rightUp = mouse.rightButton.wasReleasedThisFrame;
-            bool middleUp = mouse.middleButton.wasReleasedThisFrame;
-
-            if (rightDown || middleDown)
+            // --- Middle mouse button pan ---
+            if (mouse.middleButton.wasPressedThisFrame)
             {
                 isPanning = true;
                 panThresholdMet = false;
@@ -157,7 +172,7 @@ namespace Sporefront.Visual
                 panOrigin = cam.ScreenToWorldPoint(mousePos);
             }
 
-            if (rightUp || middleUp)
+            if (mouse.middleButton.wasReleasedThisFrame)
             {
                 isPanning = false;
                 panThresholdMet = false;
@@ -165,7 +180,6 @@ namespace Sporefront.Visual
 
             if (isPanning)
             {
-                // Only start actual panning after threshold (#13)
                 if (!panThresholdMet)
                 {
                     float dist = Vector3.Distance(mousePos, panStartScreenPos);
@@ -173,6 +187,7 @@ namespace Sporefront.Visual
                     {
                         panThresholdMet = true;
                         panOrigin = cam.ScreenToWorldPoint(mousePos);
+                        isFocusing = false;
                     }
                     return;
                 }
@@ -181,6 +196,105 @@ namespace Sporefront.Visual
                 Vector3 delta = panOrigin - currentMouse;
                 transform.position += delta;
             }
+
+            // --- Right mouse button pan ---
+            if (mouse.rightButton.wasPressedThisFrame)
+            {
+                isRightClickPanning = true;
+                rightClickPanThresholdMet = false;
+                rightClickPanStartScreenPos = mousePos;
+                rightClickPanOrigin = cam.ScreenToWorldPoint(mousePos);
+            }
+
+            if (mouse.rightButton.wasReleasedThisFrame)
+            {
+                isRightClickPanning = false;
+                rightClickPanThresholdMet = false;
+            }
+
+            if (isRightClickPanning)
+            {
+                if (!rightClickPanThresholdMet)
+                {
+                    float dist = Vector3.Distance(mousePos, rightClickPanStartScreenPos);
+                    if (dist >= PanDragThreshold)
+                    {
+                        rightClickPanThresholdMet = true;
+                        rightClickPanOrigin = cam.ScreenToWorldPoint(mousePos);
+                        isFocusing = false;
+                    }
+                    return;
+                }
+
+                Vector3 currentMouse = cam.ScreenToWorldPoint(mousePos);
+                Vector3 delta = rightClickPanOrigin - currentMouse;
+                transform.position += delta;
+                rightClickPanOrigin = cam.ScreenToWorldPoint(mousePos);
+            }
+        }
+
+        // ================================================================
+        // Keyboard Pan (WASD / Arrow Keys)
+        // ================================================================
+
+        private void HandleKeyboardPan()
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+
+            Vector3 direction = Vector3.zero;
+
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed)
+                direction.y += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed)
+                direction.y -= 1f;
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+                direction.x -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+                direction.x += 1f;
+
+            if (direction.sqrMagnitude < 0.01f) return;
+
+            direction.Normalize();
+            transform.position += direction * (keyboardPanSpeed * zoomLevel * Time.deltaTime);
+            isFocusing = false;
+        }
+
+        // ================================================================
+        // Edge Pan (mouse at screen edges)
+        // ================================================================
+
+        private void HandleEdgePan()
+        {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            Vector2 mousePos = mouse.position.ReadValue();
+
+            // Skip if mouse is outside the game window
+            if (mousePos.x < 0 || mousePos.x >= Screen.width ||
+                mousePos.y < 0 || mousePos.y >= Screen.height)
+                return;
+
+            Vector3 direction = Vector3.zero;
+
+            if (mousePos.x <= edgePanMargin)
+                direction.x -= 1f;
+            if (mousePos.x >= Screen.width - edgePanMargin)
+                direction.x += 1f;
+            if (mousePos.y <= edgePanMargin)
+                direction.y -= 1f;
+            if (mousePos.y >= Screen.height - edgePanMargin)
+                direction.y += 1f;
+
+            if (direction.sqrMagnitude < 0.01f) return;
+
+            direction.Normalize();
+            transform.position += direction * (edgePanSpeed * zoomLevel * Time.deltaTime);
+            isFocusing = false;
         }
 
         // ================================================================

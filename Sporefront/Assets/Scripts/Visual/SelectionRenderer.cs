@@ -2,6 +2,7 @@
 // FILE: Visual/SelectionRenderer.cs
 // PURPOSE: Animated glowing hex selection outline — replaces flat tint (#15)
 //          Also supports build preview outlines for multi-hex buildings (#19)
+//          Entity highlights use pulsing circle rings.
 // ============================================================================
 
 using System.Collections.Generic;
@@ -13,7 +14,17 @@ namespace Sporefront.Visual
     public class SelectionRenderer : MonoBehaviour
     {
         // ================================================================
-        // State
+        // Constants — Circle Selection Rendering
+        // ================================================================
+
+        private const int CircleSegments = 32;
+        private const float CircleRadius = 0.35f;
+        private const float CircleLineWidth = 0.012f;
+        private const float CircleGlowWidth = 0.035f;
+        private const float ZPosition = -0.018f;
+
+        // ================================================================
+        // State — Tile Selection (amber hex outline, unchanged)
         // ================================================================
 
         private HexCoordinate? selectedCoord;
@@ -25,14 +36,23 @@ namespace Sporefront.Visual
         private List<LineRenderer> previewOutlines = new List<LineRenderer>();
         private List<LineRenderer> previewGlows = new List<LineRenderer>();
 
-        // Entity highlight
-        private LineRenderer entityOutlineRenderer;
-        private LineRenderer entityGlowRenderer;
-        private float entityAnimationPhase;
-        private Color entityHighlightColor;
+        // ================================================================
+        // State — Entity Tendrils (replaces hex-outline entity highlight)
+        // ================================================================
+
+        private GameObject entityTendrilRoot;
+        private LineRenderer[] entityTendrilStrands;
+        private float entityTendrilPhase;
+        private Color entityTendrilColor;
+
+        // Multi-entity tendrils (drag-select)
+        private Dictionary<HexCoordinate, (GameObject root, LineRenderer[] strands)> multiEntityTendrils
+            = new Dictionary<HexCoordinate, (GameObject, LineRenderer[])>();
+        private float multiEntityTendrilPhase;
+        private Color multiEntityTendrilColor;
 
         // ================================================================
-        // Public API
+        // Public API — Tile Selection (unchanged)
         // ================================================================
 
         public void ShowSelection(HexCoordinate coord)
@@ -69,6 +89,10 @@ namespace Sporefront.Visual
             if (glowRenderer != null) glowRenderer.enabled = false;
         }
 
+        // ================================================================
+        // Public API — Build Preview (unchanged)
+        // ================================================================
+
         public void ShowBuildPreview(List<HexCoordinate> coords, bool isValid)
         {
             ClearBuildPreview();
@@ -98,34 +122,61 @@ namespace Sporefront.Visual
             previewGlows.Clear();
         }
 
+        // ================================================================
+        // Public API — Entity Tendril Highlights
+        // ================================================================
+
         public void ShowEntityHighlight(HexCoordinate coord, Color color)
         {
-            entityHighlightColor = color;
-            EnsureEntityRenderers();
+            // Destroy previous
+            if (entityTendrilRoot != null)
+            {
+                Destroy(entityTendrilRoot);
+                entityTendrilRoot = null;
+                entityTendrilStrands = null;
+            }
 
+            entityTendrilColor = color;
             Vector3 center = HexMetrics.HexToWorldPosition(coord);
-            var points = GetHexOutlinePoints(center);
+            int seed = coord.GetHashCode();
 
-            ApplyPoints(entityOutlineRenderer, points);
-            entityOutlineRenderer.startWidth = 0.025f;
-            entityOutlineRenderer.endWidth = 0.025f;
-            entityOutlineRenderer.startColor = color;
-            entityOutlineRenderer.endColor = color;
-            entityOutlineRenderer.enabled = true;
-
-            ApplyPoints(entityGlowRenderer, points);
-            entityGlowRenderer.startWidth = 0.06f;
-            entityGlowRenderer.endWidth = 0.06f;
-            var glowColor = new Color(color.r, color.g, color.b, 0.4f);
-            entityGlowRenderer.startColor = glowColor;
-            entityGlowRenderer.endColor = glowColor;
-            entityGlowRenderer.enabled = true;
+            var result = BuildSelectionTendrils(center, color, seed);
+            entityTendrilRoot = result.root;
+            entityTendrilStrands = result.strands;
         }
 
         public void HideEntityHighlight()
         {
-            if (entityOutlineRenderer != null) entityOutlineRenderer.enabled = false;
-            if (entityGlowRenderer != null) entityGlowRenderer.enabled = false;
+            if (entityTendrilRoot != null)
+            {
+                Destroy(entityTendrilRoot);
+                entityTendrilRoot = null;
+                entityTendrilStrands = null;
+            }
+        }
+
+        public void ShowMultiEntityHighlight(List<HexCoordinate> coords, Color color)
+        {
+            ClearMultiEntityHighlight();
+            multiEntityTendrilColor = color;
+
+            foreach (var coord in coords)
+            {
+                Vector3 center = HexMetrics.HexToWorldPosition(coord);
+                int seed = coord.GetHashCode();
+
+                var result = BuildSelectionTendrils(center, color, seed);
+                multiEntityTendrils[coord] = result;
+            }
+        }
+
+        public void ClearMultiEntityHighlight()
+        {
+            foreach (var kvp in multiEntityTendrils)
+            {
+                if (kvp.Value.root != null) Destroy(kvp.Value.root);
+            }
+            multiEntityTendrils.Clear();
         }
 
         // ================================================================
@@ -134,6 +185,7 @@ namespace Sporefront.Visual
 
         private void Update()
         {
+            // Animate amber tile selection glow (unchanged)
             if (glowRenderer != null && glowRenderer.enabled)
             {
                 animationPhase += Time.deltaTime * 3f;
@@ -146,21 +198,102 @@ namespace Sporefront.Visual
                 glowRenderer.endColor = color;
             }
 
-            if (entityGlowRenderer != null && entityGlowRenderer.enabled)
+            // Animate entity tendrils — pulse alpha via gradient
+            if (entityTendrilStrands != null)
             {
-                entityAnimationPhase += Time.deltaTime * 3.5f;
-                float alpha = 0.25f + 0.15f * Mathf.Sin(entityAnimationPhase);
-                var color = new Color(
-                    entityHighlightColor.r,
-                    entityHighlightColor.g,
-                    entityHighlightColor.b, alpha);
-                entityGlowRenderer.startColor = color;
-                entityGlowRenderer.endColor = color;
+                entityTendrilPhase += Time.deltaTime * 3.5f;
+                AnimateTendrilStrands(entityTendrilStrands, entityTendrilColor, entityTendrilPhase);
+            }
+
+            // Animate multi-entity tendrils
+            if (multiEntityTendrils.Count > 0)
+            {
+                multiEntityTendrilPhase += Time.deltaTime * 3.5f;
+                foreach (var kvp in multiEntityTendrils)
+                {
+                    if (kvp.Value.strands != null)
+                        AnimateTendrilStrands(kvp.Value.strands, multiEntityTendrilColor, multiEntityTendrilPhase);
+                }
+            }
+        }
+
+        private void AnimateTendrilStrands(LineRenderer[] strands, Color baseColor, float phase)
+        {
+            float pulse = 0.6f + 0.3f * Mathf.Sin(phase);
+
+            for (int i = 0; i < strands.Length; i++)
+            {
+                if (strands[i] == null) continue;
+
+                // Index 0 = main circle line, index 1 = glow
+                float alpha = (i == 0) ? pulse : pulse * 0.45f;
+                var c = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
+                strands[i].startColor = c;
+                strands[i].endColor = c;
             }
         }
 
         // ================================================================
-        // Helpers
+        // Tendril Construction
+        // ================================================================
+
+        private (GameObject root, LineRenderer[] strands) BuildSelectionTendrils(
+            Vector3 center, Color color, int seed)
+        {
+            var rootGO = new GameObject("SelectionCircle");
+            rootGO.transform.SetParent(transform, false);
+
+            center.z = ZPosition;
+
+            // Build circle points
+            var points = new Vector3[CircleSegments + 1];
+            for (int i = 0; i <= CircleSegments; i++)
+            {
+                float angle = (i / (float)CircleSegments) * Mathf.PI * 2f;
+                points[i] = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * CircleRadius;
+                points[i].z = ZPosition;
+            }
+
+            // Main circle line
+            var mainGO = new GameObject("CircleLine");
+            mainGO.transform.SetParent(rootGO.transform, false);
+            var mainLR = mainGO.AddComponent<LineRenderer>();
+            mainLR.useWorldSpace = true;
+            mainLR.loop = false;
+            mainLR.startWidth = CircleLineWidth;
+            mainLR.endWidth = CircleLineWidth;
+            mainLR.numCapVertices = 3;
+            mainLR.numCornerVertices = 2;
+            mainLR.sortingOrder = 5;
+            mainLR.material = new Material(Shader.Find("Sprites/Default"));
+            mainLR.startColor = color;
+            mainLR.endColor = color;
+            mainLR.positionCount = points.Length;
+            mainLR.SetPositions(points);
+
+            // Glow circle (wider, semi-transparent)
+            var glowGO = new GameObject("CircleGlow");
+            glowGO.transform.SetParent(rootGO.transform, false);
+            var glowLR = glowGO.AddComponent<LineRenderer>();
+            glowLR.useWorldSpace = true;
+            glowLR.loop = false;
+            glowLR.startWidth = CircleGlowWidth;
+            glowLR.endWidth = CircleGlowWidth;
+            glowLR.numCapVertices = 3;
+            glowLR.numCornerVertices = 2;
+            glowLR.sortingOrder = 4;
+            glowLR.material = new Material(Shader.Find("Sprites/Default"));
+            var glowColor = new Color(color.r, color.g, color.b, 0.4f);
+            glowLR.startColor = glowColor;
+            glowLR.endColor = glowColor;
+            glowLR.positionCount = points.Length;
+            glowLR.SetPositions(points);
+
+            return (rootGO, new LineRenderer[] { mainLR, glowLR });
+        }
+
+        // ================================================================
+        // Helpers — Hex Outline (for tile selection + build preview)
         // ================================================================
 
         private void EnsureRenderers()
@@ -172,17 +305,6 @@ namespace Sporefront.Visual
             if (glowRenderer == null)
                 glowRenderer = CreateLineRenderer("SelectionGlow",
                     SporefrontColors.SporeAmber, 0.06f, -0.016f);
-        }
-
-        private void EnsureEntityRenderers()
-        {
-            if (entityOutlineRenderer == null)
-                entityOutlineRenderer = CreateLineRenderer("EntityOutline",
-                    SporefrontColors.SporeTeal, 0.025f, -0.015f);
-
-            if (entityGlowRenderer == null)
-                entityGlowRenderer = CreateLineRenderer("EntityGlow",
-                    SporefrontColors.SporeTeal, 0.06f, -0.016f);
         }
 
         private LineRenderer CreateLineRenderer(string name, Color color, float width, float zPos)
@@ -232,6 +354,7 @@ namespace Sporefront.Visual
         {
             ClearBuildPreview();
             HideEntityHighlight();
+            ClearMultiEntityHighlight();
         }
     }
 }

@@ -43,6 +43,20 @@ namespace Sporefront.Visual
         private Guid? selectedEntityID;
         private bool selectedEntityIsArmy;
 
+        // Multi-selection (drag-select box)
+        private struct SelectedEntity
+        {
+            public Guid id;
+            public bool isArmy;
+        }
+        private List<SelectedEntity> selectedEntities = new List<SelectedEntity>();
+        private bool isDragSelecting;
+        private bool mouseDownOnOwnedEntity;
+
+        // Focused entity (from clicking a card in SelectedEntitiesPanel)
+        private Guid? focusedEntityID;
+        private bool focusedEntityIsArmy;
+
         // Auto-save state
         private const double AutoSaveIntervalGameTime = 300.0; // 5 minutes game time
         private double lastAutoSaveGameTime;
@@ -73,6 +87,7 @@ namespace Sporefront.Visual
 
                 HandleTileHover();
                 HandleTileInteraction();
+                HandleRightClick();
 
                 // Auto-save check
                 if (gameState != null && !gameState.isPaused &&
@@ -108,7 +123,16 @@ namespace Sporefront.Visual
             uiManager.OnPlayArenaGame += StartArenaGame;
             uiManager.OnLoadGame += LoadGame;
 
-            // 4. Show main menu
+            // 4. Listen for entity focus from SelectedEntitiesPanel card click
+            uiManager.OnEntityFocused += (id, isArmy) =>
+            {
+                focusedEntityID = id;
+                focusedEntityIsArmy = isArmy;
+                selectedEntityID = id;
+                selectedEntityIsArmy = isArmy;
+            };
+
+            // 5. Show main menu
             uiManager.ShowMainMenu();
 
             Debug.Log("[GameSceneManager] Main menu shown");
@@ -528,7 +552,11 @@ namespace Sporefront.Visual
         private void HandleTileHover()
         {
             // Skip hover if pointer is over UI
-            if (uiManager != null && uiManager.IsPointerOverUI()) return;
+            if (uiManager != null && uiManager.IsPointerOverUI())
+            {
+                CursorManager.SetCursor(CursorType.Default);
+                return;
+            }
             var mouse = Mouse.current;
             if (mouse == null) return;
 
@@ -551,17 +579,20 @@ namespace Sporefront.Visual
             {
                 view.SetHovered(true);
                 hoveredTile = coord;
+                UpdateCursor(coord);
             }
             else
             {
                 hoveredTile = null;
+                CursorManager.SetCursor(CursorType.Default);
             }
         }
 
         private void HandleTileInteraction()
         {
-            // Skip interaction if pointer is over UI
-            if (uiManager != null && uiManager.IsPointerOverUI()) return;
+            // Only block new interactions when pointer is over UI; allow ongoing drags to continue
+            bool pointerOverUI = uiManager != null && uiManager.IsPointerOverUI();
+            if (pointerOverUI && !mouseIsDown) return;
             var mouse = Mouse.current;
             if (mouse == null) return;
 
@@ -570,12 +601,37 @@ namespace Sporefront.Visual
             // Track left mouse button press (#13)
             if (mouse.leftButton.wasPressedThisFrame)
             {
+                if (pointerOverUI) return; // Don't start new interaction on UI
                 mouseIsDown = true;
+                isDragSelecting = false;
                 mouseDownScreenPos = mousePos;
 
                 Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mousePos);
                 mouseWorld.z = 0f;
                 mouseDownTile = HexMetrics.WorldToHex(mouseWorld);
+
+                // Check if press tile has an owned entity (for drag-to-move disambiguation)
+                mouseDownOnOwnedEntity = HasOwnedEntityAt(mouseDownTile.Value);
+            }
+
+            // During left mouse hold — check for drag threshold
+            if (mouseIsDown && mouse.leftButton.isPressed)
+            {
+                float dragDistance = Vector3.Distance(mousePos, mouseDownScreenPos);
+                if (dragDistance >= DragThreshold && !isDragSelecting)
+                {
+                    // Disambiguate: drag on owned entity = drag-to-move, else = drag-select
+                    if (!mouseDownOnOwnedEntity)
+                    {
+                        isDragSelecting = true;
+                        uiManager.SelectionBox.BeginSelection(mouseDownScreenPos);
+                    }
+                }
+
+                if (isDragSelecting)
+                {
+                    uiManager.SelectionBox.UpdateSelection(mousePos);
+                }
             }
 
             // On left mouse button release
@@ -588,9 +644,17 @@ namespace Sporefront.Visual
                 mouseUpWorld.z = 0f;
                 var releaseCoord = HexMetrics.WorldToHex(mouseUpWorld);
 
-                if (dragDistance < DragThreshold)
+                if (isDragSelecting)
                 {
-                    // Normal click — select tile
+                    // Resolve drag-select box
+                    var screenRect = uiManager.SelectionBox.EndSelection();
+                    ResolveDragSelect(screenRect);
+                    isDragSelecting = false;
+                }
+                else if (dragDistance < DragThreshold)
+                {
+                    // Normal click — select tile, clear multi-selection
+                    ClearMultiSelection();
                     HandleTileClick(releaseCoord);
                 }
                 else if (selectedEntityID.HasValue && mouseDownTile.HasValue)
@@ -602,7 +666,7 @@ namespace Sporefront.Visual
                         var localID = gameState.localPlayerID ?? Guid.Empty;
                         var cmd = new MoveCommand(localID, selectedEntityID.Value,
                             releaseCoord, selectedEntityIsArmy);
-                        GameEngine.Instance.ExecuteCommand(cmd);
+                        UIManager.ExecutePlayerCommand(cmd);
                     }
                 }
 
@@ -615,9 +679,15 @@ namespace Sporefront.Visual
             var view = gridRenderer.GetTileView(coord);
             if (view == null) return;
 
+            // Clear any focused entity from a previous card click
+            focusedEntityID = null;
+
             // Check if action mode (move/attack target) consumes the click
             if (uiManager != null && uiManager.HandleActionModeClick(coord))
+            {
+                ClearMultiSelection();
                 return;
+            }
 
             // Select tile
             gridRenderer.SelectTile(coord);
@@ -626,9 +696,17 @@ namespace Sporefront.Visual
             // Track selected entity for drag-to-move (#13)
             UpdateSelectedEntity(coord);
 
-            // Notify UI
+            // Notify UI — collect all owned entities on tile for panel
             if (uiManager != null)
+            {
                 uiManager.OnTileSelected(coord);
+
+                var tileEntities = CollectOwnedEntities(coord);
+                if (tileEntities.Count > 1)
+                    uiManager.UpdateSelectedEntitiesPanel(null, false, tileEntities);
+                else
+                    uiManager.UpdateSelectedEntitiesPanel(selectedEntityID, selectedEntityIsArmy, null);
+            }
 
             Debug.Log($"[GameSceneManager] Selected tile ({coord.q},{coord.r}) — {view.TerrainType}");
         }
@@ -672,6 +750,291 @@ namespace Sporefront.Visual
                     }
                 }
             }
+        }
+
+        // ================================================================
+        // Right-Click — move or attack
+        // ================================================================
+
+        private void HandleRightClick()
+        {
+            if (uiManager != null && uiManager.IsPointerOverUI()) return;
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            if (!mouse.rightButton.wasReleasedThisFrame) return;
+
+            // Skip if right-click was consumed by camera panning
+            if (cameraController.IsRightClickPanning) return;
+
+            // If action mode is active, right-click cancels it
+            if (uiManager != null && uiManager.IsActionModeActive)
+            {
+                uiManager.CancelActionMode();
+                return;
+            }
+
+            Vector3 mouseWorld = Camera.main.ScreenToWorldPoint((Vector3)mouse.position.ReadValue());
+            mouseWorld.z = 0f;
+            var targetCoord = HexMetrics.WorldToHex(mouseWorld);
+
+            // Verify target tile exists
+            var view = gridRenderer.GetTileView(targetCoord);
+            if (view == null) return;
+
+            var entities = GetSelectedEntities();
+            if (entities.Count == 0) return;
+
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+
+            if (HasEnemyAtCoord(targetCoord, localID))
+            {
+                // Attack with selected armies (villagers can't attack)
+                foreach (var entity in entities)
+                {
+                    if (entity.isArmy)
+                    {
+                        var cmd = new AttackCommand(localID, entity.id, targetCoord);
+                        UIManager.ExecutePlayerCommand(cmd);
+                    }
+                }
+            }
+            else
+            {
+                // Move each selected entity
+                foreach (var entity in entities)
+                {
+                    var cmd = new MoveCommand(localID, entity.id, targetCoord, entity.isArmy);
+                    UIManager.ExecutePlayerCommand(cmd);
+                }
+            }
+
+            ClearMultiSelection();
+        }
+
+        // ================================================================
+        // Context-Sensitive Cursor
+        // ================================================================
+
+        private void UpdateCursor(HexCoordinate coord)
+        {
+            var entities = GetSelectedEntities();
+            if (entities.Count == 0)
+            {
+                CursorManager.SetCursor(CursorType.Default);
+                return;
+            }
+
+            bool hasArmy = false, hasVillager = false;
+            foreach (var e in entities)
+            {
+                if (e.isArmy) hasArmy = true;
+                else hasVillager = true;
+            }
+
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+
+            // Priority: Attack > Gather > Move > Default
+            if (hasArmy && HasEnemyAtCoord(coord, localID))
+            {
+                CursorManager.SetCursor(CursorType.Attack);
+                return;
+            }
+
+            if (hasVillager)
+            {
+                var rp = gameState.GetResourcePoint(coord);
+                if (rp != null && !rp.IsDepleted())
+                {
+                    CursorManager.SetCursor(CursorType.Gather);
+                    return;
+                }
+            }
+
+            if (gameState.mapData.IsWalkable(coord))
+            {
+                CursorManager.SetCursor(CursorType.Move);
+                return;
+            }
+
+            CursorManager.SetCursor(CursorType.Default);
+        }
+
+        // ================================================================
+        // Multi-Select Helpers
+        // ================================================================
+
+        private List<SelectedEntity> GetSelectedEntities()
+        {
+            // Focused entity takes priority (card clicked in SelectedEntitiesPanel)
+            if (focusedEntityID.HasValue)
+                return new List<SelectedEntity> { new SelectedEntity { id = focusedEntityID.Value, isArmy = focusedEntityIsArmy } };
+
+            if (selectedEntities.Count > 0)
+                return selectedEntities;
+
+            // Fall back to single selected entity
+            if (selectedEntityID.HasValue)
+                return new List<SelectedEntity> { new SelectedEntity { id = selectedEntityID.Value, isArmy = selectedEntityIsArmy } };
+
+            return new List<SelectedEntity>();
+        }
+
+        private bool HasEnemyAtCoord(HexCoordinate coord, Guid localID)
+        {
+            // Check armies
+            var armies = gameState.GetArmies(coord);
+            if (armies != null)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.ownerID.HasValue && army.ownerID.Value != localID &&
+                        gameState.GetDiplomacyStatus(localID, army.ownerID.Value) == DiplomacyStatus.Enemy)
+                        return true;
+                }
+            }
+
+            // Check buildings
+            var building = gameState.GetBuilding(coord);
+            if (building != null && building.ownerID.HasValue && building.ownerID.Value != localID &&
+                gameState.GetDiplomacyStatus(localID, building.ownerID.Value) == DiplomacyStatus.Enemy)
+                return true;
+
+            // Check villager groups
+            var groups = gameState.GetVillagerGroups(coord);
+            if (groups != null)
+            {
+                foreach (var group in groups)
+                {
+                    if (group.ownerID.HasValue && group.ownerID.Value != localID &&
+                        gameState.GetDiplomacyStatus(localID, group.ownerID.Value) == DiplomacyStatus.Enemy)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool HasOwnedEntityAt(HexCoordinate coord)
+        {
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+
+            var armies = gameState.GetArmies(coord);
+            if (armies != null)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.ownerID.HasValue && army.ownerID.Value == localID)
+                        return true;
+                }
+            }
+
+            var groups = gameState.GetVillagerGroups(coord);
+            if (groups != null)
+            {
+                foreach (var group in groups)
+                {
+                    if (group.ownerID.HasValue && group.ownerID.Value == localID)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void ResolveDragSelect(Rect screenRect)
+        {
+            selectedEntities.Clear();
+
+            if (screenRect.width < 5f && screenRect.height < 5f) return;
+
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+            var cam = Camera.main;
+
+            // Select owned armies
+            foreach (var kvp in gameState.armies)
+            {
+                var army = kvp.Value;
+                if (!army.ownerID.HasValue || army.ownerID.Value != localID) continue;
+                if (army.isInCombat) continue;
+
+                Vector3 worldPos = HexMetrics.HexToWorldPosition(army.coordinate);
+                Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
+
+                if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
+                    selectedEntities.Add(new SelectedEntity { id = army.id, isArmy = true });
+            }
+
+            // Select owned villager groups
+            foreach (var kvp in gameState.villagerGroups)
+            {
+                var group = kvp.Value;
+                if (!group.ownerID.HasValue || group.ownerID.Value != localID) continue;
+
+                Vector3 worldPos = HexMetrics.HexToWorldPosition(group.coordinate);
+                Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
+
+                if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
+                    selectedEntities.Add(new SelectedEntity { id = group.id, isArmy = false });
+            }
+
+            if (selectedEntities.Count > 0)
+            {
+                var coords = new List<HexCoordinate>();
+                var entityList = new List<(Guid id, bool isArmy)>();
+                foreach (var entity in selectedEntities)
+                {
+                    entityList.Add((entity.id, entity.isArmy));
+                    if (entity.isArmy)
+                    {
+                        var army = gameState.GetArmy(entity.id);
+                        if (army != null) coords.Add(army.coordinate);
+                    }
+                    else
+                    {
+                        var vg = gameState.GetVillagerGroup(entity.id);
+                        if (vg != null) coords.Add(vg.coordinate);
+                    }
+                }
+                uiManager.OnMultiSelect(coords);
+                uiManager.UpdateSelectedEntitiesPanel(null, false, entityList);
+            }
+        }
+
+        private List<(Guid id, bool isArmy)> CollectOwnedEntities(HexCoordinate coord)
+        {
+            var result = new List<(Guid, bool)>();
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+
+            var armies = gameState.GetArmies(coord);
+            if (armies != null)
+            {
+                foreach (var army in armies)
+                {
+                    if (army.ownerID.HasValue && army.ownerID.Value == localID)
+                        result.Add((army.id, true));
+                }
+            }
+
+            var groups = gameState.GetVillagerGroups(coord);
+            if (groups != null)
+            {
+                foreach (var group in groups)
+                {
+                    if (group.ownerID.HasValue && group.ownerID.Value == localID)
+                        result.Add((group.id, false));
+                }
+            }
+
+            return result;
+        }
+
+        private void ClearMultiSelection()
+        {
+            focusedEntityID = null;
+            selectedEntities.Clear();
+            uiManager?.ClearMultiSelectHighlights();
+            uiManager?.UpdateSelectedEntitiesPanel(null, false, null);
         }
 
         // ================================================================

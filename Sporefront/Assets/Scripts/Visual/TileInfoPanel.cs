@@ -41,6 +41,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
+        private GameObject backdrop;
         private GameObject panel;
         private RectTransform contentRT;
         private HexCoordinate? currentCoord;
@@ -57,6 +58,9 @@ namespace Sporefront.Visual
         // Preview state
         private Guid? previewedEntityID;
         private bool previewIsArmy;
+
+        // Modal header label
+        private Text modalHeaderLabel;
 
         // Cached references for incremental updates
         private Image buildingHPFill;
@@ -82,30 +86,54 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            // Right-anchored panel
+            // Semi-transparent backdrop for click-to-dismiss
+            backdrop = new GameObject("TileInfoBackdrop");
+            backdrop.transform.SetParent(canvasTransform, false);
+            var backdropRT = backdrop.AddComponent<RectTransform>();
+            backdropRT.anchorMin = Vector2.zero;
+            backdropRT.anchorMax = Vector2.one;
+            backdropRT.offsetMin = Vector2.zero;
+            backdropRT.offsetMax = Vector2.zero;
+            var backdropImg = backdrop.AddComponent<Image>();
+            backdropImg.color = new Color(0f, 0f, 0f, 0.3f);
+            var backdropBtn = backdrop.AddComponent<Button>();
+            backdropBtn.transition = Selectable.Transition.None;
+            backdropBtn.onClick.AddListener(() => OnCloseRequested?.Invoke());
+            backdrop.SetActive(false);
+
+            // Center-screen modal panel (~420x600)
             panel = UIHelper.CreatePanel(canvasTransform, "TileInfoPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1, 0);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(1, 0.5f);
-            rt.offsetMin = new Vector2(-UIConstants.SidePanelWidth, 50); // bottom margin
-            rt.offsetMax = new Vector2(0, -70);    // 70px top margin (below resource bar)
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(420f, 600f);
 
-            // ScrollView
+            // Header bar (terrain name + close button)
+            var headerBar = UIHelper.CreateHorizontalRow(panel.transform, 36f, 4f);
+            var headerBarRT = headerBar.GetComponent<RectTransform>();
+            headerBarRT.anchorMin = new Vector2(0, 1);
+            headerBarRT.anchorMax = new Vector2(1, 1);
+            headerBarRT.pivot = new Vector2(0.5f, 1);
+            headerBarRT.offsetMin = new Vector2(8, -40);
+            headerBarRT.offsetMax = new Vector2(-8, -4);
+
+            modalHeaderLabel = UIHelper.CreateLabel(headerBar.transform, "",
+                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+            var headerLabelLE = modalHeaderLabel.gameObject.AddComponent<LayoutElement>();
+            headerLabelLE.flexibleWidth = 1;
+
+            var closeBtn = UIHelper.CreateButton(headerBar.transform, "X",
+                SporefrontColors.InkMid, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
+            var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
+            closeBtnLE.preferredWidth = 28;
+            closeBtnLE.preferredHeight = 28;
+
+            // ScrollView (below header)
             var scroll = UIHelper.CreateScrollView(panel.transform, "TileScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMax = new Vector2(0, -28); // leave room for close button
-
-            // Close button (top-right corner)
-            var closeBtn = UIHelper.CreateButton(panel.transform, "X",
-                SporefrontColors.InkMid, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
-            var closeBtnRT = closeBtn.GetComponent<RectTransform>();
-            closeBtnRT.anchorMin = new Vector2(1, 1);
-            closeBtnRT.anchorMax = new Vector2(1, 1);
-            closeBtnRT.pivot = new Vector2(1, 1);
-            closeBtnRT.anchoredPosition = new Vector2(-4, -4);
-            closeBtnRT.sizeDelta = new Vector2(24, 24);
+            scrollRT.offsetMax = new Vector2(0, -44); // below header bar
 
             panel.SetActive(false);
         }
@@ -123,7 +151,14 @@ namespace Sporefront.Visual
             showingEntrenchConfirm = false;
             hasCachedFingerprint = false;
             ClearPreview();
+
+            // Update modal header
+            var tileNullable = gameState.mapData.GetTile(coord);
+            if (tileNullable.HasValue && modalHeaderLabel != null)
+                modalHeaderLabel.text = $"{tileNullable.Value.terrain} ({coord.q},{coord.r})";
+
             Rebuild(gameState);
+            if (backdrop != null) backdrop.SetActive(true);
             panel.SetActive(true);
         }
 
@@ -135,6 +170,7 @@ namespace Sporefront.Visual
             showingEntrenchConfirm = false;
             ClearPreview();
             panel.SetActive(false);
+            if (backdrop != null) backdrop.SetActive(false);
         }
 
         public void Refresh(GameState gameState)

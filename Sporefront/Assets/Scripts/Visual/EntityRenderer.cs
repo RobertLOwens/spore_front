@@ -28,8 +28,6 @@ namespace Sporefront.Visual
         private Mesh smallCircleMesh; // villagers (6 segments)
         private Mesh triangleMesh;  // resource nodes
         private Mesh barMesh;       // progress/HP bars
-        private Mesh entrenchRingMesh; // entrenchment ring around armies
-
         private Material sharedMaterial;
 
         private const float BuildingSize = 0.30f;  // ~30% of hex outer radius
@@ -49,7 +47,7 @@ namespace Sporefront.Visual
         private static readonly Vector3 BarContainerPosition = new Vector3(0.217f, -0.437f, -0.01f);
 
         // Cached MaterialPropertyBlock to avoid per-frame allocation
-        private MaterialPropertyBlock cachedMPB = new MaterialPropertyBlock();
+        private MaterialPropertyBlock cachedMPB;
 
         // Cached label transforms to avoid Find() lookups
         private Dictionary<Guid, Transform> cachedLabelTransforms = new Dictionary<Guid, Transform>();
@@ -69,13 +67,6 @@ namespace Sporefront.Visual
 
         // Building progress/HP bar state
         private Dictionary<Guid, BuildingBarVisuals> buildingBars = new Dictionary<Guid, BuildingBarVisuals>();
-
-        // Entrenchment ring state
-        private Dictionary<Guid, GameObject> entrenchRings = new Dictionary<Guid, GameObject>();
-
-        // Entrenchment coverage overlays (on surrounding tiles)
-        private Dictionary<Guid, List<GameObject>> entrenchCoverageOverlays = new Dictionary<Guid, List<GameObject>>();
-        private Mesh coverageOverlayMesh;
 
         // Fog of war filtering
         private Guid fogLocalPlayerID;
@@ -109,8 +100,6 @@ namespace Sporefront.Visual
             if (activelyMovingEntities == null) activelyMovingEntities = new HashSet<Guid>();
             if (smoothedETAs == null) smoothedETAs = new Dictionary<Guid, double>();
             if (buildingBars == null) buildingBars = new Dictionary<Guid, BuildingBarVisuals>();
-            if (entrenchRings == null) entrenchRings = new Dictionary<Guid, GameObject>();
-            if (entrenchCoverageOverlays == null) entrenchCoverageOverlays = new Dictionary<Guid, List<GameObject>>();
 
             if (sharedMaterial == null)
                 sharedMaterial = new Material(Shader.Find("Sprites/Default"));
@@ -154,15 +143,6 @@ namespace Sporefront.Visual
                 movementStates.Remove(id);
                 timerLabels.Remove(id); // child GO destroyed with parent
                 buildingBars.Remove(id); // child GOs destroyed with parent
-                if (entrenchRings.TryGetValue(id, out var ring) && ring != null)
-                    Destroy(ring);
-                entrenchRings.Remove(id);
-                if (entrenchCoverageOverlays.TryGetValue(id, out var overlays))
-                {
-                    foreach (var overlay in overlays)
-                        if (overlay != null) Destroy(overlay);
-                    entrenchCoverageOverlays.Remove(id);
-                }
             }
 
             // Update existing or create new
@@ -225,41 +205,10 @@ namespace Sporefront.Visual
                         changed = true;
                     }
 
-                    // Update entrenchment ring
+                    // Update entrenchment state tracking (visuals handled by EntrenchmentRenderer)
                     if (current.isEntrenched != desired.isEntrenched ||
                         current.isEntrenching != desired.isEntrenching)
                     {
-                        bool hadRing = current.isEntrenched || current.isEntrenching;
-                        bool needsRing = desired.isEntrenched || desired.isEntrenching;
-
-                        if (!needsRing && hadRing)
-                        {
-                            // Remove ring
-                            if (entrenchRings.TryGetValue(id, out var oldRing) && oldRing != null)
-                                Destroy(oldRing);
-                            entrenchRings.Remove(id);
-                        }
-                        else if (needsRing && !hadRing)
-                        {
-                            // Add ring
-                            CreateEntrenchRing(id, go, desired.isEntrenched);
-                        }
-                        else if (needsRing)
-                        {
-                            // Update ring color (e.g. entrenching → entrenched)
-                            if (entrenchRings.TryGetValue(id, out var ringGO) && ringGO != null)
-                            {
-                                Color ringColor = desired.isEntrenched
-                                    ? SporefrontColors.SporeTeal : SporefrontColors.SporeAmber;
-                                var ringMR = ringGO.GetComponent<MeshRenderer>();
-                                if (ringMR != null)
-                                {
-                                    cachedMPB.Clear();
-                                    cachedMPB.SetColor("_Color", ringColor);
-                                    ringMR.SetPropertyBlock(cachedMPB);
-                                }
-                            }
-                        }
                         changed = true;
                     }
 
@@ -591,82 +540,6 @@ namespace Sporefront.Visual
                 timerLabels.Remove(id);
             }
 
-            // Update entrenchment coverage overlays on surrounding tiles
-            UpdateEntrenchCoverageOverlays(gameState);
-        }
-
-        private void UpdateEntrenchCoverageOverlays(GameState gameState)
-        {
-            PlayerState localPlayer = fogEnabled ? gameState.GetPlayer(fogLocalPlayerID) : null;
-
-            // Track which army IDs still need overlays
-            HashSet<Guid> activeEntrenchedArmies = new HashSet<Guid>();
-
-            foreach (var kvp in gameState.armies)
-            {
-                var army = kvp.Value;
-                if (!army.isEntrenched || army.entrenchedCoveredTiles == null || army.entrenchedCoveredTiles.Count == 0)
-                    continue;
-
-                // Fog filter: only show overlays for own armies or visible enemy armies
-                if (localPlayer != null && (!army.ownerID.HasValue || army.ownerID.Value != fogLocalPlayerID))
-                {
-                    if (!localPlayer.IsVisible(army.coordinate)) continue;
-                }
-
-                activeEntrenchedArmies.Add(army.id);
-
-                // Skip if overlays already exist for this army
-                if (entrenchCoverageOverlays.ContainsKey(army.id)) continue;
-
-                Color ownerColor = GetOwnerColor(army.ownerID, gameState);
-                Color overlayColor = new Color(ownerColor.r, ownerColor.g, ownerColor.b, 0.35f);
-
-                var overlays = new List<GameObject>();
-                foreach (var tile in army.entrenchedCoveredTiles)
-                {
-                    // Skip the army's own tile
-                    if (tile.Equals(army.coordinate)) continue;
-
-                    Vector3 worldPos = HexMetrics.HexToWorldPosition(tile);
-                    worldPos.z = -0.02f; // above tiles but below entities
-
-                    var overlayGO = new GameObject($"CoverageOverlay_{army.id.ToString().Substring(0, 4)}_{tile.q}_{tile.r}");
-                    overlayGO.transform.SetParent(transform, false);
-                    overlayGO.transform.position = worldPos;
-
-                    var mf = overlayGO.AddComponent<MeshFilter>();
-                    mf.sharedMesh = coverageOverlayMesh;
-
-                    var mr = overlayGO.AddComponent<MeshRenderer>();
-                    mr.sharedMaterial = sharedMaterial;
-                    mr.sortingOrder = 4;
-
-                    cachedMPB.Clear();
-                    cachedMPB.SetColor("_Color", overlayColor);
-                    mr.SetPropertyBlock(cachedMPB);
-
-                    overlays.Add(overlayGO);
-                }
-                entrenchCoverageOverlays[army.id] = overlays;
-            }
-
-            // Remove overlays for armies no longer entrenched
-            toRemove.Clear();
-            foreach (var id in entrenchCoverageOverlays.Keys)
-            {
-                if (!activeEntrenchedArmies.Contains(id))
-                    toRemove.Add(id);
-            }
-            foreach (var id in toRemove)
-            {
-                if (entrenchCoverageOverlays.TryGetValue(id, out var overlays))
-                {
-                    foreach (var overlay in overlays)
-                        if (overlay != null) Destroy(overlay);
-                }
-                entrenchCoverageOverlays.Remove(id);
-            }
         }
 
         private void AddDesiredState(EntityPlacement placement, Vector3 tileCenter, Vector2 offset)
@@ -838,12 +711,6 @@ namespace Sporefront.Visual
                 CreateBuildingBars(state.id, go);
             }
 
-            // Entrenchment ring for armies
-            if (state.type == EntityVisualType.Army && (state.isEntrenched || state.isEntrenching))
-            {
-                CreateEntrenchRing(state.id, go, state.isEntrenched);
-            }
-
             entityVisuals[state.id] = go;
             currentStates[state.id] = state;
         }
@@ -867,28 +734,6 @@ namespace Sporefront.Visual
 
             var meshRenderer = labelGO.GetComponent<MeshRenderer>();
             meshRenderer.sortingOrder = 7;
-        }
-
-        private void CreateEntrenchRing(Guid id, GameObject parent, bool isEntrenched)
-        {
-            Color ringColor = isEntrenched ? SporefrontColors.SporeTeal : SporefrontColors.SporeAmber;
-
-            var ringGO = new GameObject("EntrenchRing");
-            ringGO.transform.SetParent(parent.transform, false);
-            ringGO.transform.localPosition = new Vector3(0f, 0f, 0.005f);
-
-            var mf = ringGO.AddComponent<MeshFilter>();
-            mf.sharedMesh = entrenchRingMesh;
-
-            var mr = ringGO.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = sharedMaterial;
-            mr.sortingOrder = 5; // below the army circle (6)
-
-            cachedMPB.Clear();
-            cachedMPB.SetColor("_Color", ringColor);
-            mr.SetPropertyBlock(cachedMPB);
-
-            entrenchRings[id] = ringGO;
         }
 
         // ================================================================
@@ -1050,8 +895,6 @@ namespace Sporefront.Visual
             smallCircleMesh = CreateCircleMesh(VillagerSize, 6);
             triangleMesh = CreateTriangleMesh(ResourceSize);
             barMesh = CreateBarMesh(BarHeight);
-            entrenchRingMesh = CreateRingMesh(ArmySize + 0.06f, ArmySize + 0.12f, 16);
-            coverageOverlayMesh = CreateRingMesh(0.20f, 0.28f, 12);
         }
 
         private Mesh CreateDiamondMesh(float size)
@@ -1144,37 +987,6 @@ namespace Sporefront.Visual
             return mesh;
         }
 
-        private Mesh CreateRingMesh(float innerRadius, float outerRadius, int segments)
-        {
-            var mesh = new Mesh { name = "Ring" };
-            var vertices = new Vector3[segments * 2];
-            var triangles = new int[segments * 6];
-            float yScale = HexMetrics.IsometricYScale;
-
-            for (int i = 0; i < segments; i++)
-            {
-                float angle = (360f / segments) * i * Mathf.Deg2Rad;
-                float cos = Mathf.Cos(angle);
-                float sin = Mathf.Sin(angle);
-                vertices[i * 2] = new Vector3(cos * innerRadius, sin * innerRadius * yScale, 0f);
-                vertices[i * 2 + 1] = new Vector3(cos * outerRadius, sin * outerRadius * yScale, 0f);
-
-                int next = (i + 1) % segments;
-                int ti = i * 6;
-                triangles[ti]     = i * 2;
-                triangles[ti + 1] = i * 2 + 1;
-                triangles[ti + 2] = next * 2 + 1;
-                triangles[ti + 3] = i * 2;
-                triangles[ti + 4] = next * 2 + 1;
-                triangles[ti + 5] = next * 2;
-            }
-
-            mesh.vertices = vertices;
-            mesh.triangles = triangles;
-            mesh.RecalculateNormals();
-            return mesh;
-        }
-
         // ================================================================
         // Helpers
         // ================================================================
@@ -1246,13 +1058,6 @@ namespace Sporefront.Visual
             smoothedETAs.Clear();
             timerLabels.Clear();
             buildingBars.Clear();
-            entrenchRings.Clear();
-            foreach (var kvp in entrenchCoverageOverlays)
-            {
-                foreach (var overlay in kvp.Value)
-                    if (overlay != null) Destroy(overlay);
-            }
-            entrenchCoverageOverlays.Clear();
         }
 
         // ================================================================
