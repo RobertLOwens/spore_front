@@ -53,6 +53,9 @@ namespace Sporefront.Visual
         private bool isDragSelecting;
         private bool mouseDownOnOwnedEntity;
 
+        // Drag preview entity IDs (for per-frame tendril updates)
+        private HashSet<Guid> dragPreviewEntityIDs = new HashSet<Guid>();
+
         // Focused entity (from clicking a card in SelectedEntitiesPanel)
         private Guid? focusedEntityID;
         private bool focusedEntityIsArmy;
@@ -155,15 +158,41 @@ namespace Sporefront.Visual
             gameState.players[ai.id] = ai;
             gameState.localPlayerID = human.id;
 
-            // 3. Generate Arabia map scaled to configured size
+            // 3. Generate map scaled to configured size
             ulong seed = (ulong)DateTime.UtcNow.Ticks;
             float areaRatio = (float)(width * height) / (35f * 35f);
-            var mapConfig = new ArabiaMapConfig
+
+            MapGeneratorBase generator;
+            var resolvedMapType = config.mapType;
+            if (resolvedMapType == MapType.Random)
             {
-                treePocketCount = Mathf.RoundToInt(25 * areaRatio),
-                mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
-            };
-            var generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
+                resolvedMapType = (seed % 2 == 0) ? MapType.MountainValley : MapType.Arabia;
+            }
+
+            switch (resolvedMapType)
+            {
+                case MapType.MountainValley:
+                    var mvConfig = new MountainValleyMapConfig
+                    {
+                        slopeTreePocketCount = Mathf.RoundToInt(10 * areaRatio),
+                        slopeMineralCount = Mathf.RoundToInt(6 * areaRatio),
+                        valleyTreePocketCount = Mathf.RoundToInt(8 * areaRatio),
+                        valleyAnimalCount = Mathf.RoundToInt(10 * areaRatio),
+                        ridgeTreePocketCount = Mathf.RoundToInt(2 * areaRatio),
+                        ridgeAnimalCount = Mathf.RoundToInt(3 * areaRatio),
+                    };
+                    generator = new MountainValleyMapGenerator(width, height, seed, mvConfig);
+                    break;
+                case MapType.Arabia:
+                default:
+                    var mapConfig = new ArabiaMapConfig
+                    {
+                        treePocketCount = Mathf.RoundToInt(25 * areaRatio),
+                        mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
+                    };
+                    generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
+                    break;
+            }
             var terrain = generator.GenerateTerrain();
 
             // 4. Apply terrain to map data
@@ -178,7 +207,21 @@ namespace Sporefront.Visual
 
             // 5. Place starting resources and city centers
             var startPositions = generator.GetStartingPositions();
-            PlaceStartingEntities(startPositions, human, ai, generator);
+            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources);
+
+            // 5b. Place neutral resources across the map (trees, minerals, animals)
+            var startCoords = new List<HexCoordinate>();
+            foreach (var pos in startPositions)
+                startCoords.Add(pos.coordinate);
+
+            var neutralResources = generator.GenerateNeutralResources(10, startCoords);
+            foreach (var placement in neutralResources)
+            {
+                var rp = new ResourcePointData(placement.coordinate, placement.resourceType);
+                gameState.resourcePoints[rp.id] = rp;
+                gameState.mapData.resourcePointIDs.Add(rp.id);
+                gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
+            }
 
             // 6. Initialize engine
             gameState.visibilityMode = config.visibilityMode;
@@ -487,8 +530,24 @@ namespace Sporefront.Visual
             List<PlayerStartPosition> startPositions,
             PlayerState human,
             PlayerState ai,
-            ArabiaMapGenerator generator)
+            MapGeneratorBase generator,
+            StartingResources startingResources = StartingResources.Medium)
         {
+            // Determine resource amounts based on tier
+            int food, wood, ore, stone;
+            switch (startingResources)
+            {
+                case StartingResources.Small:
+                    food = 200; wood = 200; ore = 100; stone = 100;
+                    break;
+                case StartingResources.Large:
+                    food = 500; wood = 500; ore = 300; stone = 300;
+                    break;
+                default: // Medium
+                    food = 300; wood = 300; ore = 200; stone = 200;
+                    break;
+            }
+
             var playerList = new List<PlayerState> { human, ai };
 
             for (int i = 0; i < startPositions.Count && i < playerList.Count; i++)
@@ -520,10 +579,10 @@ namespace Sporefront.Visual
                 }
 
                 // Give starting resources
-                player.SetResource(ResourceType.Food, 200);
-                player.SetResource(ResourceType.Wood, 200);
-                player.SetResource(ResourceType.Ore, 100);
-                player.SetResource(ResourceType.Stone, 100);
+                player.SetResource(ResourceType.Food, food);
+                player.SetResource(ResourceType.Wood, wood);
+                player.SetResource(ResourceType.Ore, ore);
+                player.SetResource(ResourceType.Stone, stone);
 
                 // Spawn starting villagers (5 per player)
                 var spawnCoord = gameState.mapData.FindNearestWalkable(pos.coordinate, 3, player.id, gameState);
@@ -631,6 +690,7 @@ namespace Sporefront.Visual
                 if (isDragSelecting)
                 {
                     uiManager.SelectionBox.UpdateSelection(mousePos);
+                    UpdateDragPreview();
                 }
             }
 
@@ -980,25 +1040,66 @@ namespace Sporefront.Visual
 
             if (selectedEntities.Count > 0)
             {
-                var coords = new List<HexCoordinate>();
+                var entityIDs = new List<Guid>();
                 var entityList = new List<(Guid id, bool isArmy)>();
                 foreach (var entity in selectedEntities)
                 {
+                    entityIDs.Add(entity.id);
                     entityList.Add((entity.id, entity.isArmy));
-                    if (entity.isArmy)
-                    {
-                        var army = gameState.GetArmy(entity.id);
-                        if (army != null) coords.Add(army.coordinate);
-                    }
-                    else
-                    {
-                        var vg = gameState.GetVillagerGroup(entity.id);
-                        if (vg != null) coords.Add(vg.coordinate);
-                    }
                 }
-                uiManager.OnMultiSelect(coords);
+                uiManager.OnMultiSelect(entityIDs);
                 uiManager.UpdateSelectedEntitiesPanel(null, false, entityList);
             }
+        }
+
+        private void UpdateDragPreview()
+        {
+            if (uiManager == null || gameState == null) return;
+
+            var screenRect = uiManager.SelectionBox.GetCurrentScreenRect();
+            if (screenRect.width < 1f && screenRect.height < 1f)
+            {
+                if (dragPreviewEntityIDs.Count > 0)
+                {
+                    dragPreviewEntityIDs.Clear();
+                    uiManager.ClearDragPreviewHighlights();
+                }
+                return;
+            }
+
+            var localID = gameState.localPlayerID ?? Guid.Empty;
+            var cam = Camera.main;
+
+            dragPreviewEntityIDs.Clear();
+
+            // Check owned armies
+            foreach (var kvp in gameState.armies)
+            {
+                var army = kvp.Value;
+                if (!army.ownerID.HasValue || army.ownerID.Value != localID) continue;
+                if (army.isInCombat) continue;
+
+                Vector3 worldPos = HexMetrics.HexToWorldPosition(army.coordinate);
+                Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
+
+                if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
+                    dragPreviewEntityIDs.Add(army.id);
+            }
+
+            // Check owned villager groups
+            foreach (var kvp in gameState.villagerGroups)
+            {
+                var group = kvp.Value;
+                if (!group.ownerID.HasValue || group.ownerID.Value != localID) continue;
+
+                Vector3 worldPos = HexMetrics.HexToWorldPosition(group.coordinate);
+                Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
+
+                if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
+                    dragPreviewEntityIDs.Add(group.id);
+            }
+
+            uiManager.UpdateDragPreview(dragPreviewEntityIDs);
         }
 
         private List<(Guid id, bool isArmy)> CollectOwnedEntities(HexCoordinate coord)

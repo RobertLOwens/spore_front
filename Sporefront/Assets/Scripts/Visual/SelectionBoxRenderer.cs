@@ -77,6 +77,18 @@ namespace Sporefront.Visual
 
         public bool IsActive => isActive;
 
+        /// <summary>
+        /// Returns the current drag rect in screen-space without ending the selection.
+        /// Used for per-frame drag preview queries.
+        /// </summary>
+        public Rect GetCurrentScreenRect()
+        {
+            if (!isActive) return Rect.zero;
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            Vector2 currentPos = mouse != null ? (Vector2)mouse.position.ReadValue() : startPos;
+            return GetScreenRect(startPos, currentPos);
+        }
+
         private void UpdateRect(Vector2 currentPos)
         {
             var rect = GetScreenRect(startPos, currentPos);

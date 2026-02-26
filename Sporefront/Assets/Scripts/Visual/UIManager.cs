@@ -47,6 +47,7 @@ namespace Sporefront.Visual
         private EntrenchmentRenderer entrenchmentRenderer;
         private SelectionBoxRenderer selectionBoxRenderer;
         private SelectedEntitiesPanel selectedEntitiesPanel;
+        private MiniMapPanel miniMap;
 
         // ================================================================
         // Navigation & Flow Panels
@@ -125,6 +126,7 @@ namespace Sporefront.Visual
         private Canvas canvas;
         private Guid localPlayerID;
         private HexCoordinate? selectedCoord;
+        private HexCoordinate? pendingBuildCoord;
 
         // Thread-safe queue for callbacks from background threads (e.g., ArenaSimulator)
         private readonly ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
@@ -158,6 +160,7 @@ namespace Sporefront.Visual
             var entityGO = new GameObject("EntityRenderer");
             entityGO.transform.SetParent(gridRenderer.transform, false);
             entityRenderer = entityGO.AddComponent<EntityRenderer>();
+            selectionRenderer.SetEntityRenderer(entityRenderer);
 
             var entrenchGO = new GameObject("EntrenchmentRenderer");
             entrenchGO.transform.SetParent(gridRenderer.transform, false);
@@ -232,6 +235,9 @@ namespace Sporefront.Visual
 
             selectedEntitiesPanel = CreatePanelComponent<SelectedEntitiesPanel>("SelectedEntities");
             InitPanel("SelectedEntities", () => selectedEntitiesPanel.Initialize(ct));
+
+            miniMap = CreatePanelComponent<MiniMapPanel>("MiniMap");
+            InitPanel("MiniMap", () => miniMap.Initialize(ct, cameraController));
 
             // ---- Overviews ----
 
@@ -375,14 +381,28 @@ namespace Sporefront.Visual
             };
             tileInfoPopup.OnAttackRequested += (armyID) =>
                 actionPanel.ShowAttackTarget(armyID);
-            tileInfoPopup.OnGatherRequested += (vgID, rpID) =>
+            tileInfoPopup.OnGatherSelectionRequested += (rpID) =>
             {
-                var cmd = new GatherCommand(localPlayerID, vgID, rpID);
-                ExecutePlayerCommand(cmd);
+                gatherPanel.Show(gameState, rpID);
             };
             tileInfoPopup.OnRetreatRequested += (armyID) =>
             {
                 var cmd = new RetreatCommand(localPlayerID, armyID);
+                ExecutePlayerCommand(cmd);
+            };
+            tileInfoPopup.OnTrainVillagerRequested += (buildingID) =>
+            {
+                var cmd = new TrainVillagerCommand(localPlayerID, buildingID, 1);
+                ExecutePlayerCommand(cmd);
+            };
+            tileInfoPopup.OnDeployVillagersRequested += (buildingID, count) =>
+            {
+                var cmd = new DeployVillagersCommand(localPlayerID, buildingID, count);
+                ExecutePlayerCommand(cmd);
+            };
+            tileInfoPopup.OnUpgradeBuildingRequested += (buildingID) =>
+            {
+                var cmd = new UpgradeCommand(localPlayerID, buildingID, null);
                 ExecutePlayerCommand(cmd);
             };
 
@@ -397,9 +417,23 @@ namespace Sporefront.Visual
                 actionPanel.ShowMoveTarget(id, true);
             tileInfo.OnAttackRequested += (armyID, coord) =>
                 actionPanel.ShowAttackTarget(armyID);
-            tileInfo.OnGatherRequested += (vgID, rpID) =>
+            tileInfo.OnGatherSelectionRequested += (rpID) =>
             {
-                var cmd = new GatherCommand(localPlayerID, vgID, rpID);
+                gatherPanel.Show(gameState, rpID);
+            };
+            tileInfo.OnTrainVillagerRequested += (buildingID) =>
+            {
+                var cmd = new TrainVillagerCommand(localPlayerID, buildingID, 1);
+                ExecutePlayerCommand(cmd);
+            };
+            tileInfo.OnDeployVillagersRequested += (buildingID, count) =>
+            {
+                var cmd = new DeployVillagersCommand(localPlayerID, buildingID, count);
+                ExecutePlayerCommand(cmd);
+            };
+            tileInfo.OnUpgradeBuildingRequested += (buildingID) =>
+            {
+                var cmd = new UpgradeCommand(localPlayerID, buildingID, null);
                 ExecutePlayerCommand(cmd);
             };
             tileInfo.OnHuntRequested += (rpID) =>
@@ -432,10 +466,10 @@ namespace Sporefront.Visual
                 }
                 if (!entityCoord.HasValue) return;
 
-                // Show entity hex highlight
+                // Show entity hex highlight (attached to entity for movement tracking)
                 Color highlightColor = isAttack ? SporefrontColors.SporeRed
                     : (isArmy ? SporefrontColors.SporeTeal : SporefrontColors.SporeTeal);
-                selectionRenderer.ShowEntityHighlight(entityCoord.Value, highlightColor);
+                selectionRenderer.ShowEntityHighlight(entityCoord.Value, highlightColor, entityID);
 
                 // Find path and show preview
                 var path = gameState.mapData.FindPath(entityCoord.Value, destination,
@@ -481,6 +515,7 @@ namespace Sporefront.Visual
             };
             actionPanel.OnBuildTypeSelected += (buildingType, coord, rotation) =>
             {
+                pendingBuildCoord = coord;
                 buildVillagerSelect.Show(gameState, buildingType, coord, rotation);
             };
 
@@ -489,12 +524,21 @@ namespace Sporefront.Visual
             {
                 var cmd = new BuildCommand(localPlayerID, buildingType, coord, rotation, vgID);
                 ExecutePlayerCommand(cmd);
+                pendingBuildCoord = null;
                 selectionRenderer.ClearBuildPreview();
                 pathRenderer.ClearPreviewPath();
                 selectionRenderer.HideEntityHighlight();
             };
+            buildVillagerSelect.OnBack += () =>
+            {
+                pathRenderer.ClearPreviewPath();
+                selectionRenderer.HideEntityHighlight();
+                if (pendingBuildCoord.HasValue)
+                    actionPanel.ShowBuildMenu(pendingBuildCoord.Value, gameState);
+            };
             buildVillagerSelect.OnClose += () =>
             {
+                pendingBuildCoord = null;
                 selectionRenderer.ClearBuildPreview();
                 pathRenderer.ClearPreviewPath();
                 selectionRenderer.HideEntityHighlight();
@@ -504,7 +548,7 @@ namespace Sporefront.Visual
                 var vg = gameState.GetVillagerGroup(vgID);
                 if (vg == null) return;
 
-                selectionRenderer.ShowEntityHighlight(vg.coordinate, SporefrontColors.SporeAmber);
+                selectionRenderer.ShowEntityHighlight(vg.coordinate, SporefrontColors.SporeAmber, vgID);
 
                 var path = gameState.mapData.FindPath(vg.coordinate, buildCoord,
                     localPlayerID, gameState);
@@ -713,7 +757,7 @@ namespace Sporefront.Visual
                 var vg = gameState.GetVillagerGroup(vgID);
                 if (vg == null) return;
 
-                selectionRenderer.ShowEntityHighlight(vg.coordinate, SporefrontColors.SporeAmber);
+                selectionRenderer.ShowEntityHighlight(vg.coordinate, SporefrontColors.SporeAmber, vgID);
 
                 var path = gameState.mapData.FindPath(vg.coordinate, resourceCoord,
                     localPlayerID, gameState);
@@ -825,7 +869,7 @@ namespace Sporefront.Visual
                 if (coord.HasValue)
                 {
                     selectionRenderer.ClearMultiEntityHighlight();
-                    selectionRenderer.ShowEntityHighlight(coord.Value, SporefrontColors.SporeTeal);
+                    selectionRenderer.ShowEntityHighlight(coord.Value, SporefrontColors.SporeTeal, entityID);
                     tileInfoPopup.Show(coord.Value, gameState, localPlayerID);
                 }
 
@@ -845,7 +889,7 @@ namespace Sporefront.Visual
             tileInfoPopup.Show(coord, gameState, localPlayerID);
 
             // Show entity highlight if tile has an owned entity
-            bool hasOwnedEntity = false;
+            Guid? foundEntityID = null;
             var armies = gameState.GetArmies(coord);
             if (armies != null)
             {
@@ -853,12 +897,12 @@ namespace Sporefront.Visual
                 {
                     if (army.ownerID.HasValue && army.ownerID.Value == localPlayerID)
                     {
-                        hasOwnedEntity = true;
+                        foundEntityID = army.id;
                         break;
                     }
                 }
             }
-            if (!hasOwnedEntity)
+            if (!foundEntityID.HasValue)
             {
                 var villagers = gameState.GetVillagerGroups(coord);
                 if (villagers != null)
@@ -867,15 +911,15 @@ namespace Sporefront.Visual
                     {
                         if (vg.ownerID.HasValue && vg.ownerID.Value == localPlayerID)
                         {
-                            hasOwnedEntity = true;
+                            foundEntityID = vg.id;
                             break;
                         }
                     }
                 }
             }
 
-            if (hasOwnedEntity)
-                selectionRenderer.ShowEntityHighlight(coord, SporefrontColors.SporeTeal);
+            if (foundEntityID.HasValue)
+                selectionRenderer.ShowEntityHighlight(coord, SporefrontColors.SporeTeal, foundEntityID.Value);
             else
                 selectionRenderer.HideEntityHighlight();
         }
@@ -902,10 +946,20 @@ namespace Sporefront.Visual
 
         public SelectionBoxRenderer SelectionBox => selectionBoxRenderer;
 
-        public void OnMultiSelect(List<HexCoordinate> coords)
+        public void OnMultiSelect(List<Guid> entityIDs)
         {
-            if (coords.Count > 0)
-                selectionRenderer.ShowMultiEntityHighlight(coords, SporefrontColors.SporeTeal);
+            if (entityIDs.Count > 0)
+                selectionRenderer.ShowMultiEntityHighlight(entityIDs, SporefrontColors.SporeTeal);
+        }
+
+        public void UpdateDragPreview(HashSet<Guid> entityIDs)
+        {
+            selectionRenderer.UpdateMultiEntityHighlight(entityIDs, SporefrontColors.SporeTeal);
+        }
+
+        public void ClearDragPreviewHighlights()
+        {
+            selectionRenderer.ClearMultiEntityHighlight();
         }
 
         public void ClearMultiSelectHighlights()
@@ -977,6 +1031,11 @@ namespace Sporefront.Visual
             settings.UpdateLocalPlayerID(localPlayerID);
             notificationInbox.UpdateLocalPlayerID(localPlayerID);
             selectedEntitiesPanel.UpdateLocalPlayerID(localPlayerID);
+            miniMap.UpdateLocalPlayerID(localPlayerID);
+
+            // Build and show mini map
+            miniMap.BuildMap(state, localPlayerID);
+            miniMap.Show();
 
             // Initialize fog of war
             if (state.visibilityMode == VisibilityMode.Normal)
@@ -1087,6 +1146,9 @@ namespace Sporefront.Visual
             if (villagerDeploy.IsVisible) villagerDeploy.Refresh(gameState);
             if (buildVillagerSelect.IsVisible) buildVillagerSelect.Refresh(gameState);
             if (upgradeVillagerSelect.IsVisible) upgradeVillagerSelect.Refresh(gameState);
+
+            // Refresh mini map (always visible during gameplay)
+            if (miniMap.IsVisible) miniMap.Refresh(gameState);
 
             // Update fog of war tile visuals before entity updates
             foreach (var change in batch.changes)
@@ -1242,6 +1304,13 @@ namespace Sporefront.Visual
                         "Villager", vtcc.quantity, building.coordinate);
                     notifications.ShowNotification(notif);
                     notificationInbox.AddNotification(notif);
+                }
+            }
+            else if (change is CommanderCreatedChange ccChange)
+            {
+                if (ccChange.ownerID == localPlayerID)
+                {
+                    if (commander.IsVisible) commander.Refresh(gameState);
                 }
             }
             else if (change is CommanderXPGainedChange xpChange)
