@@ -102,6 +102,14 @@ namespace Sporefront.Visual
         private SaveLoadPanel saveLoad;
 
         // ================================================================
+        // Auth & Account
+        // ================================================================
+
+        private AuthPanel authPanel;
+        private DisplayNamePanel displayNamePanel;
+        private AccountPanel accountPanel;
+
+        // ================================================================
         // AI & Evolution
         // ================================================================
 
@@ -332,6 +340,17 @@ namespace Sporefront.Visual
 
             about = CreatePanelComponent<AboutPanel>("About");
             InitPanel("About", () => about.Initialize(ct));
+
+            // ---- Auth & Account (on top of about) ----
+
+            authPanel = CreatePanelComponent<AuthPanel>("Auth");
+            InitPanel("Auth", () => authPanel.Initialize(ct));
+
+            displayNamePanel = CreatePanelComponent<DisplayNamePanel>("DisplayName");
+            InitPanel("DisplayName", () => displayNamePanel.Initialize(ct));
+
+            accountPanel = CreatePanelComponent<AccountPanel>("Account");
+            InitPanel("Account", () => accountPanel.Initialize(ct));
 
             // ---- Tooltip (last, so it renders on top) ----
             tooltip = CreatePanelComponent<TooltipManager>("Tooltip");
@@ -851,6 +870,42 @@ namespace Sporefront.Visual
             // ---- Spectator ----
             spectatorOverlay.OnExit += () => { mainMenu.Show(); };
 
+            // ---- Auth & Account ----
+            authPanel.OnAuthSuccess += () =>
+            {
+                authPanel.Hide();
+                var state = AuthService.Instance.CurrentState;
+                if (state == AuthState.NeedsUsername)
+                    displayNamePanel.Show();
+                else
+                    mainMenu.Show();
+            };
+            displayNamePanel.OnUsernameSet += () =>
+            {
+                displayNamePanel.Hide();
+                mainMenu.Show();
+            };
+            accountPanel.OnSignedOut += () =>
+            {
+                HideAllPanels();
+                authPanel.Show();
+            };
+            accountPanel.OnAccountDeleted += () =>
+            {
+                HideAllPanels();
+                authPanel.Show();
+            };
+            if (mainMenu != null)
+            {
+                mainMenu.OnAccount += () => { accountPanel.Show(); };
+            }
+            settings.OnAccountRequested += () => { accountPanel.Show(); };
+            settings.OnSignOutRequested += () =>
+            {
+                HideAllPanels();
+                authPanel.Show();
+            };
+
             // ---- SelectedEntitiesPanel (card click → focus entity) ----
             selectedEntitiesPanel.OnEntityCardClicked += (entityID, isArmy) =>
             {
@@ -979,6 +1034,24 @@ namespace Sporefront.Visual
         }
 
         /// <summary>
+        /// Hides all major panels — used when auth state changes require a full UI reset.
+        /// </summary>
+        public void HideAllPanels()
+        {
+            mainMenu.Hide();
+            gameSetup.Hide();
+            gameOver.Hide();
+            about.Hide();
+            settings.Hide();
+            saveLoad.Hide();
+            authPanel.Hide();
+            displayNamePanel.Hide();
+            accountPanel.Hide();
+            resourceBar.Hide();
+            menuBar.Hide();
+        }
+
+        /// <summary>
         /// Returns true if the pointer is over a UI element (for click gating).
         /// </summary>
         public bool IsPointerOverUI()
@@ -1058,10 +1131,33 @@ namespace Sporefront.Visual
         public void ShowMainMenu() => mainMenu.Show();
         public void HideMainMenu() => mainMenu.Hide();
         public void ShowGameSetup() => gameSetup.Show();
-        public void ShowGameOver(bool isVictory, string reason, GameOverStats stats) =>
+        public void ShowGameOver(bool isVictory, string reason, GameOverStats stats)
+        {
             gameOver.Show(isVictory, reason, stats);
+
+            // Record stats to Firestore if signed in
+            if (AuthService.Instance.CurrentState == AuthState.SignedIn)
+            {
+                var endStats = new GameEndStats
+                {
+                    timePlayed = stats.timePlayed,
+                    battlesWon = stats.battlesWon,
+                    battlesLost = stats.battlesLost,
+                    unitsKilled = stats.unitsKilled,
+                    unitsLost = stats.unitsLost,
+                    buildingsBuilt = stats.buildingsBuilt,
+                    resourcesGathered = stats.resourcesGathered
+                };
+                UserStatsService.Instance.RecordGameEnd(
+                    AuthService.Instance.CurrentUID, isVictory, endStats, reason, null);
+            }
+        }
         public void ShowSettings() => settings.Show();
         public void ShowAbout() => about.Show();
+
+        public void ShowAuth() => authPanel.Show();
+        public void ShowDisplayName() => displayNamePanel.Show();
+        public void ShowAccount() => accountPanel.Show();
 
         public void ShowBuildingsOverview() => buildingsOverview.Show(gameState);
         public void ShowEntitiesOverview() => entitiesOverview.Show(gameState);
@@ -1118,41 +1214,14 @@ namespace Sporefront.Visual
 
         public void HandleStateChanges(StateChangeBatch batch)
         {
-            // Refresh resource bar every batch
-            resourceBar.Refresh(gameState, localPlayerID);
+            // Single-pass: classify all changes, process fog updates and notifications inline
+            StateChangeFlags flags = StateChangeFlags.None;
 
-            // Refresh visible core panels
-            if (tileInfoPopup.IsVisible) tileInfoPopup.Refresh(gameState);
-            if (tileInfo.IsVisible) tileInfo.Refresh(gameState);
-            if (buildingDetail.IsVisible) buildingDetail.Refresh(gameState);
-            if (armyDetail.IsVisible) armyDetail.Refresh(gameState);
-
-            // Refresh visible overview panels
-            if (buildingsOverview.IsVisible) buildingsOverview.Refresh(gameState);
-            if (entitiesOverview.IsVisible) entitiesOverview.Refresh(gameState);
-            if (militaryOverview.IsVisible) militaryOverview.Refresh(gameState);
-            if (resourceOverview.IsVisible) resourceOverview.Refresh(gameState);
-            if (trainingOverview.IsVisible) trainingOverview.Refresh(gameState);
-
-            // Refresh visible detail panels
-            if (commander.IsVisible) commander.Refresh(gameState);
-            if (researchTree.IsVisible) researchTree.Refresh(gameState);
-            if (liveCombat.IsVisible) liveCombat.Refresh(gameState);
-            if (combatHistory.IsVisible) combatHistory.Refresh(gameState);
-
-            // Refresh visible action panels
-            if (gatherPanel.IsVisible) gatherPanel.Refresh(gameState);
-            if (reinforcePanel.IsVisible) reinforcePanel.Refresh(gameState);
-            if (villagerDeploy.IsVisible) villagerDeploy.Refresh(gameState);
-            if (buildVillagerSelect.IsVisible) buildVillagerSelect.Refresh(gameState);
-            if (upgradeVillagerSelect.IsVisible) upgradeVillagerSelect.Refresh(gameState);
-
-            // Refresh mini map (always visible during gameplay)
-            if (miniMap.IsVisible) miniMap.Refresh(gameState);
-
-            // Update fog of war tile visuals before entity updates
             foreach (var change in batch.changes)
             {
+                flags |= StateChange.ClassifyChange(change);
+
+                // Inline fog tile updates
                 if (change is FogOfWarUpdatedChange fogChange && fogChange.playerID == localPlayerID)
                 {
                     VisibilityLevel level;
@@ -1163,35 +1232,92 @@ namespace Sporefront.Visual
                         default:          level = VisibilityLevel.Unexplored; break;
                     }
                     gridRenderer.UpdateTileFog(fogChange.coordinate, level);
+                    miniMap.MarkTerrainDirty(fogChange.coordinate);
                 }
-            }
 
-            // Update path renderer only when movement-related changes occur
-            bool hasMovementChange = false;
-            foreach (var change in batch.changes)
-            {
-                if (change is ArmyMovedChange || change is VillagerGroupMovedChange ||
-                    change is ArmyDestroyedChange || change is ArmyCreatedChange)
-                {
-                    hasMovementChange = true;
-                    break;
-                }
-            }
-            if (hasMovementChange)
-            {
-                pathRenderer.UpdatePaths(gameState, localPlayerID);
-            }
-
-            // Update entity visuals on map
-            entityRenderer.UpdateEntities(gameState);
-
-            // Update entrenchment tendril visuals
-            entrenchmentRenderer?.UpdateEntrenchment(gameState, localPlayerID);
-
-            // Route notification-worthy changes
-            foreach (var change in batch.changes)
-            {
+                // Inline notification routing
                 RouteNotification(change);
+            }
+
+            // --- Conditional panel refreshes based on accumulated flags ---
+
+            const StateChangeFlags resourceFlags = StateChangeFlags.Resources | StateChangeFlags.Buildings
+                | StateChangeFlags.Training | StateChangeFlags.Villagers;
+            if ((flags & resourceFlags) != 0)
+                resourceBar.Refresh(gameState, localPlayerID);
+
+            // Core info panels — refresh on broad entity/building/fog changes
+            const StateChangeFlags tileFlags = StateChangeFlags.Buildings | StateChangeFlags.Armies
+                | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar | StateChangeFlags.Combat
+                | StateChangeFlags.Garrison;
+            if ((flags & tileFlags) != 0)
+            {
+                if (tileInfoPopup.IsVisible) tileInfoPopup.Refresh(gameState);
+                if (tileInfo.IsVisible) tileInfo.Refresh(gameState);
+                if (buildingDetail.IsVisible) buildingDetail.Refresh(gameState);
+                if (armyDetail.IsVisible) armyDetail.Refresh(gameState);
+            }
+
+            // Overview panels
+            if ((flags & (StateChangeFlags.Buildings | StateChangeFlags.Garrison)) != 0)
+                if (buildingsOverview.IsVisible) buildingsOverview.Refresh(gameState);
+
+            if ((flags & StateChangeFlags.Resources) != 0)
+                if (resourceOverview.IsVisible) resourceOverview.Refresh(gameState);
+
+            if ((flags & (StateChangeFlags.Armies | StateChangeFlags.Combat)) != 0)
+                if (militaryOverview.IsVisible) militaryOverview.Refresh(gameState);
+
+            if ((flags & StateChangeFlags.Training) != 0)
+                if (trainingOverview.IsVisible) trainingOverview.Refresh(gameState);
+
+            if ((flags & (StateChangeFlags.Armies | StateChangeFlags.Villagers)) != 0)
+                if (entitiesOverview.IsVisible) entitiesOverview.Refresh(gameState);
+
+            // Detail panels
+            if ((flags & StateChangeFlags.Research) != 0)
+                if (researchTree.IsVisible) researchTree.Refresh(gameState);
+
+            if ((flags & (StateChangeFlags.Commander | StateChangeFlags.Armies)) != 0)
+                if (commander.IsVisible) commander.Refresh(gameState);
+
+            if ((flags & StateChangeFlags.Combat) != 0)
+            {
+                if (liveCombat.IsVisible) liveCombat.Refresh(gameState);
+                if (combatHistory.IsVisible) combatHistory.Refresh(gameState);
+            }
+
+            // Action panels
+            const StateChangeFlags actionFlags = StateChangeFlags.Villagers | StateChangeFlags.Buildings
+                | StateChangeFlags.Armies | StateChangeFlags.Resources;
+            if ((flags & actionFlags) != 0)
+            {
+                if (gatherPanel.IsVisible) gatherPanel.Refresh(gameState);
+                if (reinforcePanel.IsVisible) reinforcePanel.Refresh(gameState);
+                if (villagerDeploy.IsVisible) villagerDeploy.Refresh(gameState);
+                if (buildVillagerSelect.IsVisible) buildVillagerSelect.Refresh(gameState);
+                if (upgradeVillagerSelect.IsVisible) upgradeVillagerSelect.Refresh(gameState);
+            }
+
+            // Map renderers — conditional
+            if ((flags & StateChangeFlags.Movement) != 0)
+                pathRenderer.UpdatePaths(gameState, localPlayerID);
+
+            if ((flags & (StateChangeFlags.Armies | StateChangeFlags.Buildings
+                | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar)) != 0)
+                entityRenderer.UpdateEntities(gameState);
+
+            if ((flags & StateChangeFlags.Entrenchment) != 0)
+                entrenchmentRenderer?.UpdateEntrenchment(gameState, localPlayerID);
+
+            // Mini map — incremental refresh
+            if (miniMap.IsVisible)
+            {
+                bool hasEntityChange = (flags & (StateChangeFlags.Armies | StateChangeFlags.Buildings
+                    | StateChangeFlags.Villagers)) != 0;
+                bool hasFogChange = (flags & StateChangeFlags.FogOfWar) != 0;
+                if (hasEntityChange || hasFogChange)
+                    miniMap.RefreshIncremental(gameState, hasEntityChange, hasFogChange);
             }
 
             // Update notification badge
@@ -1329,6 +1455,36 @@ namespace Sporefront.Visual
                         notificationInbox.AddNotification(notif);
                     }
                     if (commander.IsVisible) commander.Refresh(gameState);
+                }
+            }
+            else if (change is ArmyStrandedChange asc)
+            {
+                var army = gameState.GetArmy(asc.armyID);
+                if (army != null && army.ownerID.HasValue && army.ownerID.Value == localPlayerID)
+                {
+                    var notif = new ArmyStrandedNotification(army.name, asc.coordinate);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
+                }
+            }
+            else if (change is AttackCancelledChange accChange)
+            {
+                var army = gameState.GetArmy(accChange.armyID);
+                if (army != null && army.ownerID.HasValue && army.ownerID.Value == localPlayerID)
+                {
+                    var notif = new AttackCancelledNotification(army.name, accChange.coordinate);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
+                }
+            }
+            else if (change is ArmyRemobilizedChange arc)
+            {
+                var army = gameState.GetArmy(arc.armyID);
+                if (army != null && army.ownerID.HasValue && army.ownerID.Value == localPlayerID)
+                {
+                    var notif = new ArmyRemobilizedNotification(army.name, arc.destination);
+                    notifications.ShowNotification(notif);
+                    notificationInbox.AddNotification(notif);
                 }
             }
             else if (change is ResourcesChangedChange rchg)

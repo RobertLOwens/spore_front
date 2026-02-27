@@ -23,6 +23,8 @@ namespace Sporefront.Visual
 
         public event Action OnClose;
         public event Action<string, bool> OnSettingChanged;
+        public event Action OnAccountRequested;
+        public event Action OnSignOutRequested;
 
         // ================================================================
         // Settings Keys
@@ -69,12 +71,12 @@ namespace Sporefront.Visual
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
             headerBarRT.pivot = new Vector2(0.5f, 1);
-            headerBarRT.offsetMin = new Vector2(0, -40);
+            headerBarRT.offsetMin = new Vector2(0, -48);
             headerBarRT.offsetMax = Vector2.zero;
 
             var headerHLG = headerBar.AddComponent<HorizontalLayoutGroup>();
-            headerHLG.spacing = 4f;
-            headerHLG.padding = new RectOffset(12, 8, 4, 4);
+            headerHLG.spacing = 6f;
+            headerHLG.padding = new RectOffset(12, 10, 6, 6);
             headerHLG.childForceExpandWidth = false;
             headerHLG.childForceExpandHeight = true;
             headerHLG.childControlWidth = false;
@@ -87,16 +89,16 @@ namespace Sporefront.Visual
             titleLE.flexibleWidth = 1;
 
             var doneBtn = UIHelper.CreateButton(headerBar.transform, "Done",
-                SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontSmall, Hide);
             var doneBtnLE = doneBtn.gameObject.AddComponent<LayoutElement>();
-            doneBtnLE.preferredWidth = 60;
+            doneBtnLE.preferredWidth = 68;
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "SettingsScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
             scrollRT.offsetMin = Vector2.zero;
-            scrollRT.offsetMax = new Vector2(0, -44);
+            scrollRT.offsetMax = new Vector2(0, -52);
 
             backdrop.SetActive(false);
         }
@@ -247,6 +249,52 @@ namespace Sporefront.Visual
                     SetBool(ConfirmDestructiveKey, val);
                     OnSettingChanged?.Invoke(ConfirmDestructiveKey, val);
                 });
+
+            // Section: Account (when signed in)
+            if (AuthService.Instance.CurrentState == AuthState.SignedIn)
+            {
+                UIHelper.CreateDivider(contentRT, null, 2);
+
+                BuildSectionHeader("Account");
+
+                string displayName = AuthService.Instance.CurrentDisplayName ?? "—";
+                string email = AuthService.Instance.CurrentEmail ?? "—";
+                var signedInLabel = UIHelper.CreateLabel(contentRT,
+                    $"Signed in as {displayName} ({email})",
+                    UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                var siLE = signedInLabel.gameObject.AddComponent<LayoutElement>();
+                siLE.preferredHeight = 22;
+
+                var accountRow = UIHelper.CreatePanel(contentRT, "AccountRow", Color.clear);
+                var accountRowLE = accountRow.AddComponent<LayoutElement>();
+                accountRowLE.preferredHeight = 40;
+                var accountHLG = accountRow.AddComponent<HorizontalLayoutGroup>();
+                accountHLG.spacing = 8f;
+                accountHLG.padding = new RectOffset(8, 8, 4, 4);
+                accountHLG.childForceExpandWidth = false;
+                accountHLG.childForceExpandHeight = true;
+                accountHLG.childControlWidth = false;
+                accountHLG.childControlHeight = true;
+
+                var manageBtn = UIHelper.CreateButton(accountRow.transform, "Manage Account",
+                    UIHelper.ButtonBg, UIHelper.ButtonText, UIConstants.FontSmall, () =>
+                    {
+                        Hide();
+                        OnAccountRequested?.Invoke();
+                    });
+                var manageBtnLE = manageBtn.gameObject.AddComponent<LayoutElement>();
+                manageBtnLE.preferredWidth = 140;
+
+                var signOutBtn = UIHelper.CreateButton(accountRow.transform, "Sign Out",
+                    SporefrontColors.SporeAmber, UIHelper.HudTextColor, UIConstants.FontSmall, () =>
+                    {
+                        AuthService.Instance.SignOut();
+                        Hide();
+                        OnSignOutRequested?.Invoke();
+                    });
+                var signOutBtnLE = signOutBtn.gameObject.AddComponent<LayoutElement>();
+                signOutBtnLE.preferredWidth = 100;
+            }
         }
 
         // ================================================================
@@ -272,7 +320,7 @@ namespace Sporefront.Visual
         {
             var row = UIHelper.CreatePanel(contentRT, "ToggleRow", Color.clear);
             var rowLE = row.AddComponent<LayoutElement>();
-            rowLE.preferredHeight = 48;
+            rowLE.preferredHeight = 52;
 
             var hlg = row.AddComponent<HorizontalLayoutGroup>();
             hlg.spacing = 8f;
@@ -294,11 +342,11 @@ namespace Sporefront.Visual
             textVLG.childControlWidth = true;
             textVLG.childControlHeight = false;
 
-            var titleLabel = UIHelper.CreateLabel(textCol.transform, title, 13, UIHelper.BodyTextColor);
+            var titleLabel = UIHelper.CreateLabel(textCol.transform, title, UIConstants.FontSmall, UIHelper.BodyTextColor);
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 20;
 
-            var subtitleLabel = UIHelper.CreateLabel(textCol.transform, subtitle, 10,
+            var subtitleLabel = UIHelper.CreateLabel(textCol.transform, subtitle, UIConstants.FontCaption,
                 SporefrontColors.InkLight);
             var subtitleLE = subtitleLabel.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 16;
@@ -309,14 +357,14 @@ namespace Sporefront.Visual
             Color toggleTextColor = isOn ? UIHelper.HudTextColor : SporefrontColors.InkLight;
 
             var toggleBtn = UIHelper.CreateButton(row.transform, toggleText,
-                toggleBg, toggleTextColor, 11, () =>
+                toggleBg, toggleTextColor, UIConstants.FontSmall, () =>
                 {
                     bool newValue = !isOn;
                     onChanged?.Invoke(newValue);
                     Rebuild();
                 });
             var toggleBtnLE = toggleBtn.gameObject.AddComponent<LayoutElement>();
-            toggleBtnLE.preferredWidth = 50;
+            toggleBtnLE.preferredWidth = 56;
         }
 
         // ================================================================

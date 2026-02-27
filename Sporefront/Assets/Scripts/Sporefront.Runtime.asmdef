@@ -8,10 +8,27 @@
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Firebase.App.dll",
+        "Firebase.Auth.dll",
+        "Firebase.Firestore.dll",
+        "Firebase.Extensions.dll",
+        "Firebase.TaskExtension.dll"
+    ],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.google.firebase.auth",
+            "expression": "",
+            "define": "FIREBASE_AUTH"
+        },
+        {
+            "name": "com.google.firebase.firestore",
+            "expression": "",
+            "define": "FIREBASE_FIRESTORE"
+        }
+    ],
     "noEngineReferences": false
 }

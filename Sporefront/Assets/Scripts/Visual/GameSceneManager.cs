@@ -78,7 +78,60 @@ namespace Sporefront.Visual
             if (cameraController == null)
                 cameraController = Camera.main.gameObject.AddComponent<CameraController>();
 
+            // Initialize Firebase before bootstrapping UI
+            FirebaseInitializer.EnsureExists();
+
+            if (FirebaseInitializer.IsReady)
+            {
+                OnFirebaseResolved(true);
+            }
+            else if (FirebaseInitializer.HasFailed)
+            {
+                OnFirebaseResolved(false);
+            }
+            else
+            {
+                FirebaseInitializer.OnFirebaseReady += () => OnFirebaseResolved(true);
+                FirebaseInitializer.OnFirebaseFailed += (_) => OnFirebaseResolved(false);
+            }
+        }
+
+        private void OnFirebaseResolved(bool success)
+        {
+            if (success)
+            {
+                AuthService.Instance.Initialize();
+                UserStatsService.Instance.Initialize();
+                GameSessionService.Instance.Initialize();
+            }
+
             BootstrapMainMenu();
+            RouteAuthState(success);
+        }
+
+        private void RouteAuthState(bool firebaseAvailable)
+        {
+            if (!firebaseAvailable)
+            {
+                // Offline mode — go directly to main menu
+                uiManager.ShowMainMenu();
+                return;
+            }
+
+            var authState = AuthService.Instance.CurrentState;
+            switch (authState)
+            {
+                case AuthState.SignedIn:
+                    uiManager.ShowMainMenu();
+                    break;
+                case AuthState.NeedsUsername:
+                    uiManager.ShowDisplayName();
+                    break;
+                case AuthState.SignedOut:
+                default:
+                    uiManager.ShowAuth();
+                    break;
+            }
         }
 
         private void Update()
@@ -135,10 +188,8 @@ namespace Sporefront.Visual
                 selectedEntityIsArmy = isArmy;
             };
 
-            // 5. Show main menu
-            uiManager.ShowMainMenu();
-
-            Debug.Log("[GameSceneManager] Main menu shown");
+            // 5. Auth routing will show the appropriate panel (auth, displayName, or mainMenu)
+            Debug.Log("[GameSceneManager] UI bootstrapped, awaiting auth routing");
         }
 
         // ================================================================
@@ -859,7 +910,7 @@ namespace Sporefront.Visual
                     }
                 }
             }
-            else
+            else if (!TryHandleResourceRightClick(targetCoord, localID, entities))
             {
                 // Move each selected entity
                 foreach (var entity in entities)
@@ -906,8 +957,21 @@ namespace Sporefront.Visual
                 var rp = gameState.GetResourcePoint(coord);
                 if (rp != null && !rp.IsDepleted())
                 {
-                    CursorManager.SetCursor(CursorType.Gather);
-                    return;
+                    if (rp.resourceType.IsHuntable() && rp.IsAlive())
+                    {
+                        CursorManager.SetCursor(CursorType.Hunt);
+                        return;
+                    }
+                    if (rp.resourceType.IsGatherable())
+                    {
+                        // Only show gather cursor if camp coverage is satisfied
+                        if (!rp.resourceType.RequiresCamp() ||
+                            GameEngine.Instance.resourceEngine.HasCampCoverage(rp.coordinate, rp.resourceType, gameState))
+                        {
+                            CursorManager.SetCursor(CursorType.Gather);
+                            return;
+                        }
+                    }
                 }
             }
 
@@ -973,6 +1037,50 @@ namespace Sporefront.Visual
             }
 
             return false;
+        }
+
+        private bool TryHandleResourceRightClick(HexCoordinate targetCoord, Guid localID, List<SelectedEntity> entities)
+        {
+            var rp = gameState.GetResourcePoint(targetCoord);
+            if (rp == null || rp.IsDepleted()) return false;
+
+            bool isHuntable = rp.resourceType.IsHuntable() && rp.IsAlive();
+            bool isGatherable = rp.resourceType.IsGatherable();
+
+            if (!isHuntable && !isGatherable) return false;
+
+            // Camp coverage check for resources that require it
+            if (isGatherable && rp.resourceType.RequiresCamp())
+            {
+                if (!GameEngine.Instance.resourceEngine.HasCampCoverage(rp.coordinate, rp.resourceType, gameState))
+                    return false;
+            }
+
+            foreach (var entity in entities)
+            {
+                if (!entity.isArmy)
+                {
+                    // Villagers get gather/hunt commands
+                    if (isHuntable)
+                    {
+                        var cmd = new HuntCommand(localID, entity.id, rp.id);
+                        UIManager.ExecutePlayerCommand(cmd);
+                    }
+                    else
+                    {
+                        var cmd = new GatherCommand(localID, entity.id, rp.id);
+                        UIManager.ExecutePlayerCommand(cmd);
+                    }
+                }
+                else
+                {
+                    // Armies in mixed selection just move to the tile
+                    var cmd = new MoveCommand(localID, entity.id, targetCoord, true);
+                    UIManager.ExecutePlayerCommand(cmd);
+                }
+            }
+
+            return true;
         }
 
         private bool HasOwnedEntityAt(HexCoordinate coord)
