@@ -1,6 +1,6 @@
 // ============================================================================
 // FILE: Visual/ReinforcePanel.cs
-// PURPOSE: Left-side slide-out panel for sending garrison reinforcements to
+// PURPOSE: Centered modal panel for sending garrison reinforcements to
 //          an army. Lists buildings with garrisoned units and per-unit sliders.
 // ============================================================================
 
@@ -28,7 +28,8 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject panel;
+        private GameObject backdrop;
+        private GameObject modalPanel;
         private RectTransform contentRT;
         private Guid? currentArmyID;
         private Guid localPlayerID;
@@ -48,33 +49,51 @@ namespace Sporefront.Visual
         {
             localPlayerID = playerID;
 
-            // Left-anchored slide-out panel, 300px wide
-            panel = UIHelper.CreatePanel(canvasTransform, "ReinforcePanel", UIHelper.PanelBg);
-            var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 0.1f);
-            rt.anchorMax = new Vector2(0, 0.9f);
-            rt.pivot = new Vector2(0, 0.5f);
-            rt.offsetMin = new Vector2(0, 0);
-            rt.offsetMax = new Vector2(300, 0);
+            // Full-screen backdrop with click-to-dismiss
+            backdrop = UIHelper.CreatePanel(canvasTransform, "ReinforceBackdrop",
+                new Color(0, 0, 0, 0.4f));
+            var bdRT = backdrop.GetComponent<RectTransform>();
+            UIHelper.StretchFull(bdRT);
+            var bdBtn = backdrop.AddComponent<Button>();
+            bdBtn.transition = Selectable.Transition.None;
+            bdBtn.onClick.AddListener(Hide);
 
-            // ScrollView
-            var scroll = UIHelper.CreateScrollView(panel.transform, "ReinforceScroll", out contentRT);
+            // Centered modal panel (ModalMedium — needs more space for expandable rows)
+            modalPanel = UIHelper.CreatePanel(backdrop.transform, "ReinforceModal", UIHelper.PanelBg);
+            var rt = modalPanel.GetComponent<RectTransform>();
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
+
+            // Header "Reinforce Army" — fixed at top
+            var header = UIHelper.CreateLabel(modalPanel.transform, "Reinforce Army",
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleCenter, true);
+            var headerRT = header.GetComponent<RectTransform>();
+            headerRT.anchorMin = new Vector2(0, 1);
+            headerRT.anchorMax = new Vector2(1, 1);
+            headerRT.pivot = new Vector2(0.5f, 1);
+            headerRT.offsetMin = new Vector2(12, -40);
+            headerRT.offsetMax = new Vector2(-12, -6);
+
+            // Scroll area for army info + buildings list
+            var scroll = UIHelper.CreateScrollView(modalPanel.transform, "ReinforceScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
-            UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 44);
-            scrollRT.offsetMax = Vector2.zero;
+            scrollRT.anchorMin = Vector2.zero;
+            scrollRT.anchorMax = Vector2.one;
+            scrollRT.offsetMin = new Vector2(0, 52); // Space for close button
+            scrollRT.offsetMax = new Vector2(0, -42); // Space for header
 
-            // Bottom close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Cancel",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+            // Close button at bottom
+            var closeBtn = UIHelper.CreateButton(modalPanel.transform, "Close",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
-            closeBtnRT.anchorMin = Vector2.zero;
+            closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 40);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 48);
 
-            panel.SetActive(false);
+            backdrop.SetActive(false);
         }
 
         public void UpdateLocalPlayerID(Guid playerID)
@@ -92,7 +111,7 @@ namespace Sporefront.Visual
             selections.Clear();
             expandedBuildings.Clear();
             Rebuild(gameState);
-            panel.SetActive(true);
+            backdrop.SetActive(true);
         }
 
         public void Hide()
@@ -100,17 +119,17 @@ namespace Sporefront.Visual
             currentArmyID = null;
             selections.Clear();
             expandedBuildings.Clear();
-            panel.SetActive(false);
+            backdrop.SetActive(false);
             OnClose?.Invoke();
         }
 
         public void Refresh(GameState gameState)
         {
-            if (!currentArmyID.HasValue || !panel.activeSelf) return;
+            if (!currentArmyID.HasValue || !backdrop.activeSelf) return;
             Rebuild(gameState);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild
@@ -122,18 +141,9 @@ namespace Sporefront.Visual
             var army = gameState.GetArmy(currentArmyID.Value);
             if (army == null) { Hide(); return; }
 
-            // Clear
+            // Clear scroll content
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
-
-            // Header
-            var header = UIHelper.CreateLabel(contentRT, "Reinforce Army",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleCenter, true);
-            var headerLE = header.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 28;
-
-            UIHelper.CreateDivider(contentRT);
 
             // Target army info
             BuildArmyInfoSection(army);
@@ -153,25 +163,25 @@ namespace Sporefront.Visual
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 22;
+            sectionLE.preferredHeight = 28;
 
             var nameLabel = UIHelper.CreateLabel(contentRT,
-                $"  {army.name} ({army.GetTotalUnits()} units)", 12);
+                $"  {army.name} ({army.GetTotalUnits()} units)", UIConstants.FontBody);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-            nameLE.preferredHeight = 20;
+            nameLE.preferredHeight = 26;
 
             string status = army.isEntrenched ? "Entrenched" :
                             army.isInCombat ? "In Combat" :
                             army.isRetreating ? "Retreating" : "Idle";
             var statusLabel = UIHelper.CreateLabel(contentRT,
-                $"  Status: {status}", 12, SporefrontColors.InkLight);
+                $"  Status: {status}", UIConstants.FontSmall, SporefrontColors.InkLight);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
-            statusLE.preferredHeight = 20;
+            statusLE.preferredHeight = 24;
 
             var coordLabel = UIHelper.CreateLabel(contentRT,
-                $"  Location: ({army.coordinate.q},{army.coordinate.r})", 12, SporefrontColors.InkLight);
+                $"  Location: ({army.coordinate.q},{army.coordinate.r})", UIConstants.FontSmall, SporefrontColors.InkLight);
             var coordLE = coordLabel.gameObject.AddComponent<LayoutElement>();
-            coordLE.preferredHeight = 20;
+            coordLE.preferredHeight = 24;
         }
 
         // ================================================================
@@ -184,7 +194,7 @@ namespace Sporefront.Visual
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 22;
+            sectionLE.preferredHeight = 28;
 
             var buildings = gameState.GetBuildingsForPlayer(localPlayerID);
             bool anyGarrisoned = false;
@@ -213,11 +223,11 @@ namespace Sporefront.Visual
                 var buildingRow = UIHelper.CreatePanel(contentRT, "BuildingRow",
                     SporefrontColors.ParchmentMid);
                 var buildingRowLE = buildingRow.AddComponent<LayoutElement>();
-                buildingRowLE.preferredHeight = 36;
+                buildingRowLE.preferredHeight = 44;
 
                 var buildingHLG = buildingRow.AddComponent<HorizontalLayoutGroup>();
                 buildingHLG.spacing = 4f;
-                buildingHLG.padding = new RectOffset(8, 8, 4, 4);
+                buildingHLG.padding = new RectOffset(10, 10, 6, 6);
                 buildingHLG.childForceExpandWidth = false;
                 buildingHLG.childForceExpandHeight = true;
                 buildingHLG.childControlWidth = false;
@@ -227,9 +237,9 @@ namespace Sporefront.Visual
                 var capturedBuildingID = building.id;
                 var toggleBtn = UIHelper.CreateButton(buildingRow.transform,
                     isExpanded ? "-" : "+",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12, null);
+                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontSmall, null);
                 var toggleBtnLE = toggleBtn.gameObject.AddComponent<LayoutElement>();
-                toggleBtnLE.preferredWidth = 28;
+                toggleBtnLE.preferredWidth = 32;
 
                 toggleBtn.onClick.AddListener(() =>
                 {
@@ -242,15 +252,15 @@ namespace Sporefront.Visual
 
                 // Building name + garrison count
                 var bNameLabel = UIHelper.CreateLabel(buildingRow.transform,
-                    $"{building.buildingType.DisplayName()} ({totalGarrisoned})", 12);
+                    $"{building.buildingType.DisplayName()} ({totalGarrisoned})", UIConstants.FontBody);
                 var bNameLE = bNameLabel.gameObject.AddComponent<LayoutElement>();
                 bNameLE.flexibleWidth = 1;
 
                 // Travel distance
                 var travelLabel = UIHelper.CreateLabel(buildingRow.transform,
-                    $"{distance} tiles", 11, SporefrontColors.InkLight);
+                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.InkLight);
                 var travelLE = travelLabel.gameObject.AddComponent<LayoutElement>();
-                travelLE.preferredWidth = 55;
+                travelLE.preferredWidth = 70;
 
                 // Expanded: unit type sliders
                 if (isExpanded)
@@ -283,7 +293,7 @@ namespace Sporefront.Visual
                         var sendUnits = new Dictionary<MilitaryUnitType, int>(sel);
 
                         var confirmBtn = UIHelper.CreateButton(contentRT, $"Send {totalSelected} Units",
-                            SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                            SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontBody, () =>
                             {
                                 // Filter out zero entries
                                 var filtered = new Dictionary<MilitaryUnitType, int>();
@@ -298,7 +308,7 @@ namespace Sporefront.Visual
                                 }
                             });
                         var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
-                        confirmLE.preferredHeight = 32;
+                        confirmLE.preferredHeight = 44;
                     }
 
                     UIHelper.CreateDivider(contentRT);
@@ -308,9 +318,9 @@ namespace Sporefront.Visual
             if (!anyGarrisoned)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No buildings with garrisoned units", 12, SporefrontColors.InkFaded);
+                    "  No buildings with garrisoned units", UIConstants.FontSmall, SporefrontColors.InkFaded);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
-                emptyLE.preferredHeight = 20;
+                emptyLE.preferredHeight = 24;
             }
         }
 
@@ -323,28 +333,28 @@ namespace Sporefront.Visual
         {
             var row = UIHelper.CreatePanel(contentRT, "UnitRow", Color.clear);
             var rowLE = row.AddComponent<LayoutElement>();
-            rowLE.preferredHeight = 44;
+            rowLE.preferredHeight = 52;
 
             var vlg = row.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2;
-            vlg.padding = new RectOffset(16, 8, 2, 2);
+            vlg.spacing = 4;
+            vlg.padding = new RectOffset(16, 10, 4, 4);
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
 
             int currentVal = sel.ContainsKey(unitType) ? sel[unitType] : 0;
 
             // Label row
-            var labelRow = UIHelper.CreateHorizontalRow(row.transform, 18f, 4f);
+            var labelRow = UIHelper.CreateHorizontalRow(row.transform, 22f, 4f);
             var unitLabel = UIHelper.CreateLabel(labelRow.transform,
-                unitType.DisplayName(), 12);
+                unitType.DisplayName(), UIConstants.FontSmall);
             var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
             unitLE.flexibleWidth = 1;
 
             var countLabel = UIHelper.CreateLabel(labelRow.transform,
-                $"{currentVal}/{maxCount}", 12, SporefrontColors.InkLight,
+                $"{currentVal}/{maxCount}", UIConstants.FontSmall, SporefrontColors.InkLight,
                 TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
-            countLE.preferredWidth = 50;
+            countLE.preferredWidth = 60;
 
             // Slider
             var capturedUnitType = unitType;
@@ -360,7 +370,7 @@ namespace Sporefront.Visual
             });
             slider.value = currentVal;
             var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
-            sliderLE.preferredHeight = 20;
+            sliderLE.preferredHeight = 24;
         }
     }
 }

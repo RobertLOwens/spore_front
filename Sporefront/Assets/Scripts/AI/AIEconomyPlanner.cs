@@ -59,7 +59,7 @@ namespace Sporefront.AI
             var deployCmd = TryDeployVillagers(playerID, gameState);
             if (deployCmd != null) commands.Add(deployCmd);
 
-            // Build lumber camp ASAP if missing
+            // Build lumber camp ASAP if missing (always highest priority)
             if (currentTime - aiState.lastEconomicBuildTime >= buildInterval)
             {
                 if (!HasLumberCamp(playerID, gameState))
@@ -82,46 +82,41 @@ namespace Sporefront.AI
             // Rebalance villagers
             commands.AddRange(TryRebalanceVillagers(playerID, gameState));
 
-            // Build farms if food urgency high
-            var urgency = AnalyzeResourceNeeds(playerID, gameState);
-            double foodUrgency;
-            urgency.TryGetValue(ResourceType.Food, out foodUrgency);
-            var foodRate = player.GetCollectionRate(ResourceType.Food);
-
-            if ((foodUrgency > 0.5 || foodRate < 2.0) && currentTime - aiState.lastEconomicBuildTime >= buildInterval)
-            {
-                var cmd = TryBuildFarm(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build storage if near capacity
-            bool shouldBuildStorage = urgency.Values.Any(u => u < 0.2);
-            if (shouldBuildStorage && currentTime - aiState.lastEconomicBuildTime >= buildInterval)
-            {
-                var cmd = TryBuildStorage(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build Library if CC level >= 3
+            // Weighted candidate system for building construction (randomized build order)
             if (currentTime - aiState.lastEconomicBuildTime >= buildInterval)
             {
-                var cmd = TryBuildLibrary(playerID, gameState);
-                if (cmd != null)
+                var urgency = AnalyzeResourceNeeds(playerID, gameState);
+                double foodUrgency;
+                urgency.TryGetValue(ResourceType.Food, out foodUrgency);
+                var foodRate = player.GetCollectionRate(ResourceType.Food);
+
+                bool shouldBuildStorage = urgency.Values.Any(u => u < 0.2);
+
+                var buildCandidates = new List<(Func<IEngineCommand> tryBuild, double weight, string name)>();
+
+                // Farm: high weight if food urgency is high
+                if (foodUrgency > 0.5 || foodRate < 2.0)
+                    buildCandidates.Add((() => TryBuildFarm(playerID, gameState), 0.8, "Farm"));
+
+                // Military building
+                buildCandidates.Add((() => TryBuildMilitaryBuilding(playerID, gameState), 0.5, "Military"));
+
+                // Storage
+                if (shouldBuildStorage)
+                    buildCandidates.Add((() => TryBuildStorage(playerID, gameState), 0.3, "Storage"));
+
+                // Library
+                buildCandidates.Add((() => TryBuildLibrary(playerID, gameState), 0.2, "Library"));
+
+                var buildCmd = PickWeightedCandidate(buildCandidates, aiState.economyRng);
+                if (buildCmd != null)
                 {
-                    commands.Add(cmd);
+                    commands.Add(buildCmd);
                     aiState.lastEconomicBuildTime = currentTime;
                 }
             }
 
-            // Build houses if near pop cap
+            // Build houses if near pop cap (always checked, not randomized)
             bool shouldBuildHouse = popCurrent >= popCapacity - 5 ||
                 (aiState.currentState == AIState.Peace &&
                  villagerCount >= 15 &&
@@ -136,17 +131,6 @@ namespace Sporefront.AI
                 {
                     commands.Add(cmd);
                     aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build military buildings
-            if (currentTime - aiState.lastMilitaryBuildTime >= buildInterval)
-            {
-                var cmd = TryBuildMilitaryBuilding(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastMilitaryBuildTime = currentTime;
                 }
             }
 
@@ -833,6 +817,43 @@ namespace Sporefront.AI
         }
 
         // ================================================================
+        // Weighted Build Candidate Selection
+        // ================================================================
+
+        private IEngineCommand PickWeightedCandidate(List<(Func<IEngineCommand> tryBuild, double weight, string name)> candidates, System.Random rng)
+        {
+            if (candidates.Count == 0) return null;
+
+            // Sort by weight descending
+            candidates.Sort((a, b) => b.weight.CompareTo(a.weight));
+
+            // 80% chance: pick highest-weight candidate that succeeds
+            // 20% chance: try a random candidate first
+            double roll = rng.NextDouble();
+            if (roll < 0.8)
+            {
+                // Try in weight order
+                foreach (var candidate in candidates)
+                {
+                    var cmd = candidate.tryBuild();
+                    if (cmd != null) return cmd;
+                }
+            }
+            else
+            {
+                // Shuffle and try random order
+                var shuffled = candidates.OrderBy(_ => rng.Next()).ToList();
+                foreach (var candidate in shuffled)
+                {
+                    var cmd = candidate.tryBuild();
+                    if (cmd != null) return cmd;
+                }
+            }
+
+            return null;
+        }
+
+        // ================================================================
         // Scouting
         // ================================================================
 
@@ -842,10 +863,18 @@ namespace Sporefront.AI
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return null;
 
+            // Don't use generic scouting if we have dedicated Scout units
+            // (dedicated scouting is handled by AIMilitaryPlanner.GenerateScoutingCommands)
+            var armies = gameState.GetArmiesForPlayer(playerID);
+            bool hasDedicatedScouts = armies.Any(a =>
+                a.GetUnitCount(MilitaryUnitType.Scout) > 0 &&
+                (double)a.GetUnitCount(MilitaryUnitType.Scout) / Math.Max(1, a.GetTotalUnits()) >= 0.5);
+            if (hasDedicatedScouts) return null;
+
             var scoutTarget = gameState.FindNearestUnexploredCoordinate(cityCenter.coordinate, playerID, scoutRange);
             if (!scoutTarget.HasValue) return null;
 
-            var idleArmies = gameState.GetArmiesForPlayer(playerID)
+            var idleArmies = armies
                 .Where(a => !a.isInCombat && a.currentPath == null)
                 .ToList();
 

@@ -83,6 +83,14 @@ namespace Sporefront.Commands
             );
             state.AddCommander(commander);
 
+            changeBuilder.Add(new CommanderCreatedChange
+            {
+                commanderID = commander.id,
+                ownerID = PlayerID,
+                name = commander.name,
+                specialty = specialty.ToString()
+            });
+
             DebugLog.Log($"RecruitCommanderCommand: Player recruited {commander.name} ({specialty})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);

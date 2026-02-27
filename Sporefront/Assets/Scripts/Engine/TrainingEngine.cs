@@ -32,7 +32,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -197,16 +197,16 @@ namespace Sporefront.Engine
 
         public List<StateChange> StartMilitaryTraining(Guid buildingID, MilitaryUnitType unitType, int quantity, Guid playerID)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
-            if (building == null) return new List<StateChange>();
+            if (building == null) return StateChange.EmptyChanges;
 
             var player = gameState.GetPlayer(playerID);
-            if (player == null) return new List<StateChange>();
+            if (player == null) return StateChange.EmptyChanges;
 
             var validation = CanTrainMilitary(buildingID, unitType, quantity, playerID);
-            if (!validation.valid) return new List<StateChange>();
+            if (!validation.valid) return StateChange.EmptyChanges;
 
             // Deduct resources
             var cost = ConvertTrainingCost(unitType.TrainingCost(), quantity);
@@ -269,16 +269,16 @@ namespace Sporefront.Engine
 
         public List<StateChange> StartVillagerTraining(Guid buildingID, int quantity, Guid playerID)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
-            if (building == null) return new List<StateChange>();
+            if (building == null) return StateChange.EmptyChanges;
 
             var player = gameState.GetPlayer(playerID);
-            if (player == null) return new List<StateChange>();
+            if (player == null) return StateChange.EmptyChanges;
 
             var validation = CanTrainVillagers(buildingID, quantity, playerID);
-            if (!validation.valid) return new List<StateChange>();
+            if (!validation.valid) return StateChange.EmptyChanges;
 
             // Deduct resources
             player.RemoveResource(ResourceType.Food, 50 * quantity);

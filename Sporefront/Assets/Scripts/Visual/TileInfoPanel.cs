@@ -29,11 +29,14 @@ namespace Sporefront.Visual
         public event Action<Guid, HexCoordinate> OnMoveRequested;
         public event Action<Guid> OnArmyMoveRequested;
         public event Action<Guid, HexCoordinate> OnAttackRequested;
-        public event Action<Guid, Guid> OnGatherRequested; // villagerGroupID, resourcePointID
+        public event Action<Guid> OnGatherSelectionRequested; // resourcePointID — opens GatherPanel with villager selection
         public event Action<Guid> OnHuntRequested; // resourcePointID — opens GatherPanel in hunt mode
         public event Action<Guid, HexCoordinate, bool> OnMoveEntityToTile; // entityID, destination, isArmy
         public event Action<Guid, HexCoordinate> OnAttackEntityToTile; // armyID, target coordinate
         public event Action OnCloseRequested;
+        public event Action<Guid> OnTrainVillagerRequested;
+        public event Action<Guid, int> OnDeployVillagersRequested;  // buildingID, count
+        public event Action<Guid> OnUpgradeBuildingRequested;        // buildingID
         public event Action<Guid, HexCoordinate, bool, bool> OnPreviewPathRequested; // entityID, destination, isArmy, isAttack
         public event Action OnPreviewPathCleared;
 
@@ -75,6 +78,7 @@ namespace Sporefront.Visual
         private int cachedArmyCount;
         private int cachedVillagerCount;
         private bool cachedHasResource;
+        private int cachedBuildingGarrison;
         private int cachedArmyStateHash;
 
         // Walking time estimate: seconds per tile for villagers
@@ -358,6 +362,7 @@ namespace Sporefront.Visual
             {
                 if (building.state != cachedBuildingState) return false;
                 if (building.level != cachedBuildingLevel) return false;
+                if (building.villagerGarrison != cachedBuildingGarrison) return false;
             }
 
             // Check army combat/entrench/retreat state changes
@@ -373,6 +378,7 @@ namespace Sporefront.Visual
             cachedBuildingCount = building != null ? 1 : 0;
             cachedBuildingState = building != null ? building.state : BuildingState.Planning;
             cachedBuildingLevel = building != null ? building.level : 0;
+            cachedBuildingGarrison = building != null ? building.villagerGarrison : 0;
             var armies = gameState.GetArmies(coord);
             cachedArmyCount = armies != null ? armies.Count : 0;
             var villagers = gameState.GetVillagerGroups(coord);
@@ -467,6 +473,55 @@ namespace Sporefront.Visual
                 var btnLE = detailBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 34;
             }
+
+            // Quick train villager button (City Center / Neighborhood)
+            if (isOwned && building.IsOperational && building.CanTrainVillagers())
+            {
+                int queueCount = building.villagerTrainingQueue.Count;
+                string btnLabel = queueCount > 0
+                    ? $"Train Villager ({queueCount} queued)"
+                    : "Train Villager (50f)";
+
+                var capturedBuildingID = building.id;
+                var trainBtn = UIHelper.CreateButton(contentRT, btnLabel,
+                    SporefrontColors.SporeGreen, UIHelper.ButtonText, UIConstants.FontBody,
+                    () => OnTrainVillagerRequested?.Invoke(capturedBuildingID));
+                var trainBtnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
+                trainBtnLE.preferredHeight = 34;
+            }
+
+            // Quick deploy villagers button
+            if (isOwned && building.IsOperational && building.villagerGarrison > 0)
+            {
+                var capturedBuildingID = building.id;
+                var capturedCount = building.villagerGarrison;
+                var deployBtn = UIHelper.CreateButton(contentRT,
+                    $"Deploy Villagers ({building.villagerGarrison})",
+                    SporefrontColors.SporeGreen, UIHelper.ButtonText, UIConstants.FontBody,
+                    () => OnDeployVillagersRequested?.Invoke(capturedBuildingID, capturedCount));
+                var deployBtnLE = deployBtn.gameObject.AddComponent<LayoutElement>();
+                deployBtnLE.preferredHeight = 34;
+            }
+
+            // Quick upgrade button (all building types)
+            if (isOwned && building.CanUpgrade)
+            {
+                var cost = building.GetUpgradeCost();
+                var player = gameState.GetPlayer(localPlayerID);
+                bool canAfford = player != null && player.CanAfford(cost);
+                int nextLevel = building.level + 1;
+
+                var capturedBuildingID = building.id;
+                var upgradeBtn = UIHelper.CreateButton(contentRT,
+                    $"Upgrade to Lv.{nextLevel} ({UIHelper.FormatCost(cost)})",
+                    canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
+                    canAfford ? UIHelper.ButtonText : SporefrontColors.InkLight,
+                    UIConstants.FontBody,
+                    () => OnUpgradeBuildingRequested?.Invoke(capturedBuildingID));
+                upgradeBtn.interactable = canAfford;
+                var upgradeBtnLE = upgradeBtn.gameObject.AddComponent<LayoutElement>();
+                upgradeBtnLE.preferredHeight = 34;
+            }
         }
 
         private void BuildArmiesSection(List<ArmyData> armies, GameState gameState)
@@ -529,10 +584,35 @@ namespace Sporefront.Visual
                     entrenchLE.preferredHeight = 20;
                 }
 
-                if (isOwned)
+                if (isOwned && army.isStranded)
+                {
+                    // Stranded army — show status label and only Info button
+                    var strandedLabel = UIHelper.CreateLabel(contentRT,
+                        "Stranded — build a home base to retreat",
+                        UIConstants.FontCaption, SporefrontColors.SporeRed);
+                    var strandedLE = strandedLabel.gameObject.AddComponent<LayoutElement>();
+                    strandedLE.preferredHeight = 20;
+
+                    var btnRow = UIHelper.CreateHorizontalRow(contentRT, 34f, 3f);
+                    var capturedArmyID = army.id;
+                    CreateActionButton(btnRow.transform, "Info", () =>
+                        OnArmyDetailRequested?.Invoke(capturedArmyID));
+                }
+                else if (isOwned)
                 {
                     // Row 2: Action buttons
                     var btnRow = UIHelper.CreateHorizontalRow(contentRT, 34f, 3f);
+
+                    // Stop — only when army is actively moving
+                    if (army.currentPath != null && army.pathIndex < army.currentPath.Count && !army.isInCombat)
+                    {
+                        var capturedArmyID = army.id;
+                        CreateActionButton(btnRow.transform, "Stop", () =>
+                        {
+                            var cmd = new StopMovementCommand(localPlayerID, capturedArmyID);
+                            UIManager.ExecutePlayerCommand(cmd);
+                        });
+                    }
 
                     // Entrench
                     if (!army.isEntrenched && !army.isEntrenching && !army.isInCombat)
@@ -687,34 +767,14 @@ namespace Sporefront.Visual
 
                 if (hasCoverage)
                 {
-                    // Find nearest idle villager owned by this player (no distance restriction)
-                    var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-                    VillagerGroupData nearest = null;
-                    int nearestDist = int.MaxValue;
-                    if (villagers != null)
-                    {
-                        foreach (var vg in villagers)
-                        {
-                            if (vg.currentTask != null && !vg.currentTask.IsIdle) continue;
-                            int dist = vg.coordinate.Distance(rp.coordinate);
-                            if (dist < nearestDist)
-                            {
-                                nearestDist = dist;
-                                nearest = vg;
-                            }
-                        }
-                    }
-
-                    if (nearest != null)
-                    {
-                        var capturedVG = nearest;
-                        var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
-                            SporefrontColors.SporeGreen,
-                            UIHelper.HudTextColor, UIConstants.FontBody,
-                            () => OnGatherRequested?.Invoke(capturedVG.id, rp.id));
-                        var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
-                        btnLE.preferredHeight = 34;
-                    }
+                    // Gather button — opens GatherPanel with villager selection
+                    var capturedRPID = rp.id;
+                    var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
+                        SporefrontColors.SporeGreen,
+                        UIHelper.HudTextColor, UIConstants.FontBody,
+                        () => OnGatherSelectionRequested?.Invoke(capturedRPID));
+                    var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
+                    btnLE.preferredHeight = 34;
                 }
                 else
                 {
@@ -731,33 +791,12 @@ namespace Sporefront.Visual
             }
             else
             {
-                // Non-camp resources (Farmland, Forage, Carcasses): find nearest idle villager
-                var villagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-                VillagerGroupData nearest = null;
-                int nearestDist = int.MaxValue;
-                if (villagers != null)
-                {
-                    foreach (var vg in villagers)
-                    {
-                        if (vg.currentTask != null && !vg.currentTask.IsIdle) continue;
-                        int dist = vg.coordinate.Distance(rp.coordinate);
-                        if (dist < nearestDist)
-                        {
-                            nearestDist = dist;
-                            nearest = vg;
-                        }
-                    }
-                }
-
+                // Non-camp resources (Farmland, Forage, Carcasses): open GatherPanel with villager selection
                 var capturedRPID = rp.id;
-                var capturedVGID = nearest?.id;
                 var gatherBtn = UIHelper.CreateButton(contentRT, "Gather",
                     SporefrontColors.SporeGreen,
                     UIHelper.HudTextColor, UIConstants.FontBody,
-                    () => {
-                        if (capturedVGID.HasValue)
-                            OnGatherRequested?.Invoke(capturedVGID.Value, capturedRPID);
-                    });
+                    () => OnGatherSelectionRequested?.Invoke(capturedRPID));
                 var btnLE = gatherBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 34;
             }

@@ -857,6 +857,13 @@ namespace Sporefront.Visual
         // Entity Position API (for PathRenderer)
         // ================================================================
 
+        public Transform GetEntityTransform(Guid entityID)
+        {
+            if (entityVisuals.TryGetValue(entityID, out var go) && go != null)
+                return go.transform;
+            return null;
+        }
+
         /// <summary>
         /// Returns the world position at the bottom of the entity's visual shape.
         /// Used by PathRenderer to anchor path start points to entity bottoms.

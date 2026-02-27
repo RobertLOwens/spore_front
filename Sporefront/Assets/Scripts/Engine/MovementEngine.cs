@@ -26,6 +26,10 @@ namespace Sporefront.Engine
         private readonly double terrainSpeedMultiplier = GameConfig.Movement.TerrainSpeedMultiplier;
         private readonly double retreatSpeedBonus = GameConfig.Movement.RetreatSpeedBonus;
 
+        // Reusable snapshot lists to avoid .ToList() allocations
+        private readonly List<ArmyData> armySnapshot = new List<ArmyData>();
+        private readonly List<VillagerGroupData> villagerSnapshot = new List<VillagerGroupData>();
+
         // Setup
 
         public void Setup(GameState gameState)
@@ -37,13 +41,16 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
+            // Snapshot armies to avoid collection modification during iteration (RemoveArmy)
+            armySnapshot.Clear();
+            armySnapshot.AddRange(gameState.armies.Values);
+
             // Update army movements
-            // Copy to list to avoid collection modification during iteration (RemoveArmy)
-            foreach (var army in gameState.armies.Values.ToList())
+            foreach (var army in armySnapshot)
             {
                 var armyChanges = UpdateArmyMovement(army, currentTime);
                 changes.AddRange(armyChanges);
@@ -68,15 +75,23 @@ namespace Sporefront.Engine
                     commander.lastStaminaUpdateTime = currentTime;
             }
 
+            // Snapshot villager groups to avoid collection modification during iteration
+            villagerSnapshot.Clear();
+            villagerSnapshot.AddRange(gameState.villagerGroups.Values);
+
             // Update villager group movements
-            foreach (var group in gameState.villagerGroups.Values.ToList())
+            foreach (var group in villagerSnapshot)
             {
                 var groupChanges = UpdateVillagerGroupMovement(group, currentTime);
                 changes.AddRange(groupChanges);
             }
 
+            // Reuse army snapshot for reinforcement movements (re-snapshot since armies may have been removed)
+            armySnapshot.Clear();
+            armySnapshot.AddRange(gameState.armies.Values);
+
             // Update reinforcement movements
-            foreach (var army in gameState.armies.Values.ToList())
+            foreach (var army in armySnapshot)
             {
                 var reinforcementChanges = UpdateReinforcementMovements(army, currentTime);
                 changes.AddRange(reinforcementChanges);
@@ -90,11 +105,73 @@ namespace Sporefront.Engine
         private List<StateChange> UpdateArmyMovement(ArmyData army, double currentTime)
         {
             if (army.currentPath == null || army.pathIndex >= army.currentPath.Count)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
+
+            // Poll retreat destination validity for retreating armies
+            if (army.isRetreating && army.homeBaseID.HasValue)
+            {
+                var homeBase = gameState.GetBuilding(army.homeBaseID.Value);
+                if (homeBase == null || !homeBase.IsOperational)
+                {
+                    // Home base destroyed — try to find a new one
+                    var newBase = army.ownerID.HasValue
+                        ? gameState.FindNearestHomeBase(army.ownerID.Value, army.coordinate)
+                        : null;
+
+                    if (newBase != null)
+                    {
+                        // Repath to new base
+                        army.homeBaseID = newBase.id;
+                        var newPath = gameState.mapData.FindPath(
+                            army.coordinate, newBase.coordinate,
+                            army.ownerID ?? Guid.Empty, gameState);
+
+                        if (newPath != null && newPath.Count > 0)
+                        {
+                            army.currentPath = newPath;
+                            army.pathIndex = 0;
+                            army.movementProgress = 0.0;
+                        }
+                        else
+                        {
+                            // Can't path to new base — strand
+                            army.currentPath = null;
+                            army.pathIndex = 0;
+                            army.movementProgress = 0.0;
+                            army.movementSpeed = 0.0;
+                            army.isRetreating = false;
+                            army.isStranded = true;
+                            changes.Add(new ArmyStrandedChange
+                            {
+                                armyID = army.id,
+                                coordinate = army.coordinate
+                            });
+                            return changes;
+                        }
+                    }
+                    else
+                    {
+                        // No base available — strand the army
+                        army.currentPath = null;
+                        army.pathIndex = 0;
+                        army.movementProgress = 0.0;
+                        army.movementSpeed = 0.0;
+                        army.isRetreating = false;
+                        army.isStranded = true;
+                        changes.Add(new ArmyStrandedChange
+                        {
+                            armyID = army.id,
+                            coordinate = army.coordinate
+                        });
+                        return changes;
+                    }
+                }
+            }
+
             var path = army.currentPath;
 
             // Clear entrenchment when army moves
@@ -189,8 +266,72 @@ namespace Sporefront.Engine
                     armyID = army.id,
                     from = fromCoord,
                     to = targetCoord,
-                    path = path.Skip(army.pathIndex).ToList()
+                    path = army.pathIndex < path.Count
+                        ? path.GetRange(army.pathIndex, path.Count - army.pathIndex)
+                        : new List<HexCoordinate>()
                 });
+
+                // Auto-engage: non-retreating army that steps onto an enemy tile triggers combat
+                if (!army.isRetreating)
+                {
+                    bool hasEnemy = false;
+
+                    // Check for enemy armies
+                    var armiesAtCoord = gameState.GetArmies(targetCoord);
+                    foreach (var other in armiesAtCoord)
+                    {
+                        if (other.id != army.id && other.ownerID.HasValue &&
+                            army.ownerID.HasValue && other.ownerID.Value != army.ownerID.Value)
+                        {
+                            hasEnemy = true;
+                            break;
+                        }
+                    }
+
+                    // Check for enemy villager groups
+                    if (!hasEnemy)
+                    {
+                        var villagersAtCoord = gameState.GetVillagerGroups(targetCoord);
+                        foreach (var vg in villagersAtCoord)
+                        {
+                            if (vg.ownerID.HasValue && army.ownerID.HasValue &&
+                                vg.ownerID.Value != army.ownerID.Value)
+                            {
+                                hasEnemy = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Check for enemy buildings
+                    if (!hasEnemy)
+                    {
+                        var buildingAtCoord = gameState.GetBuilding(targetCoord);
+                        if (buildingAtCoord != null && buildingAtCoord.ownerID.HasValue &&
+                            army.ownerID.HasValue && buildingAtCoord.ownerID.Value != army.ownerID.Value)
+                        {
+                            hasEnemy = true;
+                        }
+                    }
+
+                    if (hasEnemy)
+                    {
+                        // Validate attack — skip if army can't attack (no commander, no stamina, etc.)
+                        var attackCmd = new AttackCommand(army.ownerID ?? Guid.Empty, army.id, targetCoord);
+                        var validation = attackCmd.Validate(gameState);
+                        if (validation.Succeeded)
+                        {
+                            // Stop movement and engage
+                            army.currentPath = null;
+                            army.pathIndex = 0;
+                            army.movementProgress = 0;
+                            army.movementSpeed = 0;
+                            army.pendingAttackTarget = null;
+                            GameEngine.Instance.ExecuteCommand(attackCmd);
+                            return changes;
+                        }
+                    }
+                }
 
                 // Check if path is complete
                 if (army.pathIndex >= path.Count)
@@ -207,7 +348,20 @@ namespace Sporefront.Engine
                         HexCoordinate attackTarget = army.pendingAttackTarget.Value;
                         army.pendingAttackTarget = null;
                         var attackCmd = new AttackCommand(army.ownerID ?? Guid.Empty, army.id, attackTarget);
-                        GameEngine.Instance.ExecuteCommand(attackCmd);
+                        var validation = attackCmd.Validate(gameState);
+                        if (validation.Succeeded)
+                        {
+                            GameEngine.Instance.ExecuteCommand(attackCmd);
+                        }
+                        else
+                        {
+                            // Target moved or no longer valid — emit notification
+                            changes.Add(new AttackCancelledChange
+                            {
+                                armyID = army.id,
+                                coordinate = army.coordinate
+                            });
+                        }
                     }
 
                     // Clean up empty armies that finished retreating (commander returns home)
@@ -231,9 +385,9 @@ namespace Sporefront.Engine
         private List<StateChange> UpdateVillagerGroupMovement(VillagerGroupData group, double currentTime)
         {
             if (group.currentPath == null || group.pathIndex >= group.currentPath.Count)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
             var path = group.currentPath;
@@ -282,7 +436,9 @@ namespace Sporefront.Engine
                     groupID = group.id,
                     from = fromCoord,
                     to = targetCoord,
-                    path = path.Skip(group.pathIndex).ToList()
+                    path = group.pathIndex < path.Count
+                        ? path.GetRange(group.pathIndex, path.Count - group.pathIndex)
+                        : new List<HexCoordinate>()
                 });
 
                 // Check if path is complete
@@ -307,7 +463,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> UpdateReinforcementMovements(ArmyData army, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
             var arrivedReinforcements = new List<Guid>();

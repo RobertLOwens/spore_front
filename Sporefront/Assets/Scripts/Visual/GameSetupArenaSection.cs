@@ -589,8 +589,9 @@ namespace Sporefront.Visual
         private void UpdateArenaSectionVisibility()
         {
             bool isArena = selectedMapType == MapType.Arena;
+            if (mapSelectionSection != null) mapSelectionSection.SetActive(!isArena);
+            if (standardSettingsSection != null) standardSettingsSection.SetActive(!isArena);
             if (arenaSection != null) arenaSection.SetActive(isArena);
-            if (standardStartButton != null) standardStartButton.SetActive(!isArena);
         }
     }
 }

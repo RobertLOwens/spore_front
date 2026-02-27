@@ -54,8 +54,8 @@ namespace Sporefront.Visual
         // Constants
         // ================================================================
 
-        private const float NodeWidth = 130f;
-        private const float NodeHeight = 40f;
+        private const float NodeWidth = 140f;
+        private const float NodeHeight = 44f;
         private const float NodeSpacingV = 12f;
         private const float BranchSpacingH = 20f;
         private const float BranchHeaderHeight = 40f;
@@ -130,13 +130,13 @@ namespace Sporefront.Visual
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontSmall, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
-            closeBtnRT.anchorMin = new Vector2(0, 0);
-            closeBtnRT.anchorMax = new Vector2(1, 0);
+            closeBtnRT.anchorMin = new Vector2(0.5f, 0);
+            closeBtnRT.anchorMax = new Vector2(0.5f, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 38);
+            closeBtnRT.sizeDelta = new Vector2(120, 32);
+            closeBtnRT.anchoredPosition = new Vector2(0, 8);
 
             backdrop.SetActive(false);
         }
@@ -171,7 +171,7 @@ namespace Sporefront.Visual
             hlg.childControlHeight = true;
 
             activeNameLabel = UIHelper.CreateLabel(activeResearchBar.transform,
-                "No active research", 12, SporefrontColors.InkLight);
+                "No active research", UIConstants.FontCaption, SporefrontColors.InkLight);
             var nameLE = activeNameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredWidth = 180;
 
@@ -183,18 +183,18 @@ namespace Sporefront.Visual
             barBgLE.preferredHeight = 14;
 
             activeProgressLabel = UIHelper.CreateLabel(activeResearchBar.transform,
-                "", 11, SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                "", UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleRight);
             var progLabelLE = activeProgressLabel.gameObject.AddComponent<LayoutElement>();
             progLabelLE.preferredWidth = 60;
 
             var cancelBtn = UIHelper.CreateButton(activeResearchBar.transform, "Cancel",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 10, () =>
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                 {
                     OnCancelResearch?.Invoke();
                 });
             var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
-            cancelLE.preferredWidth = 50;
-            cancelLE.preferredHeight = 22;
+            cancelLE.preferredWidth = 60;
+            cancelLE.preferredHeight = 26;
         }
 
         // ================================================================
@@ -214,28 +214,34 @@ namespace Sporefront.Visual
             var hlg = tabContainer.AddComponent<HorizontalLayoutGroup>();
             hlg.spacing = 8;
             hlg.padding = new RectOffset(8, 8, 0, 0);
-            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
-            hlg.childControlWidth = true;
+            hlg.childControlWidth = false;
             hlg.childControlHeight = true;
 
             economicTabBtn = UIHelper.CreateButton(tabContainer.transform, "Economic",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 13, () =>
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontSmall, () =>
                 {
                     currentCategory = ResearchCategory.Economic;
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
                     Rebuild(GameEngine.Instance.GetGameState());
                 });
+            var econTabLE = economicTabBtn.gameObject.AddComponent<LayoutElement>();
+            econTabLE.preferredWidth = 140;
+            econTabLE.preferredHeight = 28;
 
             militaryTabBtn = UIHelper.CreateButton(tabContainer.transform, "Military",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 13, () =>
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontSmall, () =>
                 {
                     currentCategory = ResearchCategory.Military;
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
                     Rebuild(GameEngine.Instance.GetGameState());
                 });
+            var milTabLE = militaryTabBtn.gameObject.AddComponent<LayoutElement>();
+            milTabLE.preferredWidth = 140;
+            milTabLE.preferredHeight = 28;
         }
 
         // ================================================================
@@ -261,7 +267,7 @@ namespace Sporefront.Visual
 
             // Close popup button
             var closePopup = UIHelper.CreateButton(nodeDetailPopup.transform, "X",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 11, () =>
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
                 {
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
@@ -270,7 +276,7 @@ namespace Sporefront.Visual
             closePopupRT.anchorMin = new Vector2(1, 1);
             closePopupRT.anchorMax = new Vector2(1, 1);
             closePopupRT.pivot = new Vector2(1, 1);
-            closePopupRT.sizeDelta = new Vector2(28, 24);
+            closePopupRT.sizeDelta = new Vector2(28, 28);
             closePopupRT.anchoredPosition = new Vector2(-4, -4);
 
             nodeDetailPopup.SetActive(false);
@@ -428,7 +434,7 @@ namespace Sporefront.Visual
             headerVLG.childControlHeight = false;
 
             var branchName = UIHelper.CreateLabel(headerPanel.transform, branch.DisplayName(),
-                12, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+                UIConstants.FontSmall, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
             var bnLE = branchName.gameObject.AddComponent<LayoutElement>();
             bnLE.preferredHeight = 18;
 
@@ -437,7 +443,7 @@ namespace Sporefront.Visual
             if (gateBuilding.HasValue)
             {
                 var gateLabel = UIHelper.CreateLabel(headerPanel.transform,
-                    $"Requires: {gateBuilding.Value.DisplayName()}", 9,
+                    $"Requires: {gateBuilding.Value.DisplayName()}", 11,
                     SporefrontColors.InkLight, TextAnchor.MiddleCenter);
                 var gateLE = gateLabel.gameObject.AddComponent<LayoutElement>();
                 gateLE.preferredHeight = 14;
@@ -445,7 +451,7 @@ namespace Sporefront.Visual
             else
             {
                 var noGateLabel = UIHelper.CreateLabel(headerPanel.transform,
-                    "No building required", 9,
+                    "No building required", 11,
                     SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
                 var noGateLE = noGateLabel.gameObject.AddComponent<LayoutElement>();
                 noGateLE.preferredHeight = 14;
@@ -505,9 +511,9 @@ namespace Sporefront.Visual
             nodeVLG.childControlHeight = false;
 
             var nameLabel = UIHelper.CreateLabel(nodePanel.transform,
-                researchType.DisplayName(), 10, textColor, TextAnchor.MiddleCenter);
+                researchType.DisplayName(), UIConstants.FontCaption, textColor, TextAnchor.MiddleCenter);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-            nameLE.preferredHeight = 16;
+            nameLE.preferredHeight = 18;
 
             // Status indicator
             string statusText;
@@ -518,7 +524,7 @@ namespace Sporefront.Visual
                 case NodeState.Available: statusText = $"Tier {researchType.Tier()}"; break;
                 default: statusText = "Locked"; break;
             }
-            var statusLabel = UIHelper.CreateLabel(nodePanel.transform, statusText, 9,
+            var statusLabel = UIHelper.CreateLabel(nodePanel.transform, statusText, 11,
                 textColor, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.preferredHeight = 13;
@@ -555,7 +561,7 @@ namespace Sporefront.Visual
 
             // Description
             var descLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                researchType.Description(), 12, SporefrontColors.InkLight,
+                researchType.Description(), UIConstants.FontCaption, SporefrontColors.InkLight,
                 TextAnchor.MiddleLeft);
             var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
             descLE.preferredHeight = 20;
@@ -571,7 +577,7 @@ namespace Sporefront.Visual
                     costParts.Add($"{UIHelper.ResourceIcon(kvp.Key)}{kvp.Value}");
             }
             var costLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                $"Cost: {string.Join("  ", costParts)}", 12, UIHelper.BodyTextColor);
+                $"Cost: {string.Join("  ", costParts)}", UIConstants.FontCaption, UIHelper.BodyTextColor);
             costLabel.supportRichText = true;
             var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
             costLE.preferredHeight = 20;
@@ -581,7 +587,7 @@ namespace Sporefront.Visual
             int timeSec = (int)researchTime;
             string timeStr = timeSec >= 60 ? $"{timeSec / 60}m {timeSec % 60}s" : $"{timeSec}s";
             var timeLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                $"Time: {timeStr}", 12, UIHelper.BodyTextColor);
+                $"Time: {timeStr}", UIConstants.FontCaption, UIHelper.BodyTextColor);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 20;
 
@@ -591,7 +597,7 @@ namespace Sporefront.Visual
             {
                 var prereqNames = prereqs.Select(p => p.DisplayName()).ToArray();
                 var prereqLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                    $"Requires: {string.Join(", ", prereqNames)}", 11, SporefrontColors.InkLight);
+                    $"Requires: {string.Join(", ", prereqNames)}", UIConstants.FontCaption, SporefrontColors.InkLight);
                 var prereqLE = prereqLabel.gameObject.AddComponent<LayoutElement>();
                 prereqLE.preferredHeight = 18;
             }
@@ -602,7 +608,7 @@ namespace Sporefront.Visual
             {
                 var bldgLabel = UIHelper.CreateLabel(nodeDetailContentRT,
                     $"Building: {buildingReq.Value.buildingType.DisplayName()} Lv.{buildingReq.Value.level}",
-                    11, SporefrontColors.InkLight);
+                    UIConstants.FontCaption, SporefrontColors.InkLight);
                 var bldgLE = bldgLabel.gameObject.AddComponent<LayoutElement>();
                 bldgLE.preferredHeight = 18;
             }
@@ -637,7 +643,7 @@ namespace Sporefront.Visual
 
                 var startBtn = UIHelper.CreateButton(nodeDetailContentRT, "Start Research",
                     canAfford ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
-                    canAfford ? UIHelper.HudTextColor : SporefrontColors.InkLight, 13, () =>
+                    canAfford ? UIHelper.HudTextColor : SporefrontColors.InkLight, UIConstants.FontSmall, () =>
                     {
                         OnStartResearch?.Invoke(capturedType);
                         selectedNode = null;
@@ -645,12 +651,12 @@ namespace Sporefront.Visual
                     });
                 startBtn.interactable = canAfford;
                 var startLE = startBtn.gameObject.AddComponent<LayoutElement>();
-                startLE.preferredHeight = 32;
+                startLE.preferredHeight = 34;
 
                 if (!canAfford)
                 {
                     var affordLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                        "Insufficient resources", 10, SporefrontColors.SporeRed,
+                        "Insufficient resources", UIConstants.FontCaption, SporefrontColors.SporeRed,
                         TextAnchor.MiddleCenter);
                     var affordLE = affordLabel.gameObject.AddComponent<LayoutElement>();
                     affordLE.preferredHeight = 16;

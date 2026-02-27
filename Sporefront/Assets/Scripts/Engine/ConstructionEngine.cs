@@ -33,7 +33,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -115,7 +115,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> UpdateConstruction(BuildingData building, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
             var changes = new List<StateChange>();
 
             // Look up owner's BuildingSpeed research bonus
@@ -498,19 +498,19 @@ namespace Sporefront.Engine
         public List<StateChange> StartUpgrade(Guid buildingID, Guid playerID)
         {
             if (gameState == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
             if (building == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var validation = CanStartUpgrade(buildingID, playerID);
             if (!validation.valid)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             // Deduct resources
             var upgradeCost = building.GetUpgradeCost();
@@ -557,15 +557,15 @@ namespace Sporefront.Engine
         public List<StateChange> StartDemolition(Guid buildingID, Guid playerID, int demolishers = 1)
         {
             if (gameState == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
             if (building == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var validation = CanStartDemolition(buildingID, playerID);
             if (!validation.valid)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             building.StartDemolition(gameState.currentTime, demolishers);
 

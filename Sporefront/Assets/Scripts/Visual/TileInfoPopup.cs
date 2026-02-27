@@ -26,8 +26,11 @@ namespace Sporefront.Visual
         public event Action<Guid> OnMoveRequested;       // entityID (army preferred, fallback villager)
         public event Action<Guid> OnEntrenchRequested;    // armyID
         public event Action<Guid> OnAttackRequested;      // armyID
-        public event Action<Guid, Guid> OnGatherRequested;  // villagerGroupID, resourcePointID
+        public event Action<Guid> OnGatherSelectionRequested;  // resourcePointID — opens GatherPanel
         public event Action<Guid> OnRetreatRequested;       // armyID
+        public event Action<Guid> OnTrainVillagerRequested;  // buildingID
+        public event Action<Guid, int> OnDeployVillagersRequested;  // buildingID, count
+        public event Action<Guid> OnUpgradeBuildingRequested;        // buildingID
 
         // ================================================================
         // State
@@ -62,11 +65,19 @@ namespace Sporefront.Visual
         private GameObject digInBtn;
         private GameObject attackBtn;
         private GameObject gatherBtn;
+        private GameObject trainBtn;
         private GameObject retreatBtn;
+
+        // Inline content action buttons
+        private GameObject deployBtn;
+        private Text deployBtnText;
+        private GameObject upgradeBtn;
+        private Text upgradeBtnText;
+        private Button upgradeBtnComponent;
 
         // Positioning constants
         private const float PopupWidth = 280f;
-        private const float SidebarWidth = 48f;
+        private const float SidebarWidth = 90f;
         private const float OffsetX = 60f;
         private const float OffsetY = 40f;
         private const float SafeTop = 75f;    // resource bar
@@ -112,6 +123,28 @@ namespace Sporefront.Visual
                 UIConstants.FontSubheader, true);
             buildingRow = CreateLabelRow(contentGO.transform, out buildingLabel,
                 UIConstants.FontBody, false);
+
+            // Inline action buttons below building info
+            deployBtn = CreateContentButton(contentGO.transform, "Deploy Villagers",
+                SporefrontColors.SporeGreen, out deployBtnText, () =>
+                {
+                    if (cachedState == null || !currentCoord.HasValue) return;
+                    var b = cachedState.GetBuilding(currentCoord.Value);
+                    if (b != null && b.ownerID.HasValue && b.ownerID.Value == localPlayerID
+                        && b.IsOperational && b.villagerGarrison > 0)
+                        OnDeployVillagersRequested?.Invoke(b.id, b.villagerGarrison);
+                });
+
+            upgradeBtn = CreateContentButton(contentGO.transform, "Upgrade",
+                SporefrontColors.SporeAmber, out upgradeBtnText, () =>
+                {
+                    if (cachedState == null || !currentCoord.HasValue) return;
+                    var b = cachedState.GetBuilding(currentCoord.Value);
+                    if (b != null && b.ownerID.HasValue && b.ownerID.Value == localPlayerID && b.CanUpgrade)
+                        OnUpgradeBuildingRequested?.Invoke(b.id);
+                });
+            upgradeBtnComponent = upgradeBtn.GetComponentInChildren<Button>();
+
             armyRow = CreateLabelRow(contentGO.transform, out armyLabel,
                 UIConstants.FontBody, false);
             villagerRow = CreateLabelRow(contentGO.transform, out villagerLabel,
@@ -156,21 +189,21 @@ namespace Sporefront.Visual
             sideVLG.childAlignment = TextAnchor.UpperCenter;
 
             // Create sidebar buttons
-            infoBtn = CreateSidebarButton(sidebar.transform, "i",
+            infoBtn = CreateSidebarButton(sidebar.transform, "Info",
                 SporefrontColors.ParchmentDark, () =>
                 {
                     if (currentCoord.HasValue)
                         OnInfoRequested?.Invoke(currentCoord.Value);
                 });
 
-            buildBtn = CreateSidebarButton(sidebar.transform, "B",
+            buildBtn = CreateSidebarButton(sidebar.transform, "Build",
                 SporefrontColors.SporeGreen, () =>
                 {
                     if (currentCoord.HasValue)
                         OnBuildRequested?.Invoke(currentCoord.Value);
                 });
 
-            moveBtn = CreateSidebarButton(sidebar.transform, "M",
+            moveBtn = CreateSidebarButton(sidebar.transform, "Move",
                 SporefrontColors.SporeTeal, () =>
                 {
                     var entityID = FindOwnedMoveableEntity();
@@ -178,7 +211,7 @@ namespace Sporefront.Visual
                         OnMoveRequested?.Invoke(entityID.Value);
                 });
 
-            digInBtn = CreateSidebarButton(sidebar.transform, "D",
+            digInBtn = CreateSidebarButton(sidebar.transform, "Dig In",
                 SporefrontColors.SporeAmber, () =>
                 {
                     var armyID = FindOwnedEntrenchableArmy();
@@ -186,7 +219,7 @@ namespace Sporefront.Visual
                         OnEntrenchRequested?.Invoke(armyID.Value);
                 });
 
-            attackBtn = CreateSidebarButton(sidebar.transform, "A",
+            attackBtn = CreateSidebarButton(sidebar.transform, "Attack",
                 SporefrontColors.SporeRed, () =>
                 {
                     var armyID = FindOwnedAttackableArmy();
@@ -194,15 +227,26 @@ namespace Sporefront.Visual
                         OnAttackRequested?.Invoke(armyID.Value);
                 });
 
-            gatherBtn = CreateSidebarButton(sidebar.transform, "G",
+            gatherBtn = CreateSidebarButton(sidebar.transform, "Gather",
                 SporefrontColors.SporeGreen, () =>
                 {
-                    var result = FindGatherableVillagerAndResource();
-                    if (result.HasValue)
-                        OnGatherRequested?.Invoke(result.Value.villagerID, result.Value.resourceID);
+                    if (cachedState == null || !currentCoord.HasValue) return;
+                    var rp = cachedState.GetResourcePoint(currentCoord.Value);
+                    if (rp != null && !rp.IsDepleted())
+                        OnGatherSelectionRequested?.Invoke(rp.id);
                 });
 
-            retreatBtn = CreateSidebarButton(sidebar.transform, "R",
+            trainBtn = CreateSidebarButton(sidebar.transform, "Train",
+                SporefrontColors.SporeGreen, () =>
+                {
+                    if (cachedState == null || !currentCoord.HasValue) return;
+                    var b = cachedState.GetBuilding(currentCoord.Value);
+                    if (b != null && b.ownerID.HasValue && b.ownerID.Value == localPlayerID
+                        && b.IsOperational && b.CanTrainVillagers())
+                        OnTrainVillagerRequested?.Invoke(b.id);
+                });
+
+            retreatBtn = CreateSidebarButton(sidebar.transform, "Retreat",
                 SporefrontColors.SporeRed, () =>
                 {
                     var armyID = FindOwnedRetreatingCandidate();
@@ -276,10 +320,41 @@ namespace Sporefront.Visual
                     : building.state.ToString();
                 buildingLabel.text = $"{building.buildingType.DisplayName()} Lv.{building.level} — {status}";
                 buildingRow.SetActive(true);
+
+                bool isOwned = building.ownerID.HasValue && building.ownerID.Value == localPlayerID;
+
+                // Deploy button
+                if (isOwned && building.IsOperational && building.villagerGarrison > 0)
+                {
+                    deployBtnText.text = $"Deploy Villagers ({building.villagerGarrison})";
+                    deployBtn.SetActive(true);
+                }
+                else
+                {
+                    deployBtn.SetActive(false);
+                }
+
+                // Upgrade button
+                if (isOwned && building.CanUpgrade)
+                {
+                    var cost = building.GetUpgradeCost();
+                    var player = gameState.GetPlayer(localPlayerID);
+                    bool canAfford = player != null && player.CanAfford(cost);
+                    int nextLevel = building.level + 1;
+                    upgradeBtnText.text = $"Upgrade to Lv.{nextLevel} ({UIHelper.FormatCost(cost)})";
+                    if (upgradeBtnComponent != null) upgradeBtnComponent.interactable = canAfford;
+                    upgradeBtn.SetActive(true);
+                }
+                else
+                {
+                    upgradeBtn.SetActive(false);
+                }
             }
             else
             {
                 buildingRow.SetActive(false);
+                deployBtn.SetActive(false);
+                upgradeBtn.SetActive(false);
             }
 
             // Armies
@@ -409,22 +484,21 @@ namespace Sporefront.Visual
             }
             attackBtn.SetActive(hasAttackable);
 
-            // Gather — tile has non-depleted resource and player has at least one idle villager
+            // Gather — tile has non-depleted resource and player has any villager groups
             bool canGather = false;
             var rp = gameState.GetResourcePoint(coord);
             if (rp != null && !rp.IsDepleted())
             {
                 var playerVillagers = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-                foreach (var vg in playerVillagers)
-                {
-                    if (vg.currentTask.IsIdle)
-                    {
-                        canGather = true;
-                        break;
-                    }
-                }
+                canGather = playerVillagers != null && playerVillagers.Count > 0;
             }
             gatherBtn.SetActive(canGather);
+
+            // Train — owned operational building that can train villagers
+            bool canTrain = building != null && building.ownerID.HasValue
+                && building.ownerID.Value == localPlayerID
+                && building.IsOperational && building.CanTrainVillagers();
+            trainBtn.SetActive(canTrain);
 
             // Retreat — owned army that is entrenched/entrenching/in-combat, not already retreating
             bool hasRetreatable = false;
@@ -573,34 +647,6 @@ namespace Sporefront.Visual
             return null;
         }
 
-        private (Guid villagerID, Guid resourceID)? FindGatherableVillagerAndResource()
-        {
-            if (cachedState == null || !currentCoord.HasValue) return null;
-            var coord = currentCoord.Value;
-
-            var rp = cachedState.GetResourcePoint(coord);
-            if (rp == null || rp.IsDepleted()) return null;
-
-            // Find nearest idle villager group owned by local player
-            var playerVillagers = cachedState.GetVillagerGroupsForPlayer(localPlayerID);
-            VillagerGroupData nearest = null;
-            int bestDist = int.MaxValue;
-            foreach (var vg in playerVillagers)
-            {
-                if (!vg.currentTask.IsIdle) continue;
-                int dist = vg.coordinate.Distance(coord);
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    nearest = vg;
-                }
-            }
-
-            if (nearest != null)
-                return (nearest.id, rp.id);
-            return null;
-        }
-
         private Guid? FindOwnedRetreatingCandidate()
         {
             if (cachedState == null || !currentCoord.HasValue) return null;
@@ -642,14 +688,27 @@ namespace Sporefront.Visual
             return row;
         }
 
+        private GameObject CreateContentButton(Transform parent, string text,
+            Color bgColor, out Text label, Action onClick)
+        {
+            var btn = UIHelper.CreateButton(parent, text,
+                bgColor, UIHelper.ButtonText, UIConstants.FontBody, onClick);
+            var le = btn.gameObject.AddComponent<LayoutElement>();
+            le.preferredHeight = 30f;
+            label = btn.GetComponentInChildren<Text>();
+            var go = btn.gameObject;
+            go.SetActive(false);
+            return go;
+        }
+
         private GameObject CreateSidebarButton(Transform parent, string text,
             Color bgColor, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
                 bgColor, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
-            le.preferredWidth = 40f;
-            le.preferredHeight = 40f;
+            le.preferredWidth = 82f;
+            le.preferredHeight = 32f;
             return btn.gameObject;
         }
     }

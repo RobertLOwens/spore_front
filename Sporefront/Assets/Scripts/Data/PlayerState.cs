@@ -221,7 +221,8 @@ namespace Sporefront.Data
 
         public void SetVisibleCoordinates(HashSet<HexCoordinate> coords)
         {
-            visibleCoordinates = coords;
+            visibleCoordinates.Clear();
+            visibleCoordinates.UnionWith(coords);
             exploredCoordinates.UnionWith(coords);
         }
 

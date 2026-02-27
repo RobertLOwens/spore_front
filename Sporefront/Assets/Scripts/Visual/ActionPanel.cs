@@ -122,6 +122,15 @@ namespace Sporefront.Visual
             OnCancelled?.Invoke();
         }
 
+        /// <summary>
+        /// Hides the build menu UI without changing CurrentMode or firing OnCancelled.
+        /// Used when transitioning to the builder select panel so the build preview stays visible.
+        /// </summary>
+        public void HideBuildMenu()
+        {
+            buildBackdrop.SetActive(false);
+        }
+
         // ================================================================
         // Target Mode Resolution
         // ================================================================
@@ -427,7 +436,7 @@ namespace Sporefront.Visual
                 buildBtn.onClick.AddListener(() =>
                 {
                     OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, capturedRotation);
-                    Cancel();
+                    HideBuildMenu();
                 });
             }
         }

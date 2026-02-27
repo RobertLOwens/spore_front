@@ -93,42 +93,164 @@ namespace Sporefront.AI
                 }
             }
 
-            MilitaryUnitType unitType;
+            var trainableUnits = GetTrainableUnitsForBuilding(building.buildingType);
+            if (trainableUnits.Count == 0) return null;
 
-            switch (building.buildingType)
+            var ownComposition = CalculateOwnComposition(playerID, gameState);
+            double gameTime = gameState.currentTime;
+
+            // Score each trainable unit and pick the best
+            MilitaryUnitType? bestUnit = null;
+            double bestScore = double.MinValue;
+
+            foreach (var unitType in trainableUnits)
+            {
+                var trainingCost = unitType.TrainingCost();
+                bool canAfford = true;
+                foreach (var kvp in trainingCost)
+                {
+                    if (!player.HasResource(kvp.Key, kvp.Value)) { canAfford = false; break; }
+                }
+                if (!canAfford) continue;
+
+                double score = ScoreUnitTraining(unitType, enemyAnalysis, ownComposition, player, gameState, playerID, gameTime);
+
+                // Small hash-based tiebreaker
+                score += (unitType.GetHashCode() & 0xFF) * 0.01;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestUnit = unitType;
+                }
+            }
+
+            if (!bestUnit.HasValue) return null;
+            return new AITrainMilitaryCommand(playerID, buildingID, bestUnit.Value, 1);
+        }
+
+        private List<MilitaryUnitType> GetTrainableUnitsForBuilding(BuildingType buildingType)
+        {
+            switch (buildingType)
             {
                 case BuildingType.Barracks:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.cavalryRatio > 0.35)
-                        unitType = MilitaryUnitType.Pikeman;
-                    else
-                        unitType = MilitaryUnitType.Swordsman;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Swordsman, MilitaryUnitType.Pikeman };
                 case BuildingType.ArcheryRange:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.infantryRatio > 0.4)
-                        unitType = MilitaryUnitType.Crossbow;
-                    else
-                        unitType = MilitaryUnitType.Archer;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Archer, MilitaryUnitType.Crossbow };
                 case BuildingType.Stable:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.rangedRatio > 0.4)
-                        unitType = MilitaryUnitType.Knight;
-                    else
-                        unitType = MilitaryUnitType.Scout;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Scout, MilitaryUnitType.Knight, MilitaryUnitType.HeavyCavalry };
                 case BuildingType.SiegeWorkshop:
-                    unitType = MilitaryUnitType.Mangonel;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Mangonel, MilitaryUnitType.Trebuchet };
                 default:
-                    return null;
+                    return new List<MilitaryUnitType>();
             }
+        }
 
-            var trainingCost = unitType.TrainingCost();
-            foreach (var kvp in trainingCost)
+        private Dictionary<UnitCategory, double> CalculateOwnComposition(Guid playerID, GameState gameState)
+        {
+            var result = new Dictionary<UnitCategory, double>
             {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
+                { UnitCategory.Infantry, 0 }, { UnitCategory.Ranged, 0 },
+                { UnitCategory.Cavalry, 0 }, { UnitCategory.Siege, 0 }
+            };
+
+            int totalUnits = 0;
+            foreach (var army in gameState.GetArmiesForPlayer(playerID))
+            {
+                var ratios = army.GetCategoryRatios();
+                int count = army.GetTotalUnits();
+                result[UnitCategory.Infantry] += ratios.infantry * count;
+                result[UnitCategory.Ranged] += ratios.ranged * count;
+                result[UnitCategory.Cavalry] += ratios.cavalry * count;
+                result[UnitCategory.Siege] += ratios.siege * count;
+                totalUnits += count;
             }
 
-            return new AITrainMilitaryCommand(playerID, buildingID, unitType, 1);
+            if (totalUnits > 0)
+            {
+                result[UnitCategory.Infantry] /= totalUnits;
+                result[UnitCategory.Ranged] /= totalUnits;
+                result[UnitCategory.Cavalry] /= totalUnits;
+                result[UnitCategory.Siege] /= totalUnits;
+            }
+
+            return result;
+        }
+
+        private double ScoreUnitTraining(MilitaryUnitType unitType, EnemyCompositionAnalysis? enemyAnalysis,
+            Dictionary<UnitCategory, double> ownComposition, PlayerState player, GameState gameState,
+            Guid playerID, double gameTime)
+        {
+            double score = 0;
+            var category = unitType.Category();
+
+            // Counter bonus: does this unit's category counter the enemy's dominant type?
+            if (enemyAnalysis.HasValue)
+            {
+                var enemy = enemyAnalysis.Value;
+                // Infantry counters Cavalry, Ranged counters Infantry, Cavalry counters Ranged
+                if (category == UnitCategory.Infantry && enemy.cavalryRatio > 0.3) score += 20.0;
+                if (category == UnitCategory.Ranged && enemy.infantryRatio > 0.3) score += 20.0;
+                if (category == UnitCategory.Cavalry && enemy.rangedRatio > 0.3) score += 20.0;
+                // Pikeman gets extra bonus vs cavalry
+                if (unitType == MilitaryUnitType.Pikeman && enemy.cavalryRatio > 0.25) score += 10.0;
+            }
+
+            // Diversity penalty/bonus
+            double ownRatio = 0;
+            ownComposition.TryGetValue(category, out ownRatio);
+            if (ownRatio > 0.6) score -= 15.0;
+            else if (ownRatio < 0.15) score += 10.0;
+
+            // Tech bonus: reward units we have research bonuses for
+            double techBonus = DamageCalculator.GetResearchDamageBonus(unitType, player);
+            score += Math.Min(10.0, techBonus * 5.0);
+
+            // Timing bonus
+            bool earlyGame = gameTime < 300.0;
+            if (earlyGame)
+            {
+                // Cheap units early
+                if (unitType == MilitaryUnitType.Swordsman || unitType == MilitaryUnitType.Archer || unitType == MilitaryUnitType.Pikeman)
+                    score += 8.0;
+            }
+            else
+            {
+                // Elite units late
+                if (unitType == MilitaryUnitType.Knight || unitType == MilitaryUnitType.HeavyCavalry ||
+                    unitType == MilitaryUnitType.Crossbow || unitType == MilitaryUnitType.Trebuchet)
+                    score += 8.0;
+            }
+
+            // Scout priority: encourage scouts early if under cap
+            if (unitType == MilitaryUnitType.Scout)
+            {
+                int scoutCount = CountScoutArmies(playerID, gameState);
+                if (scoutCount < GameConfig.AI.Scouting.MaxScouts && earlyGame)
+                    score += 25.0;
+                else if (scoutCount >= GameConfig.AI.Scouting.MaxScouts)
+                    score -= 30.0;
+            }
+
+            return score;
+        }
+
+        private int CountScoutArmies(Guid playerID, GameState gameState)
+        {
+            int count = 0;
+            foreach (var army in gameState.GetArmiesForPlayer(playerID))
+            {
+                if (IsScoutArmy(army)) count++;
+            }
+            return count;
+        }
+
+        private bool IsScoutArmy(ArmyData army)
+        {
+            int totalUnits = army.GetTotalUnits();
+            if (totalUnits == 0) return false;
+            int scoutCount = army.GetUnitCount(MilitaryUnitType.Scout);
+            return scoutCount > 0 && (double)scoutCount / totalUnits >= 0.5;
         }
 
         private IEngineCommand TryDeployArmy(Guid playerID, GameState gameState)
@@ -411,6 +533,83 @@ namespace Sporefront.AI
                 {
                     aiState.persistentAttackTargetID = null;
                     commands.Add(new AIMoveCommand(playerID, army.id, cityCenter.coordinate, true));
+                }
+            }
+
+            return commands;
+        }
+
+        // ================================================================
+        // Scouting Commands
+        // ================================================================
+
+        public List<IEngineCommand> GenerateScoutingCommands(AIPlayerState aiState, GameState gameState, double currentTime)
+        {
+            var commands = new List<IEngineCommand>();
+            var playerID = aiState.playerID;
+
+            var cityCenter = gameState.GetCityCenter(playerID);
+            if (cityCenter == null) return commands;
+
+            // Update known enemy bases from visible buildings
+            var visibleEnemyBuildings = gameState.GetVisibleEnemyBuildings(playerID);
+            foreach (var building in visibleEnemyBuildings)
+            {
+                if (building.buildingType == BuildingType.CityCenter)
+                {
+                    bool alreadyKnown = false;
+                    foreach (var known in aiState.knownEnemyBases)
+                    {
+                        if (known.Distance(building.coordinate) <= 2) { alreadyKnown = true; break; }
+                    }
+                    if (!alreadyKnown)
+                    {
+                        aiState.knownEnemyBases.Add(building.coordinate);
+                        aiState.enemyBaseFound = true;
+                        DebugLog.Log(string.Format("AI {0}: Found enemy base at ({1}, {2})", playerID, building.coordinate.q, building.coordinate.r));
+                    }
+                }
+            }
+
+            // Find scout armies
+            var scoutArmies = gameState.GetArmiesForPlayer(playerID)
+                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null)
+                .ToList();
+
+            foreach (var scout in scoutArmies)
+            {
+                // Check for nearby enemy armies - retreat if threatened
+                var nearbyEnemies = gameState.GetEnemyArmies(scout.coordinate, 3, playerID);
+                if (nearbyEnemies.Count > 0)
+                {
+                    commands.Add(new AIMoveCommand(playerID, scout.id, cityCenter.coordinate, true));
+                    continue;
+                }
+
+                // Choose scouting target
+                HexCoordinate? target = null;
+
+                if (!aiState.enemyBaseFound)
+                {
+                    // Explore map edges/unexplored areas
+                    target = gameState.FindNearestUnexploredCoordinate(scout.coordinate, playerID, GameConfig.AI.Limits.ScoutRange);
+                }
+                else if (aiState.knownEnemyBases.Count > 0)
+                {
+                    // Patrol around known enemy base
+                    var enemyBase = aiState.knownEnemyBases[0];
+                    var patrolCoords = enemyBase.CoordinatesInRing(GameConfig.AI.Scouting.PatrolRadius);
+                    if (patrolCoords.Count > 0)
+                    {
+                        // Pick a random patrol point
+                        int idx = Math.Abs(scout.id.GetHashCode() + (int)(currentTime * 10)) % patrolCoords.Count;
+                        target = patrolCoords[idx];
+                    }
+                }
+
+                if (target.HasValue)
+                {
+                    commands.Add(new AIMoveCommand(playerID, scout.id, target.Value, true));
                 }
             }
 

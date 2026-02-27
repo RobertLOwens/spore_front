@@ -118,6 +118,52 @@ namespace Sporefront.Data
         public double cityCenterValue = 100.0;
 
         // ================================================================
+        // Attack Timeout Parameters (A)
+        // ================================================================
+
+        public double attackTimeoutDuration = 60.0;
+
+        // ================================================================
+        // Economy Randomization Parameters (B)
+        // ================================================================
+
+        public double economyRandomizationWeight = 0.2;
+
+        // ================================================================
+        // Composition Diversity Parameters (C)
+        // ================================================================
+
+        public double compositionDiversityThreshold = 0.6;
+        public double compositionDiversityBonus = 15.0;
+        public double compositionTechBonus = 10.0;
+        public double compositionTimingEarlyThreshold = 300.0;
+
+        // ================================================================
+        // Proactive Defense Parameters (D)
+        // ================================================================
+
+        public int proactiveDefenseWoodThreshold = 300;
+        public int proactiveDefenseStoneThreshold = 250;
+        public double earlyTowerGameTime = 300.0;
+
+        // ================================================================
+        // Scouting Parameters (E)
+        // ================================================================
+
+        public int maxScouts = 2;
+        public int scoutPatrolRadius = 6;
+        public double scoutEarlyGameThreshold = 300.0;
+
+        // ================================================================
+        // Research Planning Parameters (F)
+        // ================================================================
+
+        public double researchSynergyWeight = 10.0;
+        public double researchCounterWeight = 12.0;
+        public double researchCompositionWeight = 8.0;
+        public double researchBreadthBonus = 5.0;
+
+        // ================================================================
         // Default Genome
         // ================================================================
 

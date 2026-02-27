@@ -1,6 +1,6 @@
 // ============================================================================
 // FILE: Visual/UpgradeVillagerSelectPanel.cs
-// PURPOSE: Left-side slide-out panel for selecting a villager group to dispatch
+// PURPOSE: Centered modal panel for selecting a villager group to dispatch
 //          as upgrader. Shows all villager groups sorted by distance with
 //          walking time estimates and current task info.
 // ============================================================================
@@ -29,8 +29,10 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject panel;
+        private GameObject backdrop;
+        private GameObject modalPanel;
         private RectTransform contentRT;
+        private Text infoLabel;
         private Guid localPlayerID;
 
         private Guid pendingBuildingID;
@@ -49,42 +51,61 @@ namespace Sporefront.Visual
         {
             localPlayerID = playerID;
 
-            // Left-anchored slide-out panel, 280px wide
-            panel = UIHelper.CreatePanel(canvasTransform, "UpgradeVillagerSelectPanel", UIHelper.PanelBg);
-            var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 0.15f);
-            rt.anchorMax = new Vector2(0, 0.85f);
-            rt.pivot = new Vector2(0, 0.5f);
-            rt.offsetMin = new Vector2(0, 0);
-            rt.offsetMax = new Vector2(280, 0);
+            // Full-screen backdrop with click-to-dismiss
+            backdrop = UIHelper.CreatePanel(canvasTransform, "UpgradeVillagerBackdrop",
+                new Color(0, 0, 0, 0.4f));
+            var bdRT = backdrop.GetComponent<RectTransform>();
+            UIHelper.StretchFull(bdRT);
+            var bdBtn = backdrop.AddComponent<Button>();
+            bdBtn.transition = Selectable.Transition.None;
+            bdBtn.onClick.AddListener(Hide);
 
-            // ScrollView
-            var scroll = UIHelper.CreateScrollView(panel.transform, "UpgradeVillagerScroll", out contentRT);
+            // Centered modal panel
+            modalPanel = UIHelper.CreatePanel(backdrop.transform, "UpgradeVillagerModal", UIHelper.PanelBg);
+            var rt = modalPanel.GetComponent<RectTransform>();
+            UIHelper.SetFixedSize(rt, UIConstants.ModalSmallW, UIConstants.ModalSmallH);
+
+            // Header "Select Upgrader" — fixed at top
+            var header = UIHelper.CreateLabel(modalPanel.transform, "Select Upgrader",
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleCenter, true);
+            var headerRT = header.GetComponent<RectTransform>();
+            headerRT.anchorMin = new Vector2(0, 1);
+            headerRT.anchorMax = new Vector2(1, 1);
+            headerRT.pivot = new Vector2(0.5f, 1);
+            headerRT.offsetMin = new Vector2(12, -40);
+            headerRT.offsetMax = new Vector2(-12, -6);
+
+            // Building info label — fixed below header
+            infoLabel = UIHelper.CreateLabel(modalPanel.transform, "",
+                UIConstants.FontSmall, SporefrontColors.InkLight);
+            var infoRT = infoLabel.GetComponent<RectTransform>();
+            infoRT.anchorMin = new Vector2(0, 1);
+            infoRT.anchorMax = new Vector2(1, 1);
+            infoRT.pivot = new Vector2(0.5f, 1);
+            infoRT.offsetMin = new Vector2(12, -62);
+            infoRT.offsetMax = new Vector2(-12, -42);
+
+            // Scroll area for villager list
+            var scroll = UIHelper.CreateScrollView(modalPanel.transform, "UpgradeVillagerScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
-            UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 44);
-            scrollRT.offsetMax = Vector2.zero;
+            scrollRT.anchorMin = Vector2.zero;
+            scrollRT.anchorMax = Vector2.one;
+            scrollRT.offsetMin = new Vector2(0, 52); // Space for close button
+            scrollRT.offsetMax = new Vector2(0, -64); // Space for header + info label
 
-            // Bottom cancel button
-            var btnRow = UIHelper.CreatePanel(panel.transform, "ButtonRow", Color.clear);
-            var btnRowRT = btnRow.GetComponent<RectTransform>();
-            btnRowRT.anchorMin = Vector2.zero;
-            btnRowRT.anchorMax = new Vector2(1, 0);
-            btnRowRT.pivot = new Vector2(0.5f, 0);
-            btnRowRT.offsetMin = new Vector2(8, 6);
-            btnRowRT.offsetMax = new Vector2(-8, 42);
+            // Close button at bottom
+            var closeBtn = UIHelper.CreateButton(modalPanel.transform, "Close",
+                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                Hide);
+            var closeBtnRT = closeBtn.GetComponent<RectTransform>();
+            closeBtnRT.anchorMin = new Vector2(0, 0);
+            closeBtnRT.anchorMax = new Vector2(1, 0);
+            closeBtnRT.pivot = new Vector2(0.5f, 0);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 48);
 
-            var btnRowHLG = btnRow.AddComponent<HorizontalLayoutGroup>();
-            btnRowHLG.spacing = 8f;
-            btnRowHLG.childForceExpandWidth = true;
-            btnRowHLG.childForceExpandHeight = true;
-            btnRowHLG.childControlWidth = true;
-            btnRowHLG.childControlHeight = true;
-
-            var cancelBtn = UIHelper.CreateButton(btnRow.transform, "Cancel",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
-
-            panel.SetActive(false);
+            backdrop.SetActive(false);
         }
 
         public void UpdateLocalPlayerID(Guid playerID)
@@ -103,22 +124,22 @@ namespace Sporefront.Visual
             pendingCoordinate = coordinate;
             pendingLevel = currentLevel;
             Rebuild(gameState);
-            panel.SetActive(true);
+            backdrop.SetActive(true);
         }
 
         public void Hide()
         {
-            panel.SetActive(false);
+            backdrop.SetActive(false);
             OnClose?.Invoke();
         }
 
         public void Refresh(GameState gameState)
         {
-            if (!panel.activeSelf) return;
+            if (!backdrop.activeSelf) return;
             Rebuild(gameState);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild
@@ -126,27 +147,14 @@ namespace Sporefront.Visual
 
         private void Rebuild(GameState gameState)
         {
-            // Clear
+            // Update info label
+            int nextLevel = pendingLevel + 1;
+            if (infoLabel != null)
+                infoLabel.text = $"  {pendingBuildingType.DisplayName()} Lv.{pendingLevel} -> Lv.{nextLevel} at ({pendingCoordinate.q},{pendingCoordinate.r})";
+
+            // Clear scroll content
             for (int i = contentRT.childCount - 1; i >= 0; i--)
                 Destroy(contentRT.GetChild(i).gameObject);
-
-            // Header
-            var header = UIHelper.CreateLabel(contentRT,
-                $"Select Upgrader",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleCenter, true);
-            var headerLE = header.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 28;
-
-            // Building info
-            int nextLevel = pendingLevel + 1;
-            var infoLabel = UIHelper.CreateLabel(contentRT,
-                $"  {pendingBuildingType.DisplayName()} Lv.{pendingLevel} -> Lv.{nextLevel} at ({pendingCoordinate.q},{pendingCoordinate.r})",
-                12, SporefrontColors.InkLight);
-            var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
-            infoLE.preferredHeight = 20;
-
-            UIHelper.CreateDivider(contentRT);
 
             // Villager group list
             BuildVillagerGroupList(gameState);
@@ -162,15 +170,15 @@ namespace Sporefront.Visual
                 UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 22;
+            sectionLE.preferredHeight = 28;
 
             var groups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
             if (groups == null || groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No villager groups available", 12, SporefrontColors.InkFaded);
+                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.InkFaded);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
-                emptyLE.preferredHeight = 20;
+                emptyLE.preferredHeight = 24;
                 return;
             }
 
@@ -195,42 +203,42 @@ namespace Sporefront.Visual
 
                 var row = UIHelper.CreatePanel(contentRT, "VillagerRow", Color.clear);
                 var rowLE = row.AddComponent<LayoutElement>();
-                rowLE.preferredHeight = isBusy ? 72 : 56;
+                rowLE.preferredHeight = isBusy ? 100 : 80;
 
                 var vlg = row.AddComponent<VerticalLayoutGroup>();
-                vlg.spacing = 2;
-                vlg.padding = new RectOffset(8, 8, 2, 2);
+                vlg.spacing = 4;
+                vlg.padding = new RectOffset(10, 10, 4, 4);
                 vlg.childForceExpandWidth = true;
                 vlg.childForceExpandHeight = false;
 
                 // Name + count
-                var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                var nameRow = UIHelper.CreateHorizontalRow(row.transform, 26f, 4f);
                 var nameLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{group.name} ({group.villagerCount})", 12,
+                    $"{group.name} ({group.villagerCount})", UIConstants.FontBody,
                     isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.flexibleWidth = 1;
 
                 var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{distance} tiles", 11, SporefrontColors.InkLight);
+                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.InkLight);
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
-                distLE.preferredWidth = 55;
+                distLE.preferredWidth = 70;
 
                 // Task + walk time
-                var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                var infoRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
                 var taskLabel = UIHelper.CreateLabel(infoRow.transform,
-                    taskDesc, 11,
+                    taskDesc, UIConstants.FontSmall,
                     isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
                 var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                    walkTimeStr, 11, SporefrontColors.InkLight);
+                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.InkLight);
                 var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
-                walkLE.preferredWidth = 55;
+                walkLE.preferredWidth = 70;
 
                 // Action row
-                var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+                var actionRow = UIHelper.CreateHorizontalRow(row.transform, 30f, 4f);
 
                 var capturedGroupID = group.id;
                 var capturedBuildingID = pendingBuildingID;
@@ -239,7 +247,7 @@ namespace Sporefront.Visual
                 {
                     // Warning label for busy villagers
                     var warnLabel = UIHelper.CreateLabel(actionRow.transform,
-                        $"Will cancel {taskDesc}", 10, SporefrontColors.SporeAmber);
+                        $"Will cancel {taskDesc}", UIConstants.FontCaption, SporefrontColors.SporeAmber);
                     var warnLE = warnLabel.gameObject.AddComponent<LayoutElement>();
                     warnLE.flexibleWidth = 1;
                 }
@@ -254,14 +262,14 @@ namespace Sporefront.Visual
 
                 Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.SporeGreen;
                 var selectBtn = UIHelper.CreateButton(actionRow.transform, "Select",
-                    btnColor, UIHelper.HudTextColor, 11, () =>
+                    btnColor, UIHelper.HudTextColor, UIConstants.FontSmall, () =>
                     {
                         OnVillagerSelected?.Invoke(capturedGroupID, capturedBuildingID);
                         Hide();
                     });
                 var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 60;
-                btnLE.preferredHeight = 24;
+                btnLE.preferredWidth = 85;
+                btnLE.preferredHeight = 30;
             }
         }
     }

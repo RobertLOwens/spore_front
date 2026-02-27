@@ -120,11 +120,14 @@ namespace Sporefront.Engine
         public override int Height => _height;
 
         private readonly int startPadding;
-        private readonly int startingResourceRadius = 5;
+        private readonly int startingResourceRadius = 7;
         private readonly int neutralResourceExclusionRadius = 10;
 
         private SeededRandom rng;
         public ArabiaMapConfig config;
+
+        // Cached starting positions — avoids RNG drift when called multiple times
+        private List<PlayerStartPosition> cachedStartPositions;
 
         // ================================================================
         // Initialization
@@ -174,14 +177,30 @@ namespace Sporefront.Engine
 
         public override List<PlayerStartPosition> GetStartingPositions()
         {
-            var player1Pos = new HexCoordinate(startPadding, startPadding);
-            var player2Pos = new HexCoordinate(Width - startPadding - 1, Height - startPadding - 1);
+            if (cachedStartPositions != null) return cachedStartPositions;
 
-            return new List<PlayerStartPosition>
+            int pad = startPadding;
+            int w = Width;
+            int h = Height;
+
+            // 4 possible diagonal spawn pair configurations
+            var spawnPairs = new (HexCoordinate p1, HexCoordinate p2)[]
             {
-                new PlayerStartPosition(player1Pos, 0),
-                new PlayerStartPosition(player2Pos, 1)
+                (new HexCoordinate(pad, pad), new HexCoordinate(w - pad - 1, h - pad - 1)),         // top-left vs bottom-right
+                (new HexCoordinate(w - pad - 1, pad), new HexCoordinate(pad, h - pad - 1)),         // top-right vs bottom-left
+                (new HexCoordinate(pad, h - pad - 1), new HexCoordinate(w - pad - 1, pad)),         // bottom-left vs top-right
+                (new HexCoordinate(w - pad - 1, h - pad - 1), new HexCoordinate(pad, pad)),         // bottom-right vs top-left
             };
+
+            int choice = rng.NextInt(0, 3);
+            var chosen = spawnPairs[choice];
+
+            cachedStartPositions = new List<PlayerStartPosition>
+            {
+                new PlayerStartPosition(chosen.p1, 0),
+                new PlayerStartPosition(chosen.p2, 1)
+            };
+            return cachedStartPositions;
         }
 
         public override List<ResourcePlacement> GenerateStartingResources(HexCoordinate position)
@@ -189,14 +208,16 @@ namespace Sporefront.Engine
             var placements = new List<ResourcePlacement>();
             var usedCoordinates = new HashSet<HexCoordinate> { position };
 
-            // Get all valid coordinates within starting radius (excluding center)
+            // Get all valid coordinates within starting radius, excluding a 3-tile gap around center
+            int minResourceDistance = 3;
             var availableCoords = new List<HexCoordinate>();
             for (int q = -startingResourceRadius; q <= startingResourceRadius; q++)
             {
                 for (int r = -startingResourceRadius; r <= startingResourceRadius; r++)
                 {
                     var coord = new HexCoordinate(position.q + q, position.r + r);
-                    if (coord.Distance(position) <= startingResourceRadius && !coord.Equals(position))
+                    int dist = coord.Distance(position);
+                    if (dist >= minResourceDistance && dist <= startingResourceRadius)
                     {
                         availableCoords.Add(coord);
                     }
@@ -256,8 +277,8 @@ namespace Sporefront.Engine
                 usedCoordinates.Add(placement.coordinate);
             }
 
-            // Place 3-4 woodlines (tree clusters) within 5 tile radius
-            int woodlineCount = rng.NextInt(3, 4);
+            // Place 4-6 woodlines (tree clusters) within starting radius
+            int woodlineCount = rng.NextInt(4, 6);
             for (int i = 0; i < woodlineCount; i++)
             {
                 int woodlineSize = rng.NextInt(3, 5);

@@ -38,6 +38,9 @@ namespace Sporefront.Commands
                 if (army.isInCombat)
                     return EngineCommandResult.Failure("Army is currently in combat");
 
+                if (army.isStranded)
+                    return EngineCommandResult.Failure("Army is stranded — build a home base first");
+
                 // Check army has a commander
                 if (!army.commanderID.HasValue)
                     return EngineCommandResult.Failure("Army requires a commander to move");
@@ -84,6 +87,34 @@ namespace Sporefront.Commands
                 }
 
                 HexCoordinate fromCoordinate = army.coordinate;
+
+                // Snap-to-nearest-tile: if army is mid-move and past halfway, advance to next tile
+                if (army.currentPath != null && army.pathIndex < army.currentPath.Count
+                    && army.movementProgress >= 0.5)
+                {
+                    HexCoordinate snapTarget = army.currentPath[army.pathIndex];
+                    army.coordinate = snapTarget;
+                    state.mapData.UpdateArmyPosition(army.id, snapTarget);
+                    changeBuilder.Add(new ArmyMovedChange
+                    {
+                        armyID = army.id,
+                        from = fromCoordinate,
+                        to = snapTarget,
+                        path = new List<HexCoordinate>()
+                    });
+                    fromCoordinate = snapTarget;
+                }
+                army.movementProgress = 0.0;
+
+                // If army snapped to the destination itself, short-circuit
+                if (army.coordinate.Equals(destination))
+                {
+                    army.currentPath = null;
+                    army.pathIndex = 0;
+                    army.movementSpeed = 0.0;
+                    army.pendingAttackTarget = null;
+                    return EngineCommandResult.Success(changeBuilder.Build().changes);
+                }
 
                 // Cancel entrenchment if entrenching or entrenched
                 if (army.isEntrenching || army.isEntrenched)

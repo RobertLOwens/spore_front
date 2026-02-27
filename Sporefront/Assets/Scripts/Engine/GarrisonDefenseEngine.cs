@@ -61,6 +61,7 @@ namespace Sporefront.Engine
             var armiesUnderFireThisTick = new HashSet<Guid>();
 
             var aggregatedAttacks = new Dictionary<Guid, AggregatedAttack>();
+            var buildingCountPerTarget = new Dictionary<Guid, int>();
 
             foreach (var building in state.buildings.Values)
             {
@@ -107,6 +108,10 @@ namespace Sporefront.Engine
 
                 if (pierceDamage > 0 || bludgeonDamage > 0)
                 {
+                    int currentCount = buildingCountPerTarget.ContainsKey(target.id) ? buildingCountPerTarget[target.id] : 0;
+                    if (currentCount >= GameConfig.GarrisonDefense.MaxBuildingsPerTarget) continue;
+                    buildingCountPerTarget[target.id] = currentCount + 1;
+
                     armiesUnderFireThisTick.Add(target.id);
 
                     if (aggregatedAttacks.ContainsKey(target.id))

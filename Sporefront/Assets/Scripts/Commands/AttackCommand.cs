@@ -37,8 +37,12 @@ namespace Sporefront.Commands
                 return EngineCommandResult.Failure("You don't own this army");
 
             // Check army is not in combat
-            if (army.isInCombat || GameEngine.Instance.combatEngine.IsInCombat(armyID))
+            if (army.isInCombat)
                 return EngineCommandResult.Failure("Army is currently in combat");
+
+            // Check army is not stranded
+            if (army.isStranded)
+                return EngineCommandResult.Failure("Army is stranded — build a home base first");
 
             // Check army has a commander
             if (!army.commanderID.HasValue)

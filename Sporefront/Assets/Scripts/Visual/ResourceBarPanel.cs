@@ -16,6 +16,21 @@ namespace Sporefront.Visual
     public class ResourceBarPanel : MonoBehaviour
     {
         // ================================================================
+        // Cached color hex strings (avoid per-frame ColorUtility calls)
+        // ================================================================
+
+        private static string cachedAmberHex;
+        private static string cachedRedHex;
+        private static string cachedNeutralHex;
+
+        private static string AmberHex => cachedAmberHex ??
+            (cachedAmberHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber));
+        private static string RedHex => cachedRedHex ??
+            (cachedRedHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed));
+        private static string NeutralHex => cachedNeutralHex ??
+            (cachedNeutralHex = ColorUtility.ToHtmlStringRGB(UIHelper.HudTextColor));
+
+        // ================================================================
         // Events
         // ================================================================
 
@@ -142,10 +157,10 @@ namespace Sporefront.Visual
             var player = gameState.GetPlayer(localPlayerID);
             if (player == null) return;
 
-            double foodConsumption = gameState.GetFoodConsumptionRate(localPlayerID).rate;
+            var foodInfo = gameState.GetFoodConsumptionRate(localPlayerID);
 
             UpdateResourceLabel(woodLabel, player, ResourceType.Wood);
-            UpdateResourceLabel(foodLabel, player, ResourceType.Food, foodConsumption);
+            UpdateResourceLabel(foodLabel, player, ResourceType.Food, foodInfo);
             UpdateResourceLabel(stoneLabel, player, ResourceType.Stone);
             UpdateResourceLabel(oreLabel, player, ResourceType.Ore);
 
@@ -359,31 +374,25 @@ namespace Sporefront.Visual
         }
 
         private void UpdateResourceLabel(Text label, PlayerState player, ResourceType type,
-            double foodConsumption = 0)
+            GameState.FoodConsumptionInfo? foodInfo = null)
         {
             int amount = player.GetResource(type);
             double rate = player.GetCollectionRate(type);
             string name = type.DisplayName();
 
-            string amberHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber);
-            string redHex = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed);
-            string neutralHex = ColorUtility.ToHtmlStringRGB(UIHelper.HudTextColor);
+            // For food, show net rate (gather - adjusted consumption)
+            if (type == ResourceType.Food && foodInfo.HasValue)
+                rate -= foodInfo.Value.adjustedRate;
 
-            // Always show gather rate with appropriate color
             string rateStr;
             if (rate > 0.01)
-                rateStr = $" <color=#{amberHex}>+{rate:F1}</color>";
+                rateStr = $" <color=#{AmberHex}>+{rate:F1}</color>";
             else if (rate < -0.01)
-                rateStr = $" <color=#{redHex}>{rate:F1}</color>";
+                rateStr = $" <color=#{RedHex}>{rate:F1}</color>";
             else
-                rateStr = $" <color=#{neutralHex}>+0.0</color>";
+                rateStr = $" <color=#{NeutralHex}>+0.0</color>";
 
-            // For food, append consumption rate
-            string consumptionStr = "";
-            if (type == ResourceType.Food && foodConsumption > 0.01)
-                consumptionStr = $" <color=#{redHex}>-{foodConsumption:F1}</color>";
-
-            label.text = $"{name} {amount}{rateStr}{consumptionStr}";
+            label.text = $"{name} {amount}{rateStr}";
             label.supportRichText = true;
         }
     }

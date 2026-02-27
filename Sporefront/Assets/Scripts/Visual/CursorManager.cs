@@ -13,7 +13,8 @@ namespace Sporefront.Visual
         Default,
         Move,
         Attack,
-        Gather
+        Gather,
+        Hunt
     }
 
     public static class CursorManager
@@ -24,6 +25,7 @@ namespace Sporefront.Visual
         private static Texture2D moveCursor;
         private static Texture2D attackCursor;
         private static Texture2D gatherCursor;
+        private static Texture2D huntCursor;
 
         // ================================================================
         // Public API
@@ -47,6 +49,10 @@ namespace Sporefront.Visual
                 case CursorType.Gather:
                     EnsureGatherCursor();
                     Cursor.SetCursor(gatherCursor, new Vector2(16, 16), CursorMode.Auto);
+                    break;
+                case CursorType.Hunt:
+                    EnsureHuntCursor();
+                    Cursor.SetCursor(huntCursor, new Vector2(16, 16), CursorMode.Auto);
                     break;
                 default:
                     Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
@@ -163,6 +169,53 @@ namespace Sporefront.Visual
 
             gatherCursor.SetPixels(pixels);
             gatherCursor.Apply();
+        }
+
+        private static void EnsureHuntCursor()
+        {
+            if (huntCursor != null) return;
+            huntCursor = new Texture2D(Size, Size, TextureFormat.RGBA32, false);
+            huntCursor.filterMode = FilterMode.Point;
+            var pixels = new Color[Size * Size];
+
+            Color red = SporefrontColors.SporeRed;
+            Color outline = SporefrontColors.InkDark;
+
+            // Crosshair circle
+            DrawCircleOutline(pixels, 16, 16, 10, outline, 2);
+            DrawCircleOutline(pixels, 16, 16, 9, red, 1);
+
+            // Crosshair lines (horizontal)
+            DrawLine(pixels, 2, 16, 10, 16, outline, 2);
+            DrawLine(pixels, 3, 16, 9, 16, red, 1);
+            DrawLine(pixels, 22, 16, 30, 16, outline, 2);
+            DrawLine(pixels, 23, 16, 29, 16, red, 1);
+
+            // Crosshair lines (vertical)
+            DrawLine(pixels, 16, 2, 16, 10, outline, 2);
+            DrawLine(pixels, 16, 3, 16, 9, red, 1);
+            DrawLine(pixels, 16, 22, 16, 30, outline, 2);
+            DrawLine(pixels, 16, 23, 16, 29, red, 1);
+
+            // Center dot
+            FillCircle(pixels, 16, 16, 2, outline);
+            FillCircle(pixels, 16, 16, 1, red);
+
+            huntCursor.SetPixels(pixels);
+            huntCursor.Apply();
+        }
+
+        private static void DrawCircleOutline(Color[] pixels, int cx, int cy, int r, Color color, int thickness)
+        {
+            for (int y = cy - r - thickness; y <= cy + r + thickness; y++)
+            {
+                for (int x = cx - r - thickness; x <= cx + r + thickness; x++)
+                {
+                    float dist = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+                    if (dist >= r - thickness * 0.5f && dist <= r + thickness * 0.5f)
+                        SetPixelSafe(pixels, x, y, color);
+                }
+            }
         }
 
         // ================================================================

@@ -131,10 +131,30 @@ namespace Sporefront.AI
         public double lastEnemyAnalysisTime;
         public HexCoordinate? pendingArmyConvergence;
 
+        // Attack timeout tracking (A)
+        public double attackStateEnteredTime;
+        public double lastAttackProgressTime;
+        public double lastKnownEnemyStrength;
+
+        // Economy randomization (B)
+        public System.Random economyRng;
+
+        // Proactive defense tracking (D)
+        public double previousThreatLevel;
+        public int threatRisingCount;
+
+        // Scouting (E)
+        public bool enemyBaseFound;
+
+        // Research inference (F)
+        public HashSet<string> inferredEnemyResearch = new HashSet<string>();
+        public double lastInferredResearchTime;
+
         public AIPlayerState(Guid playerID, AIDifficulty difficulty = AIDifficulty.Medium)
         {
             this.playerID = playerID;
             this.difficulty = difficulty;
+            this.economyRng = new System.Random(playerID.GetHashCode());
         }
     }
 

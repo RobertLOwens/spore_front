@@ -34,6 +34,12 @@ namespace Sporefront.Visual
         private RectTransform contentRT;
         private Guid localPlayerID;
 
+        // Throttled rebuild
+        private bool isDirty;
+        private float lastRebuildTime;
+        private const float RebuildInterval = 0.5f;
+        private GameState cachedGameState;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -99,6 +105,9 @@ namespace Sporefront.Visual
 
         public void Show(GameState gameState)
         {
+            cachedGameState = gameState;
+            lastRebuildTime = Time.unscaledTime;
+            isDirty = false;
             Rebuild(gameState);
             backdrop.SetActive(true);
         }
@@ -112,10 +121,20 @@ namespace Sporefront.Visual
         public void Refresh(GameState gameState)
         {
             if (!IsVisible) return;
-            Rebuild(gameState);
+            cachedGameState = gameState;
+            isDirty = true;
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        private void Update()
+        {
+            if (!isDirty || !IsVisible || cachedGameState == null) return;
+            if (Time.unscaledTime - lastRebuildTime < RebuildInterval) return;
+            isDirty = false;
+            lastRebuildTime = Time.unscaledTime;
+            Rebuild(cachedGameState);
+        }
 
         // ================================================================
         // Rebuild

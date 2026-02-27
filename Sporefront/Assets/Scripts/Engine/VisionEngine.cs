@@ -35,6 +35,14 @@ namespace Sporefront.Engine
         private int baseVillagerVisionRange = GameConfig.Vision.BaseVillagerRange;
         private Dictionary<BuildingType, int> buildingVisionRanges = GameConfig.Vision.BuildingRanges;
 
+        // Reusable collections to reduce GC pressure
+        private HashSet<HexCoordinate> reusableVisibleCoords = new HashSet<HexCoordinate>();
+        private HashSet<HexCoordinate> reusablePreviousVisible = new HashSet<HexCoordinate>();
+        private HashSet<HexCoordinate> reusableNewlyVisible = new HashSet<HexCoordinate>();
+        private HashSet<HexCoordinate> reusableNewlyHidden = new HashSet<HexCoordinate>();
+        private List<HexCoordinate> reusableRing = new List<HexCoordinate>();
+        private List<HexCoordinate> reusablePath = new List<HexCoordinate>();
+
         // Setup
 
         public void Setup(GameState gameState)
@@ -46,26 +54,38 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
             // Update vision for all players
             foreach (var player in gameState.players.Values)
             {
-                var visibleCoords = CalculateVisibleCoordinates(player.id, gameState);
-                var previousVisible = new HashSet<HexCoordinate>(player.visibleCoordinates);
+                reusableVisibleCoords.Clear();
+                CalculateVisibleCoordinates(player.id, gameState, reusableVisibleCoords);
 
-                player.SetVisibleCoordinates(visibleCoords);
+                reusablePreviousVisible.Clear();
+                foreach (var coord in player.visibleCoordinates)
+                    reusablePreviousVisible.Add(coord);
+
+                player.SetVisibleCoordinates(reusableVisibleCoords);
 
                 // Generate changes for newly visible/hidden coordinates
-                var newlyVisible = new HashSet<HexCoordinate>(visibleCoords);
-                newlyVisible.ExceptWith(previousVisible);
+                reusableNewlyVisible.Clear();
+                foreach (var coord in reusableVisibleCoords)
+                {
+                    if (!reusablePreviousVisible.Contains(coord))
+                        reusableNewlyVisible.Add(coord);
+                }
 
-                var newlyHidden = new HashSet<HexCoordinate>(previousVisible);
-                newlyHidden.ExceptWith(visibleCoords);
+                reusableNewlyHidden.Clear();
+                foreach (var coord in reusablePreviousVisible)
+                {
+                    if (!reusableVisibleCoords.Contains(coord))
+                        reusableNewlyHidden.Add(coord);
+                }
 
-                foreach (var coord in newlyVisible)
+                foreach (var coord in reusableNewlyVisible)
                 {
                     changes.Add(new FogOfWarUpdatedChange
                     {
@@ -75,7 +95,7 @@ namespace Sporefront.Engine
                     });
                 }
 
-                foreach (var coord in newlyHidden)
+                foreach (var coord in reusableNewlyHidden)
                 {
                     // Check if it's now explored (was visible) or unexplored
                     string visibility = player.IsExplored(coord) ? "explored" : "unexplored";
@@ -93,10 +113,8 @@ namespace Sporefront.Engine
 
         // Vision Calculation
 
-        private HashSet<HexCoordinate> CalculateVisibleCoordinates(Guid playerID, GameState state)
+        private void CalculateVisibleCoordinates(Guid playerID, GameState state, HashSet<HexCoordinate> visibleCoords)
         {
-            var visibleCoords = new HashSet<HexCoordinate>();
-
             // Vision from buildings
             foreach (var building in state.GetBuildingsForPlayer(playerID))
             {
@@ -109,8 +127,7 @@ namespace Sporefront.Engine
                 // Add vision from all coordinates the building occupies
                 foreach (var occupiedCoord in building.OccupiedCoordinates)
                 {
-                    var coords = GetCoordinatesInRange(occupiedCoord, range, state);
-                    visibleCoords.UnionWith(coords);
+                    GetCoordinatesInRange(occupiedCoord, range, state, visibleCoords);
                 }
             }
 
@@ -118,16 +135,14 @@ namespace Sporefront.Engine
             foreach (var army in state.GetArmiesForPlayer(playerID))
             {
                 int range = baseUnitVisionRange;
-                var coords = GetCoordinatesInRange(army.coordinate, range, state);
-                visibleCoords.UnionWith(coords);
+                GetCoordinatesInRange(army.coordinate, range, state, visibleCoords);
             }
 
             // Vision from villager groups
             foreach (var group in state.GetVillagerGroupsForPlayer(playerID))
             {
                 int range = baseVillagerVisionRange;
-                var coords = GetCoordinatesInRange(group.coordinate, range, state);
-                visibleCoords.UnionWith(coords);
+                GetCoordinatesInRange(group.coordinate, range, state, visibleCoords);
             }
 
             // Vision from reinforcements (just their tile)
@@ -137,22 +152,18 @@ namespace Sporefront.Engine
             {
                 visibleCoords.UnionWith(reinforcementCoords);
             }
-
-            return visibleCoords;
         }
 
-        private HashSet<HexCoordinate> GetCoordinatesInRange(HexCoordinate center, int range, GameState state)
+        private void GetCoordinatesInRange(HexCoordinate center, int range, GameState state, HashSet<HexCoordinate> coords)
         {
-            var coords = new HashSet<HexCoordinate>();
-
             // Add center
             coords.Add(center);
 
             // Add all hexes in range
             for (int r = 1; r <= range; r++)
             {
-                var ring = GetRing(center, r);
-                foreach (var coord in ring)
+                GetRing(center, r, reusableRing);
+                foreach (var coord in reusableRing)
                 {
                     if (state.mapData.IsValidCoordinate(coord))
                     {
@@ -164,16 +175,17 @@ namespace Sporefront.Engine
                     }
                 }
             }
-
-            return coords;
         }
 
-        private List<HexCoordinate> GetRing(HexCoordinate center, int radius)
+        private void GetRing(HexCoordinate center, int radius, List<HexCoordinate> results)
         {
-            if (radius == 0)
-                return new List<HexCoordinate> { center };
+            results.Clear();
 
-            var results = new List<HexCoordinate>();
+            if (radius == 0)
+            {
+                results.Add(center);
+                return;
+            }
 
             // Walk West from center to starting position
             var hex = center;
@@ -190,8 +202,6 @@ namespace Sporefront.Engine
                     hex = hex.Neighbor(direction);
                 }
             }
-
-            return results;
         }
 
         private bool HasLineOfSight(HexCoordinate start, HexCoordinate end, int maxBlockedRange, GameState state)
@@ -204,11 +214,11 @@ namespace Sporefront.Engine
             }
 
             // Check intermediate hexes for mountains
-            var path = GetLinePath(start, end);
+            GetLinePath(start, end, reusablePath);
 
-            for (int i = 1; i < path.Count - 1; i++)
+            for (int i = 1; i < reusablePath.Count - 1; i++)
             {
-                var coord = path[i];
+                var coord = reusablePath[i];
                 TerrainType? terrain = state.mapData.GetTerrain(coord);
                 if (terrain.HasValue && terrain.Value == TerrainType.Mountain)
                 {
@@ -220,23 +230,27 @@ namespace Sporefront.Engine
             return true;
         }
 
-        private List<HexCoordinate> GetLinePath(HexCoordinate start, HexCoordinate end)
+        private void GetLinePath(HexCoordinate start, HexCoordinate end, List<HexCoordinate> path)
         {
-            int distance = start.Distance(end);
-            if (distance <= 0) return new List<HexCoordinate> { start };
+            path.Clear();
 
-            var path = new List<HexCoordinate>();
+            int distance = start.Distance(end);
+            if (distance <= 0)
+            {
+                path.Add(start);
+                return;
+            }
+
+            // Pre-compute cube coordinates for start and end
+            double startX, startY, startZ;
+            HexToCube(start, out startX, out startY, out startZ);
+
+            double endX, endY, endZ;
+            HexToCube(end, out endX, out endY, out endZ);
 
             for (int i = 0; i <= distance; i++)
             {
                 double t = (double)i / (double)distance;
-
-                // Linear interpolation in cube coordinates
-                double startX, startY, startZ;
-                HexToCube(start, out startX, out startY, out startZ);
-
-                double endX, endY, endZ;
-                HexToCube(end, out endX, out endY, out endZ);
 
                 double x = startX + (endX - startX) * t;
                 double y = startY + (endY - startY) * t;
@@ -249,8 +263,6 @@ namespace Sporefront.Engine
                     path.Add(coord);
                 }
             }
-
-            return path;
         }
 
         private void HexToCube(HexCoordinate hex, out double x, out double y, out double z)

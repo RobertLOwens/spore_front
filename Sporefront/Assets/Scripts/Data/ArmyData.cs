@@ -56,6 +56,7 @@ namespace Sporefront.Data
 
         // State
         public bool isRetreating;
+        public bool isStranded;
 
         // Pending reinforcements
         public List<PendingReinforcement> pendingReinforcements = new List<PendingReinforcement>();
@@ -65,9 +66,9 @@ namespace Sporefront.Data
         public int pathIndex;
         public double movementProgress;
 
-        // Combat state
-        public bool isInCombat;
-        public Guid? combatTargetID;
+        // Combat state (transient — combat dictionaries are not serialized)
+        [System.NonSerialized] public bool isInCombat;
+        [System.NonSerialized] public Guid? combatTargetID;
         public HexCoordinate? pendingAttackTarget;
 
         // Entrenchment state (transient)

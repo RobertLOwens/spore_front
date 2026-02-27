@@ -304,6 +304,9 @@ namespace Sporefront.AI
                     else if (ShouldAttack(aiState, gameState, ourStrength))
                     {
                         aiState.currentState = AIState.Attack;
+                        aiState.attackStateEnteredTime = currentTime;
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                         DebugLog.Log(string.Format("AI {0}: Peace -> Attack (strong enough)", playerID));
                     }
                     break;
@@ -322,6 +325,9 @@ namespace Sporefront.AI
                     else if (ShouldAttack(aiState, gameState, ourStrength))
                     {
                         aiState.currentState = AIState.Attack;
+                        aiState.attackStateEnteredTime = currentTime;
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                         DebugLog.Log(string.Format("AI {0}: Alert -> Attack (strong enough)", playerID));
                     }
                     break;
@@ -334,6 +340,9 @@ namespace Sporefront.AI
                         {
                             aiState.currentState = AIState.Attack;
                             aiState.consecutiveDefenses = 0;
+                            aiState.attackStateEnteredTime = currentTime;
+                            aiState.lastAttackProgressTime = currentTime;
+                            aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                             DebugLog.Log(string.Format("AI {0}: Defense -> Attack (counter-attack)", playerID));
                         }
                         else
@@ -350,6 +359,21 @@ namespace Sporefront.AI
                     break;
 
                 case AIState.Attack:
+                    // Attack timeout: check if making progress
+                    double currentEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
+                    if (aiState.lastKnownEnemyStrength - currentEnemyStrength >= 100)
+                    {
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = currentEnemyStrength;
+                    }
+                    if (currentTime - aiState.lastAttackProgressTime > GameConfig.AI.Timeouts.AttackTimeout)
+                    {
+                        aiState.currentState = AIState.Retreat;
+                        aiState.persistentAttackTargetID = null;
+                        DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (attack timeout, no progress)", playerID));
+                        break;
+                    }
+
                     if (nearbyEnemies.Count > 0)
                     {
                         aiState.currentState = AIState.Defense;
@@ -567,6 +591,7 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateExpansionCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
@@ -576,6 +601,7 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateEconomyCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateGarrisonCommands(aiState, gameState, currentTime));
@@ -596,6 +622,7 @@ namespace Sporefront.AI
 
                 case AIState.Attack:
                     commands.AddRange(militaryPlanner.GenerateAttackCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateEconomyCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));

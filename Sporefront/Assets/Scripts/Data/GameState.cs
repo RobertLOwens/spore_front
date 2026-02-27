@@ -47,6 +47,21 @@ namespace Sporefront.Data
         public Dictionary<Guid, HashSet<HexCoordinate>> activeReinforcementPositions =
             new Dictionary<Guid, HashSet<HexCoordinate>>();
 
+        // Per-player entity caches (transient, rebuilt on load)
+        [System.NonSerialized]
+        private Dictionary<Guid, List<BuildingData>> buildingsByPlayer = new Dictionary<Guid, List<BuildingData>>();
+        [System.NonSerialized]
+        private Dictionary<Guid, List<ArmyData>> armiesByPlayer = new Dictionary<Guid, List<ArmyData>>();
+        [System.NonSerialized]
+        private Dictionary<Guid, List<VillagerGroupData>> villagerGroupsByPlayer = new Dictionary<Guid, List<VillagerGroupData>>();
+
+        // Enemy composition analysis cache (transient)
+        [System.NonSerialized]
+        private Dictionary<Guid, (EnemyCompositionAnalysis? result, double timestamp)> enemyAnalysisCache =
+            new Dictionary<Guid, (EnemyCompositionAnalysis?, double)>();
+        [System.NonSerialized]
+        private readonly double enemyAnalysisCacheTTL = 0.5; // seconds
+
         public GameState(int mapWidth, int mapHeight)
         {
             this.mapData = new MapData(mapWidth, mapHeight);
@@ -94,11 +109,19 @@ namespace Sporefront.Data
             // Register with map data
             mapData.RegisterBuilding(building.id, building.coordinate, building.OccupiedCoordinates);
 
-            // Update player ownership
+            // Update player ownership and cache
             if (building.ownerID.HasValue)
             {
                 var player = GetPlayer(building.ownerID.Value);
                 if (player != null) player.AddOwnedBuilding(building.id);
+
+                List<BuildingData> playerBuildings;
+                if (!buildingsByPlayer.TryGetValue(building.ownerID.Value, out playerBuildings))
+                {
+                    playerBuildings = new List<BuildingData>();
+                    buildingsByPlayer[building.ownerID.Value] = playerBuildings;
+                }
+                playerBuildings.Add(building);
             }
         }
 
@@ -110,11 +133,15 @@ namespace Sporefront.Data
             // Reassign home bases for armies that had this building as home
             ReassignHomeBasesForDestroyedBuilding(id, building.ownerID);
 
-            // Update player ownership
+            // Update player ownership and cache
             if (building.ownerID.HasValue)
             {
                 var player = GetPlayer(building.ownerID.Value);
                 if (player != null) player.RemoveOwnedBuilding(id);
+
+                List<BuildingData> playerBuildings;
+                if (buildingsByPlayer.TryGetValue(building.ownerID.Value, out playerBuildings))
+                    playerBuildings.Remove(building);
             }
 
             // Unregister from map data
@@ -299,12 +326,10 @@ namespace Sporefront.Data
 
         public List<BuildingData> GetBuildingsForPlayer(Guid playerID)
         {
-            var result = new List<BuildingData>();
-            foreach (var b in buildings.Values)
-            {
-                if (b.ownerID.HasValue && b.ownerID.Value == playerID) result.Add(b);
-            }
-            return result;
+            List<BuildingData> cached;
+            if (buildingsByPlayer.TryGetValue(playerID, out cached))
+                return new List<BuildingData>(cached);
+            return new List<BuildingData>();
         }
 
         // ================================================================
@@ -320,7 +345,18 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(army.ownerID.Value);
                 if (player != null) player.AddOwnedArmy(army.id);
+
+                List<ArmyData> playerArmies;
+                if (!armiesByPlayer.TryGetValue(army.ownerID.Value, out playerArmies))
+                {
+                    playerArmies = new List<ArmyData>();
+                    armiesByPlayer[army.ownerID.Value] = playerArmies;
+                }
+                playerArmies.Add(army);
             }
+
+            // Invalidate enemy analysis cache (new army changes composition)
+            enemyAnalysisCache.Clear();
         }
 
         public void RemoveArmy(Guid id)
@@ -332,7 +368,14 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(army.ownerID.Value);
                 if (player != null) player.RemoveOwnedArmy(id);
+
+                List<ArmyData> playerArmies;
+                if (armiesByPlayer.TryGetValue(army.ownerID.Value, out playerArmies))
+                    playerArmies.Remove(army);
             }
+
+            // Invalidate enemy analysis cache
+            enemyAnalysisCache.Clear();
 
             mapData.UnregisterArmy(id);
             armies.Remove(id);
@@ -403,12 +446,10 @@ namespace Sporefront.Data
 
         public List<ArmyData> GetArmiesForPlayer(Guid playerID)
         {
-            var result = new List<ArmyData>();
-            foreach (var army in armies.Values)
-            {
-                if (army.ownerID.HasValue && army.ownerID.Value == playerID) result.Add(army);
-            }
-            return result;
+            List<ArmyData> cached;
+            if (armiesByPlayer.TryGetValue(playerID, out cached))
+                return new List<ArmyData>(cached);
+            return new List<ArmyData>();
         }
 
         public void UpdateArmyPosition(Guid armyID, HexCoordinate to)
@@ -432,6 +473,14 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(group.ownerID.Value);
                 if (player != null) player.AddOwnedVillagerGroup(group.id);
+
+                List<VillagerGroupData> playerGroups;
+                if (!villagerGroupsByPlayer.TryGetValue(group.ownerID.Value, out playerGroups))
+                {
+                    playerGroups = new List<VillagerGroupData>();
+                    villagerGroupsByPlayer[group.ownerID.Value] = playerGroups;
+                }
+                playerGroups.Add(group);
             }
         }
 
@@ -444,6 +493,10 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(group.ownerID.Value);
                 if (player != null) player.RemoveOwnedVillagerGroup(id);
+
+                List<VillagerGroupData> playerGroups;
+                if (villagerGroupsByPlayer.TryGetValue(group.ownerID.Value, out playerGroups))
+                    playerGroups.Remove(group);
             }
 
             mapData.UnregisterVillagerGroup(id);
@@ -476,12 +529,10 @@ namespace Sporefront.Data
 
         public List<VillagerGroupData> GetVillagerGroupsForPlayer(Guid playerID)
         {
-            var result = new List<VillagerGroupData>();
-            foreach (var group in villagerGroups.Values)
-            {
-                if (group.ownerID.HasValue && group.ownerID.Value == playerID) result.Add(group);
-            }
-            return result;
+            List<VillagerGroupData> cached;
+            if (villagerGroupsByPlayer.TryGetValue(playerID, out cached))
+                return new List<VillagerGroupData>(cached);
+            return new List<VillagerGroupData>();
         }
 
         public void UpdateVillagerGroupPosition(Guid groupID, HexCoordinate to)
@@ -992,6 +1043,21 @@ namespace Sporefront.Data
 
         public EnemyCompositionAnalysis? AnalyzeEnemyComposition(Guid playerID)
         {
+            // Check cache
+            (EnemyCompositionAnalysis? result, double timestamp) cached;
+            if (enemyAnalysisCache.TryGetValue(playerID, out cached) &&
+                currentTime - cached.timestamp < enemyAnalysisCacheTTL)
+            {
+                return cached.result;
+            }
+
+            var analysisResult = ComputeEnemyComposition(playerID);
+            enemyAnalysisCache[playerID] = (analysisResult, currentTime);
+            return analysisResult;
+        }
+
+        private EnemyCompositionAnalysis? ComputeEnemyComposition(Guid playerID)
+        {
             int totalCavalry = 0;
             int totalRanged = 0;
             int totalInfantry = 0;
@@ -1087,6 +1153,7 @@ namespace Sporefront.Data
             public int civilian;
             public int military;
             public double rate;
+            public double adjustedRate;
         }
 
         public FoodConsumptionInfo GetFoodConsumptionRate(Guid playerID)
@@ -1117,11 +1184,40 @@ namespace Sporefront.Data
             double baseRate = 0.1;
             double totalRate = (civilianCount + militaryCount) * baseRate;
 
+            // Compute adjusted rate with research bonuses and commander rationing
+            var player = GetPlayer(playerID);
+            double adjusted = totalRate;
+            if (player != null)
+            {
+                double civilianRate = civilianCount * baseRate;
+                double militaryRate = militaryCount * baseRate;
+                double civMultiplier = player.GetResearchBonusMultiplier(
+                    ResearchBonusType.FoodConsumption.ToString());
+                double milMultiplier = player.GetResearchBonusMultiplier(
+                    ResearchBonusType.MilitaryFoodConsumption.ToString());
+
+                var commanders = GetCommandersForPlayer(playerID);
+                int bestRationing = 0;
+                foreach (var commander in commanders)
+                {
+                    if (commander.Rationing > bestRationing)
+                        bestRationing = commander.Rationing;
+                }
+                double rationingReduction = Math.Min(
+                    GameConfig.Commander.RationingReductionCap,
+                    bestRationing * GameConfig.Commander.RationingReductionScaling
+                );
+
+                adjusted = (civilianRate * civMultiplier + militaryRate * milMultiplier)
+                    * (1.0 - rationingReduction);
+            }
+
             return new FoodConsumptionInfo
             {
                 civilian = civilianCount,
                 military = militaryCount,
-                rate = totalRate
+                rate = totalRate,
+                adjustedRate = adjusted
             };
         }
     }
@@ -1167,7 +1263,14 @@ namespace Sporefront.Data
             foreach (var player in players) gameState.AddPlayer(player);
             foreach (var rp in resourcePoints) gameState.AddResourcePoint(rp);
             foreach (var building in buildings) gameState.AddBuilding(building);
-            foreach (var army in armies) gameState.AddArmy(army);
+            foreach (var army in armies)
+            {
+                // Clear transient combat state — combat dictionaries are not serialized,
+                // so stale isInCombat flags would permanently block the army
+                army.isInCombat = false;
+                army.combatTargetID = null;
+                gameState.AddArmy(army);
+            }
             foreach (var group in villagerGroups) gameState.AddVillagerGroup(group);
             foreach (var commander in commanders) gameState.AddCommander(commander);
 

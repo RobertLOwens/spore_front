@@ -44,6 +44,11 @@ namespace Sporefront.Visual
         // Cached game state for filter changes
         private GameState cachedGameState;
 
+        // Throttled rebuild
+        private bool isDirty;
+        private float lastRebuildTime;
+        private const float RebuildInterval = 0.5f;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -133,6 +138,8 @@ namespace Sporefront.Visual
         public void Show(GameState gameState)
         {
             cachedGameState = gameState;
+            lastRebuildTime = Time.unscaledTime;
+            isDirty = false;
             Rebuild(gameState);
             backdrop.SetActive(true);
         }
@@ -147,10 +154,19 @@ namespace Sporefront.Visual
         {
             if (!IsVisible) return;
             cachedGameState = gameState;
-            Rebuild(gameState);
+            isDirty = true;
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        private void Update()
+        {
+            if (!isDirty || !IsVisible || cachedGameState == null) return;
+            if (Time.unscaledTime - lastRebuildTime < RebuildInterval) return;
+            isDirty = false;
+            lastRebuildTime = Time.unscaledTime;
+            Rebuild(cachedGameState);
+        }
 
         // ================================================================
         // Filter

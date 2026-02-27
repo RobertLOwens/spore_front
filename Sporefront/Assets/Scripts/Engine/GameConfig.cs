@@ -115,6 +115,7 @@ namespace Sporefront.Engine
             public const double CrossbowDamage = 14.0;
             public const double MangonelDamage = 18.0;
             public const double TrebuchetDamage = 25.0;
+            public const int MaxBuildingsPerTarget = 3;
         }
 
         public static class Commander
@@ -241,6 +242,23 @@ namespace Sporefront.Engine
             public static class Thresholds
             {
                 public const double MinThreatForDefenseBuilding = 15.0;
+            }
+
+            public static class Timeouts
+            {
+                public const double AttackTimeout = 60.0;
+            }
+
+            public static class Economy
+            {
+                public const double RandomizationWeight = 0.2;
+            }
+
+            public static class Scouting
+            {
+                public const int MaxScouts = 2;
+                public const int PatrolRadius = 6;
+                public const double EarlyGameThreshold = 300.0;
             }
         }
     }

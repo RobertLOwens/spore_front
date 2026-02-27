@@ -70,10 +70,10 @@ namespace Sporefront.Visual
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Hide);
 
-            // Main panel — centered 400x500
+            // Main panel — centered, medium modal
             panel = UIHelper.CreatePanel(backdrop.transform, "InboxPanel", UIHelper.PanelBg);
             var panelRT = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(panelRT, 400, 500);
+            UIHelper.SetFixedSize(panelRT, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
 
             // Header bar
             var headerBar = UIHelper.CreatePanel(panel.transform, "HeaderBar",
@@ -82,12 +82,12 @@ namespace Sporefront.Visual
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
             headerBarRT.pivot = new Vector2(0.5f, 1);
-            headerBarRT.offsetMin = new Vector2(0, -44);
+            headerBarRT.offsetMin = new Vector2(0, -48);
             headerBarRT.offsetMax = Vector2.zero;
 
             var headerHLG = headerBar.AddComponent<HorizontalLayoutGroup>();
-            headerHLG.spacing = 4f;
-            headerHLG.padding = new RectOffset(8, 8, 4, 4);
+            headerHLG.spacing = 6f;
+            headerHLG.padding = new RectOffset(10, 10, 6, 6);
             headerHLG.childForceExpandWidth = false;
             headerHLG.childForceExpandHeight = true;
             headerHLG.childControlWidth = false;
@@ -100,24 +100,24 @@ namespace Sporefront.Visual
             titleLE.flexibleWidth = 1;
 
             var markReadBtn = UIHelper.CreateButton(headerBar.transform, "Read All",
-                SporefrontColors.SporeTeal, UIHelper.HudTextColor, 10, () =>
+                SporefrontColors.SporeTeal, UIHelper.HudTextColor, UIConstants.FontSmall, () =>
                 {
                     MarkAllAsRead();
                     OnMarkAllRead?.Invoke();
                     Rebuild();
                 });
             var markReadLE = markReadBtn.gameObject.AddComponent<LayoutElement>();
-            markReadLE.preferredWidth = 60;
+            markReadLE.preferredWidth = 72;
 
             var clearBtn = UIHelper.CreateButton(headerBar.transform, "Clear",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 10, () =>
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontSmall, () =>
                 {
                     ClearAllEntries();
                     OnClearAll?.Invoke();
                     Rebuild();
                 });
             var clearLE = clearBtn.gameObject.AddComponent<LayoutElement>();
-            clearLE.preferredWidth = 48;
+            clearLE.preferredWidth = 56;
 
             var closeBtn = UIHelper.CreateButton(headerBar.transform, "X",
                 SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
@@ -129,7 +129,7 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
             scrollRT.offsetMin = Vector2.zero;
-            scrollRT.offsetMax = new Vector2(0, -48);
+            scrollRT.offsetMax = new Vector2(0, -52);
 
             backdrop.SetActive(false);
         }
@@ -284,11 +284,11 @@ namespace Sporefront.Visual
 
             var row = UIHelper.CreatePanel(contentRT, "NotifRow", rowBg);
             var rowLE = row.AddComponent<LayoutElement>();
-            rowLE.preferredHeight = 56;
+            rowLE.preferredHeight = 28;
 
             var hlg = row.AddComponent<HorizontalLayoutGroup>();
             hlg.spacing = 6f;
-            hlg.padding = new RectOffset(8, 8, 4, 4);
+            hlg.padding = new RectOffset(6, 6, 2, 2);
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
             hlg.childControlWidth = false;
@@ -331,22 +331,22 @@ namespace Sporefront.Visual
             textVLG.childControlHeight = false;
 
             // Title
-            var titleLabel = UIHelper.CreateLabel(textCol.transform, entry.title, 12,
+            var titleLabel = UIHelper.CreateLabel(textCol.transform, entry.title, UIConstants.FontSmall,
                 entry.isRead ? SporefrontColors.InkLight : UIHelper.BodyTextColor);
             titleLabel.fontStyle = entry.isRead ? FontStyle.Normal : FontStyle.Bold;
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
-            titleLE.preferredHeight = 18;
+            titleLE.preferredHeight = 14;
 
             // Message
-            var msgLabel = UIHelper.CreateLabel(textCol.transform, entry.message, 11,
+            var msgLabel = UIHelper.CreateLabel(textCol.transform, entry.message, UIConstants.FontCaption,
                 SporefrontColors.InkLight);
             var msgLE = msgLabel.gameObject.AddComponent<LayoutElement>();
-            msgLE.preferredHeight = 16;
+            msgLE.preferredHeight = 12;
 
             // Right column: time + location pin
             var rightCol = UIHelper.CreatePanel(row.transform, "RightCol", Color.clear);
             var rightColLE = rightCol.AddComponent<LayoutElement>();
-            rightColLE.preferredWidth = 55;
+            rightColLE.preferredWidth = 60;
 
             var rightVLG = rightCol.AddComponent<VerticalLayoutGroup>();
             rightVLG.spacing = 2;
@@ -358,18 +358,18 @@ namespace Sporefront.Visual
 
             // Relative time
             string timeStr = FormatRelativeTime(entry.timestamp);
-            var timeLabel = UIHelper.CreateLabel(rightCol.transform, timeStr, 10,
+            var timeLabel = UIHelper.CreateLabel(rightCol.transform, timeStr, UIConstants.FontCaption,
                 SporefrontColors.InkFaded, TextAnchor.MiddleRight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
-            timeLE.preferredHeight = 16;
+            timeLE.preferredHeight = 12;
 
             // Location pin
             if (entry.coordinate.HasValue)
             {
-                var pinLabel = UIHelper.CreateLabel(rightCol.transform, "[loc]", 10,
+                var pinLabel = UIHelper.CreateLabel(rightCol.transform, "[loc]", UIConstants.FontCaption,
                     SporefrontColors.SporeTeal, TextAnchor.MiddleRight);
                 var pinLE = pinLabel.gameObject.AddComponent<LayoutElement>();
-                pinLE.preferredHeight = 16;
+                pinLE.preferredHeight = 12;
             }
 
             // Click handler: mark read + jump to location

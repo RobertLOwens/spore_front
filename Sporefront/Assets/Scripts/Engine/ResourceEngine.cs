@@ -72,7 +72,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -94,7 +94,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> UpdatePlayerResources(PlayerState player, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -154,7 +154,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> ProcessGathering(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
             var completedAssignments = new List<Guid>();
@@ -639,7 +639,7 @@ namespace Sporefront.Engine
         /// </summary>
         public List<StateChange> ProcessGatherArrivals()
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
             var groups = new List<VillagerGroupData>(gameState.villagerGroups.Values);

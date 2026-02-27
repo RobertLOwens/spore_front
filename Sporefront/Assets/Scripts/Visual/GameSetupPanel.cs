@@ -23,6 +23,7 @@ namespace Sporefront.Visual
         public MapType mapType;
         public MapSize mapSize;
         public ResourceDensity resourceDensity;
+        public StartingResources startingResources;
         public VisibilityMode visibilityMode;
 
         public static GameSetupConfig Default => new GameSetupConfig
@@ -30,13 +31,15 @@ namespace Sporefront.Visual
             mapType = MapType.Arabia,
             mapSize = MapSize.Medium,
             resourceDensity = ResourceDensity.Normal,
+            startingResources = StartingResources.Medium,
             visibilityMode = VisibilityMode.Normal
         };
     }
 
-    public enum MapType { Arabia, Random, Arena }
+    public enum MapType { Arabia, MountainValley, Random, Arena }
     public enum MapSize { Small, Medium, Large, Huge }
     public enum ResourceDensity { Sparse, Normal, Abundant }
+    public enum StartingResources { Small, Medium, Large }
 
     [Serializable]
     public struct ArenaConfig
@@ -79,6 +82,7 @@ namespace Sporefront.Visual
         private MapType selectedMapType = MapType.Arabia;
         private MapSize selectedMapSize = MapSize.Medium;
         private ResourceDensity selectedDensity = ResourceDensity.Normal;
+        private StartingResources selectedStartingResources = StartingResources.Medium;
         private VisibilityMode selectedVisibility = VisibilityMode.Normal;
 
         // Arena config
@@ -90,6 +94,13 @@ namespace Sporefront.Visual
         // UI references for arena section toggle
         private GameObject arenaSection;
         private GameObject standardStartButton;
+        private GameObject mapSelectionSection;
+        private GameObject standardSettingsSection;
+        private MapType selectedOneVsOneMap = MapType.Arabia;
+
+        // Map card tracking for highlight toggling
+        private List<(Button btn, Image bg, Text nameLabel)> mapCards = new List<(Button, Image, Text)>();
+        private List<MapType> mapCardTypes = new List<MapType>();
 
         // Segmented button tracking
         private Dictionary<string, List<Button>> segmentGroups = new Dictionary<string, List<Button>>();
@@ -184,18 +195,36 @@ namespace Sporefront.Visual
             segmentSelections.Clear();
             playerUnitLabels.Clear();
             enemyUnitLabels.Clear();
+            mapCards.Clear();
+            mapCardTypes.Clear();
 
-            BuildMapTypeSection();
+            BuildGameModeSection();
             UIHelper.CreateDivider(contentRT);
-            BuildMapSizeSection();
-            UIHelper.CreateDivider(contentRT);
-            BuildResourceDensitySection();
-            UIHelper.CreateDivider(contentRT);
-            BuildVisibilitySection();
-            UIHelper.CreateDivider(contentRT);
+            BuildMapSelectionSection();
 
-            // Standard start button (hidden when Arena)
-            standardStartButton = BuildStartGameButton();
+            // Standard settings container (hidden when Arena)
+            standardSettingsSection = UIHelper.CreatePanel(contentRT, "StandardSettings", Color.clear);
+            var ssVLG = standardSettingsSection.AddComponent<VerticalLayoutGroup>();
+            ssVLG.spacing = 4f;
+            ssVLG.childForceExpandWidth = true;
+            ssVLG.childForceExpandHeight = false;
+            ssVLG.childControlWidth = true;
+            ssVLG.childControlHeight = false;
+            var ssCSF = standardSettingsSection.AddComponent<ContentSizeFitter>();
+            ssCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var ssParent = standardSettingsSection.transform;
+
+            BuildMapSizeSection(ssParent);
+            UIHelper.CreateDivider(ssParent);
+            BuildResourceDensitySection(ssParent);
+            UIHelper.CreateDivider(ssParent);
+            BuildStartingResourcesSection(ssParent);
+            UIHelper.CreateDivider(ssParent);
+            BuildVisibilitySection(ssParent);
+            UIHelper.CreateDivider(ssParent);
+
+            // Standard start button (inside standard settings)
+            standardStartButton = BuildStartGameButton(ssParent);
 
             // Arena config section
             BuildArenaSection();
@@ -204,12 +233,12 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
-        // Map Type
+        // Game Mode (1v1 / Arena)
         // ================================================================
 
-        private void BuildMapTypeSection()
+        private void BuildGameModeSection()
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Map Type",
+            var sectionLabel = UIHelper.CreateLabel(contentRT, "Game Mode",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
@@ -218,14 +247,23 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 36f, 4f);
             var buttons = new List<Button>();
 
-            string[] names = { "Arabia", "Random", "Arena" };
+            string[] names = { "1v1", "Arena" };
+            int currentIndex = selectedMapType == MapType.Arena ? 1 : 0;
+
             for (int i = 0; i < names.Length; i++)
             {
                 int idx = i;
                 var btn = UIHelper.CreateButton(row.transform, names[i], null, null, 13, () =>
                 {
-                    selectedMapType = (MapType)idx;
-                    UpdateSegmentSelection("mapType", idx);
+                    if (idx == 0)
+                    {
+                        selectedMapType = selectedOneVsOneMap;
+                    }
+                    else
+                    {
+                        selectedMapType = MapType.Arena;
+                    }
+                    UpdateSegmentSelection("gameMode", idx);
                     UpdateArenaSectionVisibility();
                 });
                 var btnLE = btn.gameObject.AddComponent<LayoutElement>();
@@ -234,24 +272,126 @@ namespace Sporefront.Visual
                 buttons.Add(btn);
             }
 
-            segmentGroups["mapType"] = buttons;
-            segmentSelections["mapType"] = (int)selectedMapType;
-            UpdateSegmentColors("mapType");
+            segmentGroups["gameMode"] = buttons;
+            segmentSelections["gameMode"] = currentIndex;
+            UpdateSegmentColors("gameMode");
+        }
+
+        // ================================================================
+        // Map Selection Cards (for 1v1 mode)
+        // ================================================================
+
+        private void BuildMapSelectionSection()
+        {
+            mapSelectionSection = UIHelper.CreatePanel(contentRT, "MapSelection", Color.clear);
+            var sectionVLG = mapSelectionSection.AddComponent<VerticalLayoutGroup>();
+            sectionVLG.spacing = 6f;
+            sectionVLG.childForceExpandWidth = true;
+            sectionVLG.childForceExpandHeight = false;
+            sectionVLG.childControlWidth = true;
+            sectionVLG.childControlHeight = false;
+            sectionVLG.padding = new RectOffset(0, 0, 4, 4);
+
+            var sectionCSF = mapSelectionSection.AddComponent<ContentSizeFitter>();
+            sectionCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var headerLabel = UIHelper.CreateLabel(mapSelectionSection.transform, "Select Map",
+                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var headerLE = headerLabel.gameObject.AddComponent<LayoutElement>();
+            headerLE.preferredHeight = 28;
+
+            var maps = new (MapType type, string name, string description)[]
+            {
+                (MapType.Arabia, "Arabia",
+                 "Open terrain with scattered hills and forests. Balanced starting positions with resources spread evenly across the map."),
+                (MapType.MountainValley, "Mountain Valley",
+                 "Two ridges separated by a resource-rich valley. Sparse hilltop starts force players downhill to contest forests, minerals, and game."),
+                (MapType.Random, "Random",
+                 "Randomly selects a map type for a unique experience every game."),
+            };
+
+            foreach (var (mapType, mapName, description) in maps)
+            {
+                BuildMapCard(mapSelectionSection.transform, mapType, mapName, description);
+            }
+
+            UpdateMapCardHighlights();
+        }
+
+        private void BuildMapCard(Transform parent, MapType mapType, string mapName, string description)
+        {
+            bool isSelected = mapType == selectedOneVsOneMap;
+
+            // Card panel
+            var card = UIHelper.CreatePanel(parent, $"MapCard_{mapName}", SporefrontColors.ParchmentMid);
+            var cardVLG = card.AddComponent<VerticalLayoutGroup>();
+            cardVLG.spacing = 2f;
+            cardVLG.childForceExpandWidth = true;
+            cardVLG.childForceExpandHeight = false;
+            cardVLG.childControlWidth = true;
+            cardVLG.childControlHeight = false;
+            cardVLG.padding = new RectOffset(10, 10, 6, 6);
+
+            var cardLE = card.AddComponent<LayoutElement>();
+            cardLE.preferredHeight = 65;
+
+            // Name label
+            var nameLabel = UIHelper.CreateLabel(card.transform, mapName,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLE.preferredHeight = 22;
+
+            // Description label
+            var descLabel = UIHelper.CreateLabel(card.transform, description,
+                UIConstants.FontCaption, SporefrontColors.InkMid,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
+
+            // Make whole card clickable
+            var btn = card.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            var capturedType = mapType;
+            btn.onClick.AddListener(() =>
+            {
+                selectedOneVsOneMap = capturedType;
+                selectedMapType = capturedType;
+                UpdateMapCardHighlights();
+            });
+
+            var cardImg = card.GetComponent<Image>();
+            mapCards.Add((btn, cardImg, nameLabel));
+            mapCardTypes.Add(mapType);
+        }
+
+        private void UpdateMapCardHighlights()
+        {
+            for (int i = 0; i < mapCards.Count; i++)
+            {
+                bool isSelected = mapCardTypes[i] == selectedOneVsOneMap;
+                var (btn, bg, nameLabel) = mapCards[i];
+
+                bg.color = isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentMid;
+                nameLabel.color = isSelected ? UIHelper.HudTextColor : UIHelper.HeaderTextColor;
+            }
         }
 
         // ================================================================
         // Map Size
         // ================================================================
 
-        private void BuildMapSizeSection()
+        private void BuildMapSizeSection(Transform parent)
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Map Size",
+            var sectionLabel = UIHelper.CreateLabel(parent, "Map Size",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 36f, 4f);
+            var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
 
             string[] names = { "Small", "Medium", "Large", "Huge" };
@@ -278,15 +418,15 @@ namespace Sporefront.Visual
         // Resource Density
         // ================================================================
 
-        private void BuildResourceDensitySection()
+        private void BuildResourceDensitySection(Transform parent)
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Resource Density",
+            var sectionLabel = UIHelper.CreateLabel(parent, "Resource Density",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 36f, 4f);
+            var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
 
             string[] names = { "Sparse", "Normal", "Abundant" };
@@ -310,18 +450,53 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
-        // Visibility Mode
+        // Starting Resources
         // ================================================================
 
-        private void BuildVisibilitySection()
+        private void BuildStartingResourcesSection(Transform parent)
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Visibility",
+            var sectionLabel = UIHelper.CreateLabel(parent, "Starting Resources",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 36f, 4f);
+            var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
+            var buttons = new List<Button>();
+
+            string[] names = { "Small", "Medium", "Large" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int idx = i;
+                var btn = UIHelper.CreateButton(row.transform, names[i], null, null, 13, () =>
+                {
+                    selectedStartingResources = (StartingResources)idx;
+                    UpdateSegmentSelection("startingResources", idx);
+                });
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 100;
+                btnLE.preferredHeight = 36;
+                buttons.Add(btn);
+            }
+
+            segmentGroups["startingResources"] = buttons;
+            segmentSelections["startingResources"] = (int)selectedStartingResources;
+            UpdateSegmentColors("startingResources");
+        }
+
+        // ================================================================
+        // Visibility Mode
+        // ================================================================
+
+        private void BuildVisibilitySection(Transform parent)
+        {
+            var sectionLabel = UIHelper.CreateLabel(parent, "Visibility",
+                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 28;
+
+            var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
 
             string[] names = { "Normal", "Full" };
@@ -348,13 +523,13 @@ namespace Sporefront.Visual
         // Start Game Button (for non-Arena modes)
         // ================================================================
 
-        private GameObject BuildStartGameButton()
+        private GameObject BuildStartGameButton(Transform parent)
         {
             var spacer = new GameObject("StartSpacer", typeof(RectTransform), typeof(LayoutElement));
-            spacer.transform.SetParent(contentRT, false);
+            spacer.transform.SetParent(parent, false);
             spacer.GetComponent<LayoutElement>().preferredHeight = 10;
 
-            var container = UIHelper.CreatePanel(contentRT, "StartContainer", Color.clear);
+            var container = UIHelper.CreatePanel(parent, "StartContainer", Color.clear);
             var containerLE = container.AddComponent<LayoutElement>();
             containerLE.preferredHeight = 50;
 
@@ -366,6 +541,7 @@ namespace Sporefront.Visual
                         mapType = selectedMapType,
                         mapSize = selectedMapSize,
                         resourceDensity = selectedDensity,
+                        startingResources = selectedStartingResources,
                         visibilityMode = selectedVisibility
                     };
                     OnStartGame?.Invoke(config);

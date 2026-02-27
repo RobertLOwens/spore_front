@@ -79,6 +79,7 @@ namespace Sporefront.Engine
         private double lastMovementUpdate;
         private double lastAIUpdate;
         private double lastEntrenchmentUpdate;
+        private double lastResearchCheck;
 
         private readonly double visionUpdateInterval = GameConfig.EngineIntervals.VisionUpdate;
         private readonly double buildingUpdateInterval = GameConfig.EngineIntervals.BuildingUpdate;
@@ -88,6 +89,10 @@ namespace Sporefront.Engine
         private readonly double movementUpdateInterval = GameConfig.EngineIntervals.MovementUpdate;
         private readonly double aiUpdateInterval = GameConfig.EngineIntervals.AIUpdate;
         private readonly double entrenchmentCheckInterval = GameConfig.Entrenchment.CheckInterval;
+        private readonly double researchCheckInterval = 1.0;
+
+        // Reusable list to avoid per-frame allocation
+        private readonly List<StateChange> allChanges = new List<StateChange>();
 
         // ================================================================
         // Initialization
@@ -153,6 +158,7 @@ namespace Sporefront.Engine
             lastMovementUpdate = 0;
             lastAIUpdate = 0;
             lastEntrenchmentUpdate = 0;
+            lastResearchCheck = 0;
 
             aiController?.Reset();
         }
@@ -171,7 +177,7 @@ namespace Sporefront.Engine
             double adjustedTime = currentTime * gameState.gameSpeed;
             gameState.currentTime = adjustedTime;
 
-            var allChanges = new List<StateChange>();
+            allChanges.Clear();
 
             // Vision updates (4x per second)
             if (adjustedTime - lastVisionUpdate >= visionUpdateInterval)
@@ -233,6 +239,17 @@ namespace Sporefront.Engine
                         {
                             var autoGatherChanges = TryAutoGatherAfterConstruction(building, constructionChanges);
                             allChanges.AddRange(autoGatherChanges);
+
+                            // Remobilize stranded armies when a home base is completed
+                            var homeBaseTypes = new HashSet<BuildingType>
+                            {
+                                BuildingType.CityCenter, BuildingType.WoodenFort, BuildingType.Castle
+                            };
+                            if (homeBaseTypes.Contains(building.buildingType))
+                            {
+                                var remobilizeChanges = RemobilizeStrandedArmies(building);
+                                allChanges.AddRange(remobilizeChanges);
+                            }
                         }
                     }
                 }
@@ -292,18 +309,22 @@ namespace Sporefront.Engine
                 lastEntrenchmentUpdate = adjustedTime;
             }
 
-            // Research completion updates (check all players every tick)
-            var researchChanges = UpdateResearchCompletion(adjustedTime);
-            allChanges.AddRange(researchChanges);
+            // Research and unit upgrade completion updates (1x per second)
+            if (adjustedTime - lastResearchCheck >= researchCheckInterval)
+            {
+                var researchChanges = UpdateResearchCompletion(adjustedTime);
+                allChanges.AddRange(researchChanges);
 
-            // Unit upgrade completion updates (check all players every tick)
-            var unitUpgradeChanges = UpdateUnitUpgradeCompletion(adjustedTime);
-            allChanges.AddRange(unitUpgradeChanges);
+                var unitUpgradeChanges = UpdateUnitUpgradeCompletion(adjustedTime);
+                allChanges.AddRange(unitUpgradeChanges);
+
+                lastResearchCheck = adjustedTime;
+            }
 
             // Notify listeners if there are changes
             if (allChanges.Count > 0)
             {
-                var batch = new StateChangeBatch(adjustedTime, allChanges);
+                var batch = new StateChangeBatch(adjustedTime, new List<StateChange>(allChanges));
                 OnStateChangesProduced?.Invoke(batch);
             }
 
@@ -321,7 +342,7 @@ namespace Sporefront.Engine
         /// </summary>
         private List<StateChange> UpdateEntrenchmentProgress(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -373,7 +394,7 @@ namespace Sporefront.Engine
         /// </summary>
         private List<StateChange> UpdateResearchCompletion(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -424,7 +445,7 @@ namespace Sporefront.Engine
         /// </summary>
         private List<StateChange> UpdateUnitUpgradeCompletion(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -579,6 +600,39 @@ namespace Sporefront.Engine
         /// When a MiningCamp, LumberCamp, or Farm finishes construction, automatically
         /// start the builder villager gathering from the nearby resource point.
         /// </summary>
+        private List<StateChange> RemobilizeStrandedArmies(BuildingData building)
+        {
+            var changes = new List<StateChange>();
+            if (!building.ownerID.HasValue) return changes;
+
+            Guid ownerID = building.ownerID.Value;
+            foreach (var army in gameState.armies.Values)
+            {
+                if (!army.isStranded) continue;
+                if (!army.ownerID.HasValue || army.ownerID.Value != ownerID) continue;
+
+                var retreatPath = gameState.mapData.FindPath(
+                    army.coordinate, building.coordinate, ownerID, gameState);
+
+                if (retreatPath != null && retreatPath.Count > 0)
+                {
+                    army.isStranded = false;
+                    army.isRetreating = true;
+                    army.homeBaseID = building.id;
+                    army.currentPath = retreatPath;
+                    army.pathIndex = 0;
+                    army.movementProgress = 0.0;
+
+                    changes.Add(new ArmyRemobilizedChange
+                    {
+                        armyID = army.id,
+                        destination = building.coordinate
+                    });
+                }
+            }
+            return changes;
+        }
+
         private List<StateChange> TryAutoGatherAfterConstruction(BuildingData building, List<StateChange> constructionChanges)
         {
             var changes = new List<StateChange>();
