@@ -18,6 +18,15 @@ namespace Sporefront.Visual
     public class BuildingDetailPanel : MonoBehaviour
     {
         // ================================================================
+        // Events
+        // ================================================================
+
+        public event Action<Guid, BuildingType, HexCoordinate, int> OnUpgradeRequested;
+        public event Action<Guid> OnCancelUpgradeRequested;
+        public event Action<Guid> OnCancelDemolishRequested;
+        public event Action<Guid> OnDemolishRequested;
+
+        // ================================================================
         // State
         // ================================================================
 
@@ -27,10 +36,28 @@ namespace Sporefront.Visual
         private Guid? currentBuildingID;
         private Guid localPlayerID;
 
-        // Cached references for refresh
+        // Cached references for incremental refresh
         private Image hpFill;
         private Text hpLabel;
-        private Text queueLabel;
+        private Image constructionProgressFill;
+        private Image upgradeProgressFill;
+
+        // Extracted section state
+        private BuildingTrainingSection.State trainingState;
+        private BuildingMarketSection.State marketState;
+
+        // Fade animation
+        private CanvasGroup backdropCG;
+        private Coroutine fadeCoroutine;
+
+        // Structural fingerprint — only full-rebuild when these change
+        private BuildingState cachedState;
+        private int cachedLevel;
+        private int cachedTrainingQueueCount;
+        private int cachedVillagerQueueCount;
+        private int cachedGarrisonTotal;
+        private bool cachedCanUpgrade;
+        private bool hasCachedFingerprint;
 
         // ================================================================
         // Initialization
@@ -45,33 +72,44 @@ namespace Sporefront.Visual
                 new Color(0, 0, 0, 0.4f));
             var bdRT = backdrop.GetComponent<RectTransform>();
             UIHelper.StretchFull(bdRT);
+            backdropCG = backdrop.AddComponent<CanvasGroup>();
             var bdBtn = backdrop.AddComponent<Button>();
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Close);
 
-            // Main panel — centered 400x500
+            // Main panel — centered 480x620
             panel = UIHelper.CreatePanel(backdrop.transform, "BuildingDetailPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 400, 500);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalDetailW, UIConstants.ModalDetailH);
+
+            // Click sink — absorbs pointer clicks inside the panel so they don't
+            // propagate up to the backdrop's close-on-click Button
+            var panelBtn = panel.AddComponent<Button>();
+            panelBtn.transition = Selectable.Transition.None;
 
             // ScrollView inside panel
             var scroll = UIHelper.CreateScrollView(panel.transform, "DetailScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 40); // Space for close button
+            scrollRT.offsetMin = new Vector2(0, 48); // Space for close button
             scrollRT.offsetMax = Vector2.zero;
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Close);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody, Close);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 46);
 
             backdrop.SetActive(false);
+        }
+
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
         }
 
         // ================================================================
@@ -81,23 +119,166 @@ namespace Sporefront.Visual
         public void Show(Guid buildingID, GameState gameState)
         {
             currentBuildingID = buildingID;
+            hasCachedFingerprint = false;
             Rebuild(gameState);
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
         }
 
         public void Close()
         {
             currentBuildingID = null;
-            backdrop.SetActive(false);
+            hasCachedFingerprint = false;
+            constructionProgressFill = null;
+            upgradeProgressFill = null;
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
         }
 
         public void Refresh(GameState gameState)
         {
             if (!currentBuildingID.HasValue || !backdrop.activeSelf) return;
+
+            var building = gameState.GetBuilding(currentBuildingID.Value);
+            if (building == null) { Close(); return; }
+
+            // Check if structural fingerprint matches — if so, only update dynamic values
+            if (hasCachedFingerprint && FingerprintMatches(building))
+            {
+                IncrementalUpdate(building, gameState);
+                return;
+            }
+
             Rebuild(gameState);
         }
 
+        // ================================================================
+        // Fingerprint & Incremental Update
+        // ================================================================
+
+        private bool FingerprintMatches(BuildingData building)
+        {
+            int trainingCount = building.trainingQueue != null ? building.trainingQueue.Count : 0;
+            int villagerCount = building.villagerTrainingQueue != null ? building.villagerTrainingQueue.Count : 0;
+            int garrisonTotal = building.GetTotalGarrisonCount();
+
+            return building.state == cachedState
+                && building.level == cachedLevel
+                && trainingCount == cachedTrainingQueueCount
+                && villagerCount == cachedVillagerQueueCount
+                && garrisonTotal == cachedGarrisonTotal
+                && building.CanUpgrade == cachedCanUpgrade;
+        }
+
+        private void CacheFingerprint(BuildingData building)
+        {
+            cachedState = building.state;
+            cachedLevel = building.level;
+            cachedTrainingQueueCount = building.trainingQueue != null ? building.trainingQueue.Count : 0;
+            cachedVillagerQueueCount = building.villagerTrainingQueue != null ? building.villagerTrainingQueue.Count : 0;
+            cachedGarrisonTotal = building.GetTotalGarrisonCount();
+            cachedCanUpgrade = building.CanUpgrade;
+            hasCachedFingerprint = true;
+        }
+
+        private void IncrementalUpdate(BuildingData building, GameState gameState)
+        {
+            // Update HP bar
+            if (hpFill != null && building.maxHealth > 0)
+            {
+                float pct = (float)(building.health / building.maxHealth);
+                var fillRT = hpFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
+            }
+            if (hpLabel != null && building.maxHealth > 0)
+            {
+                hpLabel.text = $"HP: {(int)building.health}/{(int)building.maxHealth}";
+            }
+
+            // Update construction progress bar
+            if (constructionProgressFill != null && building.state == BuildingState.Constructing)
+            {
+                var fillRT = constructionProgressFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.constructionProgress), 1);
+            }
+
+            // Update upgrade progress bar
+            if (upgradeProgressFill != null && building.state == BuildingState.Upgrading)
+            {
+                var fillRT = upgradeProgressFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
+            }
+
+            // Update queue labels
+            if (trainingState.queueLabel != null && building.trainingQueue != null)
+            {
+                trainingState.queueLabel.text = $"Queue: {building.trainingQueue.Count} item(s)";
+            }
+            if (trainingState.villagerQueueLabel != null && building.villagerTrainingQueue != null)
+            {
+                trainingState.villagerQueueLabel.text = $"Villager queue: {building.villagerTrainingQueue.Count} item(s)";
+            }
+
+            // Update military training progress bars
+            if (trainingState.trainingProgressFills != null && building.trainingQueue != null)
+            {
+                for (int i = 0; i < trainingState.trainingProgressFills.Count && i < building.trainingQueue.Count; i++)
+                {
+                    var entry = building.trainingQueue[i];
+                    float pct = Mathf.Clamp01((float)entry.GetProgress(gameState.currentTime,
+                        building.GetTrainingSpeedMultiplier()));
+                    var fillRT = trainingState.trainingProgressFills[i].GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(pct, 1);
+
+                    if (i < trainingState.trainingProgressLabels.Count)
+                        trainingState.trainingProgressLabels[i].text = $"{(int)(pct * 100)}%";
+
+                    if (i < trainingState.trainingTimeLabels.Count)
+                    {
+                        double baseTime = entry.unitType.TrainingTime() * entry.quantity;
+                        double totalTime = baseTime / building.GetTrainingSpeedMultiplier();
+                        double elapsed = gameState.currentTime - entry.startTime;
+                        double remaining = System.Math.Max(0, totalTime - elapsed);
+                        trainingState.trainingTimeLabels[i].text = $"~{UIHelper.FormatTime(remaining)}";
+                    }
+                }
+            }
+
+            // Update villager training progress bars
+            if (trainingState.villagerProgressFills != null && building.villagerTrainingQueue != null)
+            {
+                for (int i = 0; i < trainingState.villagerProgressFills.Count && i < building.villagerTrainingQueue.Count; i++)
+                {
+                    var entry = building.villagerTrainingQueue[i];
+                    float pct = Mathf.Clamp01((float)entry.GetProgress(gameState.currentTime));
+                    var fillRT = trainingState.villagerProgressFills[i].GetComponent<RectTransform>();
+                    fillRT.anchorMax = new Vector2(pct, 1);
+
+                    if (i < trainingState.villagerProgressLabels.Count)
+                        trainingState.villagerProgressLabels[i].text = $"{(int)(pct * 100)}%";
+
+                    if (i < trainingState.villagerTimeLabels.Count)
+                    {
+                        double totalTime = VillagerTrainingEntry.TrainingTimePerVillager * entry.quantity;
+                        double elapsed = gameState.currentTime - entry.startTime;
+                        double remaining = System.Math.Max(0, totalTime - elapsed);
+                        trainingState.villagerTimeLabels[i].text = $"~{UIHelper.FormatTime(remaining)}";
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns cached progress fill Image references for per-frame interpolation.
+        /// </summary>
+        public (Image constructionFill, Image upgradeFill) GetProgressFillRefs()
+        {
+            return (constructionProgressFill, upgradeProgressFill);
+        }
+
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+        public Guid? CurrentBuildingID => currentBuildingID;
 
         // ================================================================
         // Rebuild Content
@@ -115,95 +296,181 @@ namespace Sporefront.Visual
 
             hpFill = null;
             hpLabel = null;
-            queueLabel = null;
+            constructionProgressFill = null;
+            upgradeProgressFill = null;
+
+            // Adjust scroll content spacing
+            var contentVLG = contentRT.GetComponent<VerticalLayoutGroup>();
+            if (contentVLG != null)
+            {
+                contentVLG.spacing = UIConstants.SectionCardSpacing;
+                contentVLG.padding = new RectOffset(12, 12, 12, 12);
+            }
 
             var player = gameState.GetPlayer(localPlayerID);
 
             // Header
             var header = UIHelper.CreateLabel(contentRT,
                 $"{building.buildingType.DisplayName()} Lv.{building.level}",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 32;
+            headerLE.preferredHeight = 36;
 
-            // HP bar
-            BuildHPBar(building);
+            // Status / HP card
+            var statusCard = UIHelper.CreateSectionCard(contentRT, "StatusCard", "Status");
+            BuildHPBar(building, statusCard.transform);
 
             // State info
             if (building.state != BuildingState.Completed)
             {
-                var stateLabel = UIHelper.CreateLabel(contentRT, $"State: {building.state}");
+                var stateLabel = UIHelper.CreateLabel(statusCard.transform, $"State: {building.state}");
                 var stateLE = stateLabel.gameObject.AddComponent<LayoutElement>();
                 stateLE.preferredHeight = 20;
 
                 if (building.state == BuildingState.Constructing || building.state == BuildingState.Upgrading)
                 {
-                    var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
-                        SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
                     double progress = building.state == BuildingState.Constructing
                         ? building.constructionProgress
                         : building.upgradeProgress;
+                    int pctInt = Mathf.Clamp((int)(progress * 100), 0, 100);
+
+                    var (bg, fill, pctLabel) = UIHelper.CreateProgressBarWithLabel(statusCard.transform, 16f,
+                        SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                    pctLabel.text = $"{pctInt}%";
                     var fillRT = fill.GetComponent<RectTransform>();
                     fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)progress), 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
-                    barLE.preferredHeight = 14;
+                    barLE.preferredHeight = 16;
+
+                    // Cache fill reference for incremental updates
+                    if (building.state == BuildingState.Constructing)
+                        constructionProgressFill = fill;
+                    else
+                        upgradeProgressFill = fill;
+
+                    // Time estimate
+                    double currentTime = gameState.currentTime;
+                    double? remaining = building.state == BuildingState.Constructing
+                        ? building.GetRemainingConstructionTime(currentTime)
+                        : building.GetRemainingUpgradeTime(currentTime);
+                    if (remaining.HasValue)
+                    {
+                        var etaLabel = UIHelper.CreateLabel(statusCard.transform,
+                            $"~{UIHelper.FormatTime(remaining.Value)} remaining",
+                            UIConstants.FontSmall, SporefrontColors.InkLight);
+                        var etaLE = etaLabel.gameObject.AddComponent<LayoutElement>();
+                        etaLE.preferredHeight = 18;
+                    }
+
+                    // Cancel button for upgrading buildings
+                    if (building.state == BuildingState.Upgrading &&
+                        building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                    {
+                        var capturedID = building.id;
+                        var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Upgrade (50% refund)",
+                            SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                            {
+                                OnCancelUpgradeRequested?.Invoke(capturedID);
+                            });
+                        var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                        cancelLE.preferredHeight = 30;
+                    }
+                }
+
+                // Cancel button for demolishing buildings
+                if (building.state == BuildingState.Demolishing &&
+                    building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                {
+                    var capturedID = building.id;
+                    var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Demolish",
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        {
+                            OnCancelDemolishRequested?.Invoke(capturedID);
+                        });
+                    var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+                    cancelLE.preferredHeight = 30;
                 }
             }
-
-            UIHelper.CreateDivider(contentRT);
 
             // Training section (military buildings + CC)
             if (building.IsOperational)
             {
-                BuildTrainingSection(building, gameState, player);
-                UIHelper.CreateDivider(contentRT);
+                var trainingCard = UIHelper.CreateSectionCard(contentRT, "TrainingCard");
+                var trainingCardRT = (RectTransform)trainingCard.transform;
+                trainingState = BuildingTrainingSection.BuildTraining(
+                    trainingCardRT, building, gameState, player, localPlayerID);
 
                 // Market section
                 if (building.buildingType == BuildingType.Market)
                 {
-                    BuildMarketSection(building, gameState, player);
-                    UIHelper.CreateDivider(contentRT);
+                    var marketCard = UIHelper.CreateSectionCard(contentRT, "MarketCard");
+                    var marketCardRT = (RectTransform)marketCard.transform;
+                    marketState = BuildingMarketSection.Build(
+                        marketCardRT, building, gameState, player, localPlayerID,
+                        currentBuildingID, () => Rebuild(GameEngine.Instance.gameState));
                 }
 
                 // Unit upgrades section (military production buildings)
                 var availableUpgrades = UnitUpgradeTypeExtensions.UpgradesForBuilding(building.buildingType);
                 if (availableUpgrades.Count > 0)
                 {
-                    BuildUnitUpgradesSection(building, gameState, player, availableUpgrades);
-                    UIHelper.CreateDivider(contentRT);
+                    var upgradesCard = UIHelper.CreateSectionCard(contentRT, "UnitUpgradesCard");
+                    var upgradesCardRT = (RectTransform)upgradesCard.transform;
+                    BuildingUnitUpgradesSection.Build(
+                        upgradesCardRT, building, gameState, player, localPlayerID,
+                        currentBuildingID, availableUpgrades);
                 }
 
                 // Garrison section
-                BuildGarrisonSection(building);
-                UIHelper.CreateDivider(contentRT);
+                var garrisonCard = UIHelper.CreateSectionCard(contentRT, "GarrisonCard");
+                var garrisonCardRT = (RectTransform)garrisonCard.transform;
+                BuildingTrainingSection.BuildGarrison(garrisonCardRT, building);
 
                 // Deploy section
-                BuildDeploySection(building, gameState);
-                UIHelper.CreateDivider(contentRT);
+                var deployCard = UIHelper.CreateSectionCard(contentRT, "DeployCard");
+                var deployCardRT = (RectTransform)deployCard.transform;
+                BuildingTrainingSection.BuildDeploy(deployCardRT, building, gameState, localPlayerID);
 
                 // Home base section
                 int? homeBaseCapacity = building.GetArmyHomeBaseCapacity();
                 if (homeBaseCapacity.HasValue || building.buildingType == BuildingType.CityCenter)
                 {
                     BuildHomeBaseSection(building, gameState);
-                    UIHelper.CreateDivider(contentRT);
                 }
 
                 // Upgrade section
                 BuildUpgradeSection(building, player);
+
+                // Demolish button (completed, player-owned, non-CityCenter)
+                if (building.CanDemolish &&
+                    building.ownerID.HasValue && building.ownerID.Value == localPlayerID)
+                {
+                    var demolishCard = UIHelper.CreateSectionCard(contentRT, "DemolishCard");
+                    var capturedID = building.id;
+                    var demolishBtn = UIHelper.CreateButton(demolishCard.transform, "Demolish",
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        {
+                            OnDemolishRequested?.Invoke(capturedID);
+                        });
+                    var demolishLE = demolishBtn.gameObject.AddComponent<LayoutElement>();
+                    demolishLE.preferredHeight = 32;
+                }
             }
+
+            // Cache fingerprint for incremental refresh
+            CacheFingerprint(building);
         }
 
         // ================================================================
         // HP Bar
         // ================================================================
 
-        private void BuildHPBar(BuildingData building)
+        private void BuildHPBar(BuildingData building, Transform parent)
         {
             if (building.maxHealth <= 0) return;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 18f, 4f);
+            var row = UIHelper.CreateHorizontalRow(parent, 18f, 4f);
 
             hpLabel = UIHelper.CreateLabel(row.transform,
                 $"HP: {(int)building.health}/{(int)building.maxHealth}", 11);
@@ -221,177 +488,6 @@ namespace Sporefront.Visual
             barLE.preferredHeight = 14;
         }
 
-        // ================================================================
-        // Training Section
-        // ================================================================
-
-        private void BuildTrainingSection(BuildingData building, GameState gameState, PlayerState player)
-        {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Training",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
-
-            // Villager training (City Center)
-            if (building.CanTrainVillagers())
-            {
-                var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
-                var nameLabel = UIHelper.CreateLabel(row.transform, "Villager", 12);
-                var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                nameLE.flexibleWidth = 1;
-
-                var trainBtn = UIHelper.CreateButton(row.transform, "Train", null, null, 11, () =>
-                {
-                    var cmd = new TrainVillagerCommand(localPlayerID, building.id, 1);
-                    GameEngine.Instance.ExecuteCommand(cmd);
-                });
-                var btnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 50;
-            }
-
-            // Military unit training
-            var unitTypes = (MilitaryUnitType[])Enum.GetValues(typeof(MilitaryUnitType));
-            foreach (var ut in unitTypes)
-            {
-                if (!building.CanTrain(ut)) continue;
-
-                var cost = ut.TrainingCost();
-                bool canAfford = player != null && player.CanAfford(cost);
-
-                var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
-
-                var nameLabel = UIHelper.CreateLabel(row.transform, ut.DisplayName(), 12);
-                var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                nameLE.flexibleWidth = 1;
-
-                var costLabel = UIHelper.CreateLabel(row.transform, FormatCost(cost), 10,
-                    canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
-                costLabel.supportRichText = true;
-                var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
-                costLE.preferredWidth = 80;
-
-                var capturedUT = ut;
-                var trainBtn = UIHelper.CreateButton(row.transform, "Train",
-                    canAfford ? SporefrontColors.ParchmentDark : SporefrontColors.InkFaded,
-                    UIHelper.ButtonText, 11, () =>
-                    {
-                        var cmd = new TrainMilitaryCommand(localPlayerID, building.id, capturedUT, 1);
-                        GameEngine.Instance.ExecuteCommand(cmd);
-                    });
-                trainBtn.interactable = canAfford;
-                var btnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 50;
-            }
-
-            // Training queue display
-            if (building.trainingQueue != null && building.trainingQueue.Count > 0)
-            {
-                UIHelper.CreateDivider(contentRT, null, 1);
-                queueLabel = UIHelper.CreateLabel(contentRT,
-                    $"Queue: {building.trainingQueue.Count} item(s)", 11, SporefrontColors.InkLight);
-                var qlLE = queueLabel.gameObject.AddComponent<LayoutElement>();
-                qlLE.preferredHeight = 20;
-            }
-
-            if (building.villagerTrainingQueue != null && building.villagerTrainingQueue.Count > 0)
-            {
-                var vtLabel = UIHelper.CreateLabel(contentRT,
-                    $"Villager queue: {building.villagerTrainingQueue.Count} item(s)", 11,
-                    SporefrontColors.InkLight);
-                var vtLE = vtLabel.gameObject.AddComponent<LayoutElement>();
-                vtLE.preferredHeight = 20;
-            }
-        }
-
-        // ================================================================
-        // Garrison Section
-        // ================================================================
-
-        private void BuildGarrisonSection(BuildingData building)
-        {
-            int total = building.GetTotalGarrisonCount();
-            int capacity = building.GetGarrisonCapacity();
-            if (capacity <= 0) return;
-
-            var sectionLabel = UIHelper.CreateLabel(contentRT,
-                $"Garrison ({total}/{capacity})",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
-
-            // Military garrison
-            if (building.garrison != null)
-            {
-                foreach (var kvp in building.garrison)
-                {
-                    if (kvp.Value <= 0) continue;
-                    var label = UIHelper.CreateLabel(contentRT,
-                        $"  {kvp.Key.DisplayName()}: {kvp.Value}", 12);
-                    var le = label.gameObject.AddComponent<LayoutElement>();
-                    le.preferredHeight = 20;
-                }
-            }
-
-            // Villager garrison
-            if (building.villagerGarrison > 0)
-            {
-                var vlLabel = UIHelper.CreateLabel(contentRT,
-                    $"  Villagers: {building.villagerGarrison}", 12);
-                var vlLE = vlLabel.gameObject.AddComponent<LayoutElement>();
-                vlLE.preferredHeight = 20;
-            }
-        }
-
-        // ================================================================
-        // Deploy Section
-        // ================================================================
-
-        private void BuildDeploySection(BuildingData building, GameState gameState)
-        {
-            int totalGarrison = building.GetTotalGarrisonCount();
-            if (totalGarrison <= 0) return;
-
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Deploy",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
-
-            var row = UIHelper.CreateHorizontalRow(contentRT, 32f, 8f);
-
-            // Deploy Army button
-            if (building.garrison != null && building.GetTotalGarrisonedUnits() > 0)
-            {
-                var deployArmyBtn = UIHelper.CreateButton(row.transform, "Deploy Army",
-                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
-                    {
-                        // Deploy all garrisoned military units
-                        var composition = new Dictionary<MilitaryUnitType, int>(building.garrison);
-                        var cmd = new DeployArmyCommand(localPlayerID, building.id, composition);
-                        GameEngine.Instance.ExecuteCommand(cmd);
-                    });
-                var armyBtnLE = deployArmyBtn.gameObject.AddComponent<LayoutElement>();
-                armyBtnLE.preferredWidth = 110;
-                armyBtnLE.preferredHeight = 32;
-            }
-
-            // Deploy Villagers button
-            if (building.villagerGarrison > 0)
-            {
-                var deployVilBtn = UIHelper.CreateButton(row.transform, "Deploy Villagers",
-                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
-                    {
-                        var cmd = new DeployVillagersCommand(localPlayerID, building.id,
-                            building.villagerGarrison);
-                        GameEngine.Instance.ExecuteCommand(cmd);
-                    });
-                var vilBtnLE = deployVilBtn.gameObject.AddComponent<LayoutElement>();
-                vilBtnLE.preferredWidth = 130;
-                vilBtnLE.preferredHeight = 32;
-            }
-        }
 
         // ================================================================
         // Upgrade Section
@@ -401,29 +497,28 @@ namespace Sporefront.Visual
         {
             if (!building.CanUpgrade) return;
 
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Upgrade",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
+            var card = UIHelper.CreateSectionCard(contentRT, "UpgradeCard", "Upgrade");
 
             var cost = building.GetUpgradeCost();
             bool canAfford = player != null && player.CanAfford(cost);
             int nextLevel = building.level + 1;
 
-            var infoLabel = UIHelper.CreateLabel(contentRT,
-                $"Lv.{building.level} -> Lv.{nextLevel}  Cost: {FormatCost(cost)}", 12,
+            var infoLabel = UIHelper.CreateLabel(card.transform,
+                $"Lv.{building.level} -> Lv.{nextLevel}  Cost: {UIHelper.FormatCost(cost)}", 12,
                 canAfford ? UIHelper.BodyTextColor : SporefrontColors.SporeRed);
             infoLabel.supportRichText = true;
             var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
             infoLE.preferredHeight = 22;
 
-            var upgradeBtn = UIHelper.CreateButton(contentRT, "Upgrade",
+            var capturedID = building.id;
+            var capturedType = building.buildingType;
+            var capturedCoord = building.coordinate;
+            var capturedLevel = building.level;
+            var upgradeBtn = UIHelper.CreateButton(card.transform, "Upgrade",
                 canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
                 canAfford ? UIHelper.ButtonText : SporefrontColors.InkLight, 12, () =>
                 {
-                    var cmd = new UpgradeCommand(localPlayerID, building.id);
-                    GameEngine.Instance.ExecuteCommand(cmd);
+                    OnUpgradeRequested?.Invoke(capturedID, capturedType, capturedCoord, capturedLevel);
                 });
             upgradeBtn.interactable = canAfford;
             var btnLE = upgradeBtn.gameObject.AddComponent<LayoutElement>();
@@ -432,282 +527,16 @@ namespace Sporefront.Visual
             // Upgrade progress
             if (building.state == BuildingState.Upgrading)
             {
-                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
+                var (bg, fill) = UIHelper.CreateProgressBar(card.transform, 14f,
                     SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
                 barLE.preferredHeight = 14;
+                upgradeProgressFill = fill;
             }
         }
 
-        // ================================================================
-        // Market Section
-        // ================================================================
-
-        private Dictionary<ResourceType, int> tradeInputAmounts = new Dictionary<ResourceType, int>();
-        private ResourceType tradeOutputType = ResourceType.Food;
-        private Text tradePreviewLabel;
-
-        private void BuildMarketSection(BuildingData building, GameState gameState, PlayerState player)
-        {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Trade Resources",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
-
-            var rateLabel = UIHelper.CreateLabel(contentRT, "Exchange Rate: 80%", 11,
-                SporefrontColors.InkLight);
-            var rateLE = rateLabel.gameObject.AddComponent<LayoutElement>();
-            rateLE.preferredHeight = 18;
-
-            // Input sliders for each resource
-            tradeInputAmounts.Clear();
-            var resourceTypes = (ResourceType[])Enum.GetValues(typeof(ResourceType));
-            foreach (var rt in resourceTypes)
-            {
-                int available = player != null ? player.GetResource(rt) : 0;
-                tradeInputAmounts[rt] = 0;
-
-                var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
-
-                var nameLabel = UIHelper.CreateLabel(row.transform,
-                    $"{UIHelper.ResourceIcon(rt)} {rt}", 12);
-                var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-                nameLE.preferredWidth = 60;
-
-                var capturedRT = rt;
-                var amountLabel = UIHelper.CreateLabel(row.transform, "0", 12,
-                    SporefrontColors.InkMid, TextAnchor.MiddleCenter);
-                var amountLE = amountLabel.gameObject.AddComponent<LayoutElement>();
-                amountLE.preferredWidth = 30;
-
-                if (available > 0)
-                {
-                    var slider = UIHelper.CreateSlider(row.transform, 0, available, true, (val) =>
-                    {
-                        tradeInputAmounts[capturedRT] = (int)val;
-                        amountLabel.text = ((int)val).ToString();
-                        UpdateTradePreview();
-                    });
-                    var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
-                    sliderLE.flexibleWidth = 1;
-                    sliderLE.preferredHeight = 20;
-                }
-                else
-                {
-                    var emptyLabel = UIHelper.CreateLabel(row.transform, "(none)", 11,
-                        SporefrontColors.InkFaded);
-                    var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
-                    emptyLE.flexibleWidth = 1;
-                }
-
-                var maxLabel = UIHelper.CreateLabel(row.transform, $"/{available}", 10,
-                    SporefrontColors.InkFaded);
-                var maxLE = maxLabel.gameObject.AddComponent<LayoutElement>();
-                maxLE.preferredWidth = 40;
-            }
-
-            // Output type selection
-            var outputHeader = UIHelper.CreateLabel(contentRT, "Receive:", 12,
-                UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
-            var outputHeaderLE = outputHeader.gameObject.AddComponent<LayoutElement>();
-            outputHeaderLE.preferredHeight = 22;
-
-            var outputRow = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
-            foreach (var rt in resourceTypes)
-            {
-                var capturedRT = rt;
-                bool isSelected = (rt == tradeOutputType);
-                var btn = UIHelper.CreateButton(outputRow.transform,
-                    UIHelper.ResourceIcon(rt),
-                    isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
-                    isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText, 12, () =>
-                    {
-                        tradeOutputType = capturedRT;
-                        if (currentBuildingID.HasValue)
-                            Rebuild(GameEngine.Instance.gameState);
-                    });
-                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 40;
-                btnLE.preferredHeight = 28;
-            }
-
-            // Preview
-            tradePreviewLabel = UIHelper.CreateLabel(contentRT, "Select resources to trade", 12,
-                SporefrontColors.InkMid, TextAnchor.MiddleCenter);
-            var previewLE = tradePreviewLabel.gameObject.AddComponent<LayoutElement>();
-            previewLE.preferredHeight = 22;
-            UpdateTradePreview();
-
-            // Execute button
-            var tradeBtn = UIHelper.CreateButton(contentRT, "Execute Trade",
-                SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
-                {
-                    if (!currentBuildingID.HasValue) return;
-                    var inputs = new Dictionary<ResourceType, int>();
-                    foreach (var kvp in tradeInputAmounts)
-                    {
-                        if (kvp.Value > 0 && kvp.Key != tradeOutputType)
-                            inputs[kvp.Key] = kvp.Value;
-                    }
-                    if (inputs.Count == 0) return;
-                    var cmd = new MarketTradeCommand(localPlayerID, currentBuildingID.Value,
-                        inputs, tradeOutputType);
-                    GameEngine.Instance.ExecuteCommand(cmd);
-                });
-            var tradeBtnLE = tradeBtn.gameObject.AddComponent<LayoutElement>();
-            tradeBtnLE.preferredHeight = 32;
-        }
-
-        private void UpdateTradePreview()
-        {
-            if (tradePreviewLabel == null) return;
-            int totalInput = 0;
-            foreach (var kvp in tradeInputAmounts)
-            {
-                if (kvp.Key != tradeOutputType)
-                    totalInput += kvp.Value;
-            }
-            if (totalInput <= 0)
-            {
-                tradePreviewLabel.text = "Select resources to trade";
-                return;
-            }
-            int output = MarketTradeCommand.CalculateOutput(totalInput);
-            tradePreviewLabel.text = $"{totalInput} input -> {output} {UIHelper.ResourceIcon(tradeOutputType)}";
-        }
-
-        // ================================================================
-        // Unit Upgrades Section
-        // ================================================================
-
-        private void BuildUnitUpgradesSection(BuildingData building, GameState gameState,
-            PlayerState player, List<UnitUpgradeType> upgrades)
-        {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Unit Upgrades",
-                UIHelper.DefaultHeaderFontSize - 2, SporefrontColors.SporeAmber,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
-
-            // Group by unit type
-            MilitaryUnitType? currentUnit = null;
-            foreach (var upgrade in upgrades)
-            {
-                var unitType = upgrade.GetUnitType();
-                if (!currentUnit.HasValue || currentUnit.Value != unitType)
-                {
-                    currentUnit = unitType;
-                    int tier = player != null ? player.GetUnitUpgradeTier(unitType) : 0;
-                    var unitHeader = UIHelper.CreateLabel(contentRT,
-                        $"{unitType.DisplayName()} (Tier {tier})", 12,
-                        SporefrontColors.InkDark, TextAnchor.MiddleLeft, true);
-                    var unitHeaderLE = unitHeader.gameObject.AddComponent<LayoutElement>();
-                    unitHeaderLE.preferredHeight = 20;
-                }
-
-                bool completed = player != null && player.HasCompletedUnitUpgrade(upgrade.ToString());
-                bool isActive = player != null && player.activeUnitUpgrade == upgrade.ToString();
-                bool prereqMet = true;
-                var prereq = upgrade.Prerequisite();
-                if (prereq.HasValue && player != null)
-                    prereqMet = player.HasCompletedUnitUpgrade(prereq.Value.ToString());
-                bool levelMet = building.level >= upgrade.RequiredBuildingLevel();
-                bool canStart = !completed && !isActive && prereqMet && levelMet
-                    && player != null && !player.IsUnitUpgradeActive()
-                    && player.CanAfford(upgrade.Cost());
-
-                var row = UIHelper.CreateHorizontalRow(contentRT, 26f, 4f);
-
-                // Status indicator
-                string statusText;
-                Color statusColor;
-                if (completed)
-                {
-                    statusText = "Done";
-                    statusColor = SporefrontColors.SporeGreen;
-                }
-                else if (isActive)
-                {
-                    statusText = "Active";
-                    statusColor = SporefrontColors.SporeTeal;
-                }
-                else if (!prereqMet || !levelMet)
-                {
-                    statusText = "Locked";
-                    statusColor = SporefrontColors.InkFaded;
-                }
-                else
-                {
-                    statusText = $"Tier {upgrade.Tier()}";
-                    statusColor = SporefrontColors.InkMid;
-                }
-
-                var statusLabel = UIHelper.CreateLabel(row.transform, statusText, 11, statusColor);
-                var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
-                statusLE.preferredWidth = 45;
-
-                // Cost
-                if (!completed)
-                {
-                    var cost = upgrade.Cost();
-                    var costLabel = UIHelper.CreateLabel(row.transform, FormatCost(cost), 10,
-                        (canStart || isActive) ? SporefrontColors.InkLight : SporefrontColors.InkFaded);
-                    costLabel.supportRichText = true;
-                    var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
-                    costLE.flexibleWidth = 1;
-                }
-                else
-                {
-                    var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
-                    spacer.transform.SetParent(row.transform, false);
-                    spacer.GetComponent<LayoutElement>().flexibleWidth = 1;
-                }
-
-                // Action button
-                if (!completed && !isActive)
-                {
-                    var capturedUpgrade = upgrade;
-                    var btn = UIHelper.CreateButton(row.transform, "Upgrade",
-                        canStart ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
-                        canStart ? UIHelper.ButtonText : SporefrontColors.InkLight, 11, () =>
-                        {
-                            if (!currentBuildingID.HasValue) return;
-                            var cmd = new UpgradeUnitCommand(localPlayerID,
-                                capturedUpgrade.ToString(), currentBuildingID.Value);
-                            GameEngine.Instance.ExecuteCommand(cmd);
-                        });
-                    btn.interactable = canStart;
-                    var btnLE = btn.gameObject.AddComponent<LayoutElement>();
-                    btnLE.preferredWidth = 60;
-                }
-
-                // Active progress bar
-                if (isActive && player.activeUnitUpgradeStartTime.HasValue)
-                {
-                    double elapsed = gameState.currentTime - player.activeUnitUpgradeStartTime.Value;
-                    double total = upgrade.UpgradeTime();
-                    double pct = Math.Min(1.0, elapsed / total);
-                    double remaining = Math.Max(0, total - elapsed);
-
-                    var progressRow = UIHelper.CreateHorizontalRow(contentRT, 16f, 4f);
-                    var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                        SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
-                    var fillRT = fill.GetComponent<RectTransform>();
-                    fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)pct), 1);
-                    var barLE = bg.gameObject.AddComponent<LayoutElement>();
-                    barLE.flexibleWidth = 1;
-                    barLE.preferredHeight = 12;
-
-                    var timeLabel = UIHelper.CreateLabel(progressRow.transform,
-                        $"{(int)remaining}s", 10, SporefrontColors.InkLight);
-                    var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
-                    timeLE.preferredWidth = 30;
-                }
-            }
-        }
 
         // ================================================================
         // Home Base Section
@@ -715,11 +544,7 @@ namespace Sporefront.Visual
 
         private void BuildHomeBaseSection(BuildingData building, GameState gameState)
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Home Base",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
-            sectionLE.preferredHeight = 24;
+            var card = UIHelper.CreateSectionCard(contentRT, "HomeBaseCard", "Home Base");
 
             int? capacity = building.GetArmyHomeBaseCapacity();
             int count = gameState.GetArmyCountForHomeBase(building.id);
@@ -728,14 +553,14 @@ namespace Sporefront.Visual
                 ? $"Army Capacity: {count}/{capacity.Value}"
                 : $"Army Capacity: {count} (Unlimited)";
 
-            var capLabel = UIHelper.CreateLabel(contentRT, capacityText, 12, SporefrontColors.InkMid);
+            var capLabel = UIHelper.CreateLabel(card.transform, capacityText, 12, SporefrontColors.InkMid);
             var capLE = capLabel.gameObject.AddComponent<LayoutElement>();
             capLE.preferredHeight = 20;
 
             var armies = gameState.GetArmiesForHomeBase(building.id);
             if (armies.Count == 0)
             {
-                var emptyLabel = UIHelper.CreateLabel(contentRT, "No armies based here", 11,
+                var emptyLabel = UIHelper.CreateLabel(card.transform, "No armies based here", 11,
                     SporefrontColors.InkFaded);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 18;
@@ -744,7 +569,7 @@ namespace Sporefront.Visual
             {
                 foreach (var army in armies)
                 {
-                    var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
+                    var row = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
                     var nameLabel = UIHelper.CreateLabel(row.transform,
                         army.name ?? "Army", 12, SporefrontColors.InkDark);
@@ -766,19 +591,5 @@ namespace Sporefront.Visual
             }
         }
 
-        // ================================================================
-        // Helpers
-        // ================================================================
-
-        private string FormatCost(Dictionary<ResourceType, int> cost)
-        {
-            var parts = new List<string>();
-            foreach (var kvp in cost)
-            {
-                if (kvp.Value > 0)
-                    parts.Add($"{UIHelper.ResourceIcon(kvp.Key)}{kvp.Value}");
-            }
-            return string.Join(" ", parts);
-        }
     }
 }

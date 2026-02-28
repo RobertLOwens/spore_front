@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sporefront.Data;
 using Sporefront.Engine;
 using Sporefront.Models;
@@ -11,13 +12,15 @@ namespace Sporefront.Commands
         public BuildingType buildingType;
         public HexCoordinate coordinate;
         public int rotation;
+        public Guid? assignedVillagerGroupID;
 
-        public BuildCommand(Guid playerID, BuildingType buildingType, HexCoordinate coordinate, int rotation = 0)
+        public BuildCommand(Guid playerID, BuildingType buildingType, HexCoordinate coordinate, int rotation = 0, Guid? assignedVillagerGroupID = null)
             : base(playerID)
         {
             this.buildingType = buildingType;
             this.coordinate = coordinate;
             this.rotation = rotation;
+            this.assignedVillagerGroupID = assignedVillagerGroupID;
         }
 
         public override EngineCommandResult Validate(GameState state)
@@ -54,6 +57,25 @@ namespace Sporefront.Commands
             if (!player.CanAfford(buildCost))
                 return EngineCommandResult.Failure("Insufficient resources.");
 
+            // If a specific villager is assigned, validate it exists and is owned
+            if (assignedVillagerGroupID.HasValue)
+            {
+                var group = state.GetVillagerGroup(assignedVillagerGroupID.Value);
+                if (group == null)
+                    return EngineCommandResult.Failure("Assigned villager group not found.");
+                if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
+                    return EngineCommandResult.Failure("Assigned villager group not owned by player.");
+            }
+            else
+            {
+                // No specific villager — require at least one idle villager group
+                var villagers = state.GetVillagerGroupsForPlayer(PlayerID);
+                bool hasIdleVillager = villagers != null &&
+                    villagers.Any(g => g.currentTask.IsIdle && g.currentPath == null);
+                if (!hasIdleVillager)
+                    return EngineCommandResult.Failure("No idle villagers available.");
+            }
+
             return EngineCommandResult.Success(null);
         }
 
@@ -76,13 +98,9 @@ namespace Sporefront.Commands
             // Create the building
             var building = new BuildingData(buildingType, coordinate, PlayerID, rotation);
 
-            // Start construction with 1 builder
-            building.StartConstruction(1);
-
             // Add building to game state
             state.AddBuilding(building);
 
-            // Emit state changes
             changeBuilder.Add(new BuildingPlacedChange
             {
                 buildingID = building.id,
@@ -92,10 +110,79 @@ namespace Sporefront.Commands
                 rotation = rotation
             });
 
-            changeBuilder.Add(new BuildingConstructionStartedChange
+            // Resolve builder: use assigned villager or auto-select nearest idle
+            VillagerGroupData builder = null;
+
+            if (assignedVillagerGroupID.HasValue)
             {
-                buildingID = building.id
-            });
+                builder = state.GetVillagerGroup(assignedVillagerGroupID.Value);
+                if (builder != null && !builder.currentTask.IsIdle)
+                {
+                    // Cancel current task for busy villager
+                    if (builder.IsGathering())
+                        GameEngine.Instance.resourceEngine.StopGathering(builder.id);
+                    builder.ClearTask();
+                    builder.ClearPath();
+                }
+            }
+            else
+            {
+                var idleVillagers = state.GetVillagerGroupsForPlayer(PlayerID)
+                    .Where(g => g.currentTask.IsIdle && g.currentPath == null)
+                    .OrderBy(g => g.coordinate.Distance(coordinate))
+                    .ToList();
+
+                if (idleVillagers.Count > 0)
+                    builder = idleVillagers[0];
+            }
+
+            if (builder != null)
+            {
+                builder.AssignTask(new BuildingTask(building.id), coordinate, building.id);
+
+                changeBuilder.Add(new VillagerGroupTaskChangedChange
+                {
+                    groupID = builder.id,
+                    task = "Building",
+                    targetCoordinate = coordinate
+                });
+
+                if (builder.coordinate.Equals(coordinate))
+                {
+                    // Already on-site: start construction immediately
+                    building.StartConstruction(state.currentTime, builder.villagerCount);
+                    changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                }
+                else
+                {
+                    // Dispatch villager — building stays in Planning until arrival
+                    var path = state.mapData.FindPath(builder.coordinate, coordinate, PlayerID, state);
+                    if (path != null)
+                    {
+                        builder.SetPath(path);
+                        changeBuilder.Add(new VillagerGroupMovedChange
+                        {
+                            groupID = builder.id,
+                            from = builder.coordinate,
+                            to = coordinate,
+                            path = path
+                        });
+                    }
+                    else
+                    {
+                        // No path found — start construction as fallback
+                        building.StartConstruction(state.currentTime, 1);
+                        builder.ClearTask();
+                        changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                    }
+                }
+            }
+            else
+            {
+                // No villager available — start construction without one (graceful fallback)
+                building.StartConstruction(state.currentTime, 1);
+                changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+            }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

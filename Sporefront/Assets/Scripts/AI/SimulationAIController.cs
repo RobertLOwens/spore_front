@@ -262,6 +262,9 @@ namespace Sporefront.AI
                     else if (ShouldAttack(aiState, gameState))
                     {
                         aiState.currentState = AIState.Attack;
+                        aiState.attackStateEnteredTime = currentTime;
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                     }
                     break;
 
@@ -277,6 +280,9 @@ namespace Sporefront.AI
                     else if (ShouldAttack(aiState, gameState))
                     {
                         aiState.currentState = AIState.Attack;
+                        aiState.attackStateEnteredTime = currentTime;
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                     }
                     break;
 
@@ -288,6 +294,9 @@ namespace Sporefront.AI
                         {
                             aiState.currentState = AIState.Attack;
                             aiState.consecutiveDefenses = 0;
+                            aiState.attackStateEnteredTime = currentTime;
+                            aiState.lastAttackProgressTime = currentTime;
+                            aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
                         }
                         else
                         {
@@ -301,6 +310,20 @@ namespace Sporefront.AI
                     break;
 
                 case AIState.Attack:
+                    // Attack timeout: check if making progress
+                    double currentEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
+                    if (aiState.lastKnownEnemyStrength - currentEnemyStrength >= 100)
+                    {
+                        aiState.lastAttackProgressTime = currentTime;
+                        aiState.lastKnownEnemyStrength = currentEnemyStrength;
+                    }
+                    if (currentTime - aiState.lastAttackProgressTime > genome.attackTimeoutDuration)
+                    {
+                        aiState.currentState = AIState.Retreat;
+                        aiState.persistentAttackTargetID = null;
+                        break;
+                    }
+
                     if (nearbyEnemies.Count > 0)
                     {
                         aiState.currentState = AIState.Defense;
@@ -362,6 +385,7 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateExpansionCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime, aiPlayers));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
@@ -371,6 +395,7 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateEconomyCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime, aiPlayers));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateGarrisonCommands(aiState, gameState, currentTime));
@@ -391,6 +416,7 @@ namespace Sporefront.AI
 
                 case AIState.Attack:
                     commands.AddRange(militaryPlanner.GenerateAttackCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateEconomyCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
@@ -733,47 +759,41 @@ namespace Sporefront.AI
             // Rebalance villagers
             commands.AddRange(TryRebalanceVillagers(playerID, gameState));
 
-            // Build farms if food urgency high
-            var urgency = AnalyzeResourceNeeds(playerID, gameState);
-            double foodUrgency;
-            urgency.TryGetValue(ResourceType.Food, out foodUrgency);
-            var foodRate = player.GetCollectionRate(ResourceType.Food);
-
-            if ((foodUrgency > genome.farmFoodUrgencyThreshold || foodRate < genome.farmFoodRateThreshold) &&
-                currentTime - aiState.lastEconomicBuildTime >= genome.economicBuildInterval)
-            {
-                var cmd = TryBuildFarm(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build storage if near capacity
-            bool shouldBuildStorage = urgency.Values.Any(u => u < 0.2);
-            if (shouldBuildStorage && currentTime - aiState.lastEconomicBuildTime >= genome.economicBuildInterval)
-            {
-                var cmd = TryBuildStorage(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build Library
+            // Weighted candidate system for building construction (randomized build order)
             if (currentTime - aiState.lastEconomicBuildTime >= genome.economicBuildInterval)
             {
-                var cmd = TryBuildLibrary(playerID, gameState);
-                if (cmd != null)
+                var urgency = AnalyzeResourceNeeds(playerID, gameState);
+                double foodUrgency;
+                urgency.TryGetValue(ResourceType.Food, out foodUrgency);
+                var foodRate = player.GetCollectionRate(ResourceType.Food);
+
+                bool shouldBuildStorage = urgency.Values.Any(u => u < 0.2);
+
+                var buildCandidates = new List<(Func<IEngineCommand> tryBuild, double weight, string name)>();
+
+                // Farm: high weight if food urgency is high
+                if (foodUrgency > genome.farmFoodUrgencyThreshold || foodRate < genome.farmFoodRateThreshold)
+                    buildCandidates.Add((() => TryBuildFarm(playerID, gameState), 0.8, "Farm"));
+
+                // Military building
+                buildCandidates.Add((() => TryBuildMilitaryBuilding(playerID, gameState), 0.5, "Military"));
+
+                // Storage
+                if (shouldBuildStorage)
+                    buildCandidates.Add((() => TryBuildStorage(playerID, gameState), 0.3, "Storage"));
+
+                // Library
+                buildCandidates.Add((() => TryBuildLibrary(playerID, gameState), 0.2, "Library"));
+
+                var buildCmd = PickWeightedCandidate(buildCandidates, aiState.economyRng, genome.economyRandomizationWeight);
+                if (buildCmd != null)
                 {
-                    commands.Add(cmd);
+                    commands.Add(buildCmd);
                     aiState.lastEconomicBuildTime = currentTime;
                 }
             }
 
-            // Build houses if near pop cap
+            // Build houses if near pop cap (always checked, not randomized)
             bool shouldBuildHouse = popCurrent >= popCapacity - 5 ||
                 (aiState.currentState == AIState.Peace &&
                  villagerCount >= 15 &&
@@ -788,17 +808,6 @@ namespace Sporefront.AI
                 {
                     commands.Add(cmd);
                     aiState.lastEconomicBuildTime = currentTime;
-                }
-            }
-
-            // Build military buildings
-            if (currentTime - aiState.lastMilitaryBuildTime >= genome.economicBuildInterval)
-            {
-                var cmd = TryBuildMilitaryBuilding(playerID, gameState);
-                if (cmd != null)
-                {
-                    commands.Add(cmd);
-                    aiState.lastMilitaryBuildTime = currentTime;
                 }
             }
 
@@ -1473,10 +1482,18 @@ namespace Sporefront.AI
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return null;
 
+            // Don't use generic scouting if we have dedicated Scout units
+            // (dedicated scouting is handled by GenomeAIMilitaryPlanner.GenerateScoutingCommands)
+            var armies = gameState.GetArmiesForPlayer(playerID);
+            bool hasDedicatedScouts = armies.Any(a =>
+                a.GetUnitCount(MilitaryUnitType.Scout) > 0 &&
+                (double)a.GetUnitCount(MilitaryUnitType.Scout) / Math.Max(1, a.GetTotalUnits()) >= 0.5);
+            if (hasDedicatedScouts) return null;
+
             var scoutTarget = gameState.FindNearestUnexploredCoordinate(cityCenter.coordinate, playerID, 12);
             if (!scoutTarget.HasValue) return null;
 
-            var idleArmies = gameState.GetArmiesForPlayer(playerID)
+            var idleArmies = armies
                 .Where(a => !a.isInCombat && a.currentPath == null)
                 .ToList();
 
@@ -1494,6 +1511,43 @@ namespace Sporefront.AI
                 if (idleVillagers.Count > 0)
                 {
                     return new AIMoveCommand(playerID, idleVillagers[0].id, scoutTarget.Value, false);
+                }
+            }
+
+            return null;
+        }
+
+        // ================================================================
+        // Weighted Build Candidate Selection
+        // ================================================================
+
+        private IEngineCommand PickWeightedCandidate(List<(Func<IEngineCommand> tryBuild, double weight, string name)> candidates, System.Random rng, double randomizationWeight)
+        {
+            if (candidates.Count == 0) return null;
+
+            // Sort by weight descending
+            candidates.Sort((a, b) => b.weight.CompareTo(a.weight));
+
+            // (1 - randomizationWeight) chance: pick highest-weight candidate that succeeds
+            // randomizationWeight chance: try a random candidate first
+            double roll = rng.NextDouble();
+            if (roll >= randomizationWeight)
+            {
+                // Try in weight order
+                foreach (var candidate in candidates)
+                {
+                    var cmd = candidate.tryBuild();
+                    if (cmd != null) return cmd;
+                }
+            }
+            else
+            {
+                // Shuffle and try random order
+                var shuffled = candidates.OrderBy(_ => rng.Next()).ToList();
+                foreach (var candidate in shuffled)
+                {
+                    var cmd = candidate.tryBuild();
+                    if (cmd != null) return cmd;
                 }
             }
 
@@ -1590,42 +1644,160 @@ namespace Sporefront.AI
                 }
             }
 
-            MilitaryUnitType unitType;
+            var trainableUnits = GetTrainableUnitsForBuilding(building.buildingType);
+            if (trainableUnits.Count == 0) return null;
 
-            switch (building.buildingType)
+            var ownComposition = CalculateOwnComposition(playerID, gameState);
+            double gameTime = gameState.currentTime;
+
+            // Score each trainable unit and pick the best
+            MilitaryUnitType? bestUnit = null;
+            double bestScore = double.MinValue;
+
+            foreach (var unitType in trainableUnits)
+            {
+                var trainingCost = unitType.TrainingCost();
+                bool canAfford = true;
+                foreach (var kvp in trainingCost)
+                {
+                    if (!player.HasResource(kvp.Key, kvp.Value)) { canAfford = false; break; }
+                }
+                if (!canAfford) continue;
+
+                double score = ScoreUnitTraining(unitType, enemyAnalysis, ownComposition, player, gameState, playerID, gameTime);
+
+                // Small hash-based tiebreaker
+                score += (unitType.GetHashCode() & 0xFF) * 0.01;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestUnit = unitType;
+                }
+            }
+
+            if (!bestUnit.HasValue) return null;
+            return new AITrainMilitaryCommand(playerID, buildingID, bestUnit.Value, 1);
+        }
+
+        private List<MilitaryUnitType> GetTrainableUnitsForBuilding(BuildingType buildingType)
+        {
+            switch (buildingType)
             {
                 case BuildingType.Barracks:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.cavalryRatio > genome.counterCavalryThreshold)
-                        unitType = MilitaryUnitType.Pikeman;
-                    else
-                        unitType = MilitaryUnitType.Swordsman;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Swordsman, MilitaryUnitType.Pikeman };
                 case BuildingType.ArcheryRange:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.infantryRatio > genome.counterInfantryThreshold)
-                        unitType = MilitaryUnitType.Crossbow;
-                    else
-                        unitType = MilitaryUnitType.Archer;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Archer, MilitaryUnitType.Crossbow };
                 case BuildingType.Stable:
-                    if (enemyAnalysis.HasValue && enemyAnalysis.Value.rangedRatio > genome.counterRangedThreshold)
-                        unitType = MilitaryUnitType.Knight;
-                    else
-                        unitType = MilitaryUnitType.Scout;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Scout, MilitaryUnitType.Knight, MilitaryUnitType.HeavyCavalry };
                 case BuildingType.SiegeWorkshop:
-                    unitType = MilitaryUnitType.Mangonel;
-                    break;
+                    return new List<MilitaryUnitType> { MilitaryUnitType.Mangonel, MilitaryUnitType.Trebuchet };
                 default:
-                    return null;
+                    return new List<MilitaryUnitType>();
             }
+        }
 
-            var trainingCost = unitType.TrainingCost();
-            foreach (var kvp in trainingCost)
+        private Dictionary<UnitCategory, double> CalculateOwnComposition(Guid playerID, GameState gameState)
+        {
+            var result = new Dictionary<UnitCategory, double>
             {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
+                { UnitCategory.Infantry, 0 }, { UnitCategory.Ranged, 0 },
+                { UnitCategory.Cavalry, 0 }, { UnitCategory.Siege, 0 }
+            };
+
+            int totalUnits = 0;
+            foreach (var army in gameState.GetArmiesForPlayer(playerID))
+            {
+                var ratios = army.GetCategoryRatios();
+                int count = army.GetTotalUnits();
+                result[UnitCategory.Infantry] += ratios.infantry * count;
+                result[UnitCategory.Ranged] += ratios.ranged * count;
+                result[UnitCategory.Cavalry] += ratios.cavalry * count;
+                result[UnitCategory.Siege] += ratios.siege * count;
+                totalUnits += count;
             }
 
-            return new AITrainMilitaryCommand(playerID, buildingID, unitType, 1);
+            if (totalUnits > 0)
+            {
+                result[UnitCategory.Infantry] /= totalUnits;
+                result[UnitCategory.Ranged] /= totalUnits;
+                result[UnitCategory.Cavalry] /= totalUnits;
+                result[UnitCategory.Siege] /= totalUnits;
+            }
+
+            return result;
+        }
+
+        private double ScoreUnitTraining(MilitaryUnitType unitType, EnemyCompositionAnalysis? enemyAnalysis,
+            Dictionary<UnitCategory, double> ownComposition, PlayerState player, GameState gameState,
+            Guid playerID, double gameTime)
+        {
+            double score = 0;
+            var category = unitType.Category();
+
+            // Counter bonus: does this unit's category counter the enemy's dominant type?
+            if (enemyAnalysis.HasValue)
+            {
+                var enemy = enemyAnalysis.Value;
+                if (category == UnitCategory.Infantry && enemy.cavalryRatio > 0.3) score += 20.0;
+                if (category == UnitCategory.Ranged && enemy.infantryRatio > 0.3) score += 20.0;
+                if (category == UnitCategory.Cavalry && enemy.rangedRatio > 0.3) score += 20.0;
+                if (unitType == MilitaryUnitType.Pikeman && enemy.cavalryRatio > 0.25) score += 10.0;
+            }
+
+            // Diversity penalty/bonus (using genome params)
+            double ownRatio = 0;
+            ownComposition.TryGetValue(category, out ownRatio);
+            if (ownRatio > genome.compositionDiversityThreshold) score -= genome.compositionDiversityBonus;
+            else if (ownRatio < 0.15) score += genome.compositionDiversityBonus * 0.67;
+
+            // Tech bonus: reward units we have research bonuses for
+            double techBonus = DamageCalculator.GetResearchDamageBonus(unitType, player);
+            score += Math.Min(genome.compositionTechBonus, techBonus * 5.0);
+
+            // Timing bonus
+            bool earlyGame = gameTime < genome.compositionTimingEarlyThreshold;
+            if (earlyGame)
+            {
+                if (unitType == MilitaryUnitType.Swordsman || unitType == MilitaryUnitType.Archer || unitType == MilitaryUnitType.Pikeman)
+                    score += 8.0;
+            }
+            else
+            {
+                if (unitType == MilitaryUnitType.Knight || unitType == MilitaryUnitType.HeavyCavalry ||
+                    unitType == MilitaryUnitType.Crossbow || unitType == MilitaryUnitType.Trebuchet)
+                    score += 8.0;
+            }
+
+            // Scout priority: encourage scouts early if under cap
+            if (unitType == MilitaryUnitType.Scout)
+            {
+                int scoutCount = CountScoutArmies(playerID, gameState);
+                if (scoutCount < genome.maxScouts && earlyGame)
+                    score += 25.0;
+                else if (scoutCount >= genome.maxScouts)
+                    score -= 30.0;
+            }
+
+            return score;
+        }
+
+        private int CountScoutArmies(Guid playerID, GameState gameState)
+        {
+            int count = 0;
+            foreach (var army in gameState.GetArmiesForPlayer(playerID))
+            {
+                if (IsScoutArmy(army)) count++;
+            }
+            return count;
+        }
+
+        private bool IsScoutArmy(ArmyData army)
+        {
+            int totalUnits = army.GetTotalUnits();
+            if (totalUnits == 0) return false;
+            int scoutCount = army.GetUnitCount(MilitaryUnitType.Scout);
+            return scoutCount > 0 && (double)scoutCount / totalUnits >= 0.5;
         }
 
         private IEngineCommand TryDeployArmy(Guid playerID, GameState gameState)
@@ -1869,6 +2041,81 @@ namespace Sporefront.AI
                 aiState.lastEnemyAnalysisTime = currentTime;
             }
         }
+
+        // ================================================================
+        // Scouting Commands
+        // ================================================================
+
+        public List<IEngineCommand> GenerateScoutingCommands(AIPlayerState aiState, GameState gameState, double currentTime)
+        {
+            var commands = new List<IEngineCommand>();
+            var playerID = aiState.playerID;
+
+            var cityCenter = gameState.GetCityCenter(playerID);
+            if (cityCenter == null) return commands;
+
+            // Update known enemy bases from visible buildings
+            var visibleEnemyBuildings = gameState.GetVisibleEnemyBuildings(playerID);
+            foreach (var building in visibleEnemyBuildings)
+            {
+                if (building.buildingType == BuildingType.CityCenter)
+                {
+                    bool alreadyKnown = false;
+                    foreach (var known in aiState.knownEnemyBases)
+                    {
+                        if (known.Distance(building.coordinate) <= 2) { alreadyKnown = true; break; }
+                    }
+                    if (!alreadyKnown)
+                    {
+                        aiState.knownEnemyBases.Add(building.coordinate);
+                        aiState.enemyBaseFound = true;
+                    }
+                }
+            }
+
+            // Find scout armies
+            var scoutArmies = gameState.GetArmiesForPlayer(playerID)
+                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null)
+                .ToList();
+
+            foreach (var scout in scoutArmies)
+            {
+                // Check for nearby enemy armies - retreat if threatened
+                var nearbyEnemies = gameState.GetEnemyArmies(scout.coordinate, 3, playerID);
+                if (nearbyEnemies.Count > 0)
+                {
+                    commands.Add(new AIMoveCommand(playerID, scout.id, cityCenter.coordinate, true));
+                    continue;
+                }
+
+                // Choose scouting target
+                HexCoordinate? target = null;
+
+                if (!aiState.enemyBaseFound)
+                {
+                    // Explore map edges/unexplored areas
+                    target = gameState.FindNearestUnexploredCoordinate(scout.coordinate, playerID, 15);
+                }
+                else if (aiState.knownEnemyBases.Count > 0)
+                {
+                    // Patrol around known enemy base
+                    var enemyBase = aiState.knownEnemyBases[0];
+                    var patrolCoords = enemyBase.CoordinatesInRing(genome.scoutPatrolRadius);
+                    if (patrolCoords.Count > 0)
+                    {
+                        int idx = Math.Abs(scout.id.GetHashCode() + (int)(currentTime * 10)) % patrolCoords.Count;
+                        target = patrolCoords[idx];
+                    }
+                }
+
+                if (target.HasValue)
+                {
+                    commands.Add(new AIMoveCommand(playerID, scout.id, target.Value, true));
+                }
+            }
+
+            return commands;
+        }
     }
 
     // ================================================================
@@ -1905,21 +2152,53 @@ namespace Sporefront.AI
 
             double threatLevel = gameState.GetThreatLevel(cityCenter.coordinate, playerID);
 
+            // Track threat trend for proactive defense
+            bool threatIsRising = false;
+            if (threatLevel > aiState.previousThreatLevel)
+            {
+                aiState.threatRisingCount++;
+                if (aiState.threatRisingCount >= 2) threatIsRising = true;
+            }
+            else
+            {
+                aiState.threatRisingCount = 0;
+            }
+            aiState.previousThreatLevel = threatLevel;
+
+            int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
+            bool hasBarracks = gameState.GetBuildingsForPlayer(playerID)
+                .Any(b => b.buildingType == BuildingType.Barracks && b.IsOperational);
+
             bool shouldBuildDefense;
             if (aiState.currentState == AIState.Peace)
             {
-                shouldBuildDefense = player.GetResource(ResourceType.Wood) > genome.peacetimeDefenseWood &&
-                                     player.GetResource(ResourceType.Stone) > genome.peacetimeDefenseStone;
+                if (threatIsRising)
+                {
+                    shouldBuildDefense = player.GetResource(ResourceType.Wood) > genome.proactiveDefenseWoodThreshold &&
+                                         player.GetResource(ResourceType.Stone) > genome.proactiveDefenseStoneThreshold;
+                }
+                else if (gameState.currentTime > genome.earlyTowerGameTime && towerCount == 0)
+                {
+                    shouldBuildDefense = true;
+                }
+                else if (hasBarracks && towerCount == 0)
+                {
+                    shouldBuildDefense = true;
+                }
+                else
+                {
+                    shouldBuildDefense = player.GetResource(ResourceType.Wood) > genome.peacetimeDefenseWood &&
+                                         player.GetResource(ResourceType.Stone) > genome.peacetimeDefenseStone;
+                }
             }
             else
             {
                 shouldBuildDefense = threatLevel >= genome.minThreatForDefense ||
-                                     aiState.currentState == AIState.Defense;
+                                     aiState.currentState == AIState.Defense ||
+                                     threatIsRising;
             }
 
             if (!shouldBuildDefense) return commands;
-
-            int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
             int fortCount = gameState.GetBuildingCount(BuildingType.WoodenFort, playerID);
 
             if (towerCount < genome.maxTowers)
@@ -2368,6 +2647,91 @@ namespace Sporefront.AI
                         score -= 5.0;
                     }
                 }
+            }
+
+            var playerID = aiState.playerID;
+            var player = gameState.GetPlayer(playerID);
+
+            // Synergy bonus: continuing a research line we already started
+            if (research.Tier() > 1)
+            {
+                var prereqs = research.Prerequisites();
+                bool allPrereqsComplete = prereqs.All(p => player != null && player.HasCompletedResearch(p.ToString()));
+                if (allPrereqsComplete)
+                    score += genome.researchSynergyWeight;
+            }
+
+            // Counter-research: boost research that counters inferred enemy capabilities
+            if (aiState.lastEnemyAnalysis.HasValue)
+            {
+                var enemy = aiState.lastEnemyAnalysis.Value;
+                var branch = research.Branch();
+
+                if (enemy.infantryRatio > 0.35)
+                {
+                    if (branch == ResearchBranch.MeleeEquipment && research.ToString().Contains("Armor"))
+                        score += genome.researchCounterWeight;
+                }
+                if (enemy.rangedRatio > 0.35)
+                {
+                    if (research.ToString().Contains("PierceArmor"))
+                        score += genome.researchCounterWeight;
+                }
+                if (enemy.cavalryRatio > 0.35)
+                {
+                    if (research.ToString().Contains("InfantryMeleeAttack"))
+                        score += genome.researchCounterWeight;
+                }
+            }
+
+            // Composition-aware: match research to own army composition
+            if (player != null)
+            {
+                var armies = gameState.GetArmiesForPlayer(playerID);
+                int totalInfantry = 0, totalRanged = 0, totalCavalry = 0, totalSiege = 0, totalUnits = 0;
+                foreach (var army in armies)
+                {
+                    var ratios = army.GetCategoryRatios();
+                    int count = army.GetTotalUnits();
+                    totalInfantry += (int)(ratios.infantry * count);
+                    totalRanged += (int)(ratios.ranged * count);
+                    totalCavalry += (int)(ratios.cavalry * count);
+                    totalSiege += (int)(ratios.siege * count);
+                    totalUnits += count;
+                }
+
+                if (totalUnits > 5)
+                {
+                    var branch = research.Branch();
+                    double infantryRatio = (double)totalInfantry / totalUnits;
+                    double rangedRatio = (double)totalRanged / totalUnits;
+                    double cavalryRatio = (double)totalCavalry / totalUnits;
+
+                    if (infantryRatio > 0.4 && branch == ResearchBranch.MeleeEquipment)
+                        score += genome.researchCompositionWeight;
+                    if (rangedRatio > 0.4 && branch == ResearchBranch.RangedEquipment)
+                        score += genome.researchCompositionWeight;
+                    if (cavalryRatio > 0.3 && branch == ResearchBranch.MeleeEquipment &&
+                        research.ToString().Contains("Cavalry"))
+                        score += genome.researchCompositionWeight;
+                }
+            }
+
+            // Breadth bonus: reward starting new branches, penalize deep specialization
+            if (player != null)
+            {
+                var branch = research.Branch();
+                int completedInBranch = 0;
+                foreach (ResearchType r in Enum.GetValues(typeof(ResearchType)))
+                {
+                    if (r.Branch() == branch && player.HasCompletedResearch(r.ToString()))
+                        completedInBranch++;
+                }
+
+                if (completedInBranch == 0)
+                    score += genome.researchBreadthBonus;
+                else if (completedInBranch >= 6)
+                    score -= genome.researchBreadthBonus;
             }
 
             return score;

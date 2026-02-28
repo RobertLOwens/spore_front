@@ -98,7 +98,7 @@ namespace Sporefront.Engine
             var gameState = new GameState(35, 35);
 
             // 2. Generate terrain via ArabiaMapGenerator
-            var generator = new ArabiaMapGenerator(mapSeed);
+            var generator = new ArabiaMapGenerator(seed: mapSeed);
             var terrainData = generator.GenerateTerrain();
 
             foreach (var kvp in terrainData)

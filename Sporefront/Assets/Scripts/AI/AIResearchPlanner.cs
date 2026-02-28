@@ -242,6 +242,95 @@ namespace Sporefront.AI
                 }
             }
 
+            var playerID = aiState.playerID;
+            var player = gameState.GetPlayer(playerID);
+
+            // Synergy bonus: continuing a research line we already started
+            if (research.Tier() > 1)
+            {
+                var prereqs = research.Prerequisites();
+                bool allPrereqsComplete = prereqs.All(p => player != null && player.HasCompletedResearch(p.ToString()));
+                if (allPrereqsComplete)
+                    score += 10.0;
+            }
+
+            // Counter-research: boost research that counters inferred enemy capabilities
+            if (aiState.lastEnemyAnalysis.HasValue)
+            {
+                var enemy = aiState.lastEnemyAnalysis.Value;
+                var branch = research.Branch();
+
+                // If enemy has strong melee (infantry dominant), boost armor research
+                if (enemy.infantryRatio > 0.35)
+                {
+                    if (branch == ResearchBranch.MeleeEquipment && research.ToString().Contains("Armor"))
+                        score += 12.0;
+                }
+                // If enemy has strong ranged, boost pierce armor
+                if (enemy.rangedRatio > 0.35)
+                {
+                    if (research.ToString().Contains("PierceArmor"))
+                        score += 12.0;
+                }
+                // If enemy has strong cavalry, boost infantry melee attack to counter
+                if (enemy.cavalryRatio > 0.35)
+                {
+                    if (research.ToString().Contains("InfantryMeleeAttack"))
+                        score += 12.0;
+                }
+            }
+
+            // Composition-aware: match research to own army composition
+            if (player != null)
+            {
+                var armies = gameState.GetArmiesForPlayer(playerID);
+                int totalInfantry = 0, totalRanged = 0, totalCavalry = 0, totalSiege = 0, totalUnits = 0;
+                foreach (var army in armies)
+                {
+                    var ratios = army.GetCategoryRatios();
+                    int count = army.GetTotalUnits();
+                    totalInfantry += (int)(ratios.infantry * count);
+                    totalRanged += (int)(ratios.ranged * count);
+                    totalCavalry += (int)(ratios.cavalry * count);
+                    totalSiege += (int)(ratios.siege * count);
+                    totalUnits += count;
+                }
+
+                if (totalUnits > 5)
+                {
+                    var branch = research.Branch();
+                    double infantryRatio = (double)totalInfantry / totalUnits;
+                    double rangedRatio = (double)totalRanged / totalUnits;
+                    double cavalryRatio = (double)totalCavalry / totalUnits;
+
+                    // Boost research matching our dominant army type
+                    if (infantryRatio > 0.4 && branch == ResearchBranch.MeleeEquipment)
+                        score += 8.0;
+                    if (rangedRatio > 0.4 && branch == ResearchBranch.RangedEquipment)
+                        score += 8.0;
+                    if (cavalryRatio > 0.3 && branch == ResearchBranch.MeleeEquipment &&
+                        (research.ToString().Contains("Cavalry")))
+                        score += 8.0;
+                }
+            }
+
+            // Breadth bonus: reward starting new branches, penalize deep specialization
+            if (player != null)
+            {
+                var branch = research.Branch();
+                int completedInBranch = 0;
+                foreach (ResearchType r in Enum.GetValues(typeof(ResearchType)))
+                {
+                    if (r.Branch() == branch && player.HasCompletedResearch(r.ToString()))
+                        completedInBranch++;
+                }
+
+                if (completedInBranch == 0)
+                    score += 5.0; // Bonus for starting a new branch
+                else if (completedInBranch >= 6)
+                    score -= 5.0; // Penalty for over-specializing
+            }
+
             return score;
         }
 

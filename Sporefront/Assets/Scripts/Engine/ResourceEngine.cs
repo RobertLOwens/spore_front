@@ -72,7 +72,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -94,7 +94,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> UpdatePlayerResources(PlayerState player, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -120,7 +120,17 @@ namespace Sporefront.Engine
                     GameConfig.Commander.RationingReductionCap,
                     bestRationing * GameConfig.Commander.RationingReductionScaling
                 );
-                double adjustedRate = consumptionInfo.rate * (1.0 - rationingReduction);
+
+                // Split consumption into civilian/military and apply research bonuses
+                double baseRate = 0.1;
+                double civilianRate = consumptionInfo.civilian * baseRate;
+                double militaryRate = consumptionInfo.military * baseRate;
+                double civMultiplier = player.GetResearchBonusMultiplier(
+                    ResearchBonusType.FoodConsumption.ToString());
+                double milMultiplier = player.GetResearchBonusMultiplier(
+                    ResearchBonusType.MilitaryFoodConsumption.ToString());
+                double adjustedRate = (civilianRate * civMultiplier + militaryRate * milMultiplier)
+                    * (1.0 - rationingReduction);
 
                 int oldFood = player.GetResource(ResourceType.Food);
                 int consumed = player.ConsumeFood(adjustedRate, deltaTime);
@@ -144,7 +154,7 @@ namespace Sporefront.Engine
 
         private List<StateChange> ProcessGathering(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
             var completedAssignments = new List<Guid>();
@@ -206,7 +216,8 @@ namespace Sporefront.Engine
                     group.villagerCount,
                     resourcePoint.resourceType,
                     resourcePoint.coordinate,
-                    gameState
+                    gameState,
+                    group.ownerID ?? Guid.Empty
                 );
 
                 // Accumulate gathered resources
@@ -299,7 +310,7 @@ namespace Sporefront.Engine
         // MARK: - Gather Rate Calculation
 
         private double CalculateGatherRate(int villagerCount, ResourcePointType resourceType,
-            HexCoordinate resourceCoordinate, GameState state)
+            HexCoordinate resourceCoordinate, GameState state, Guid ownerPlayerID)
         {
             // Base rate
             double rate = villagerCount * baseGatherRatePerVillager;
@@ -311,6 +322,29 @@ namespace Sporefront.Engine
             // Apply camp/farm level bonus
             double campLevelMultiplier = CalculateCampLevelBonus(resourceType, resourceCoordinate, state);
             rate *= campLevelMultiplier;
+
+            // Apply research gathering rate bonuses
+            var owner = state.GetPlayer(ownerPlayerID);
+            if (owner != null)
+            {
+                ResearchBonusType bonusType;
+                switch (resourceType)
+                {
+                    case ResourcePointType.Farmland:
+                        bonusType = ResearchBonusType.FarmGatheringRate;
+                        break;
+                    case ResourcePointType.Trees:
+                        bonusType = ResearchBonusType.LumberCampGatheringRate;
+                        break;
+                    case ResourcePointType.OreMine:
+                    case ResourcePointType.StoneQuarry:
+                        bonusType = ResearchBonusType.MiningCampGatheringRate;
+                        break;
+                    default:
+                        return rate;
+                }
+                rate *= owner.GetResearchBonusMultiplier(bonusType.ToString());
+            }
 
             return rate;
         }
@@ -458,6 +492,11 @@ namespace Sporefront.Engine
                 resourcePointID: resourcePointID
             );
 
+            if (group.ownerID.HasValue)
+            {
+                UpdateCollectionRates(group.ownerID.Value);
+            }
+
             return true;
         }
 
@@ -478,17 +517,25 @@ namespace Sporefront.Engine
                 }
             }
 
+            // Capture ownerID before clearing
+            var ownerID = group.ownerID;
+
             // Clear group state
             group.assignedResourcePointID = null;
             group.ClearTask();
 
             // Remove assignment
             gatheringAssignments.Remove(villagerGroupID);
+
+            if (ownerID.HasValue)
+            {
+                UpdateCollectionRates(ownerID.Value);
+            }
         }
 
         // MARK: - Camp Coverage
 
-        private bool HasCampCoverage(HexCoordinate coordinate, ResourcePointType resourceType, GameState state)
+        public bool HasCampCoverage(HexCoordinate coordinate, ResourcePointType resourceType, GameState state)
         {
             string requiredCampType = GetRequiredCampType(resourceType);
             if (requiredCampType == null)
@@ -584,6 +631,58 @@ namespace Sporefront.Engine
             return reachable;
         }
 
+        // MARK: - Gather Arrival Processing
+
+        /// <summary>
+        /// Checks all villager groups with GatheringResourceTask that have arrived
+        /// at the resource coordinate (no path remaining). Starts gathering for them.
+        /// </summary>
+        public List<StateChange> ProcessGatherArrivals()
+        {
+            if (gameState == null) return StateChange.EmptyChanges;
+
+            var changes = new List<StateChange>();
+            var groups = new List<VillagerGroupData>(gameState.villagerGroups.Values);
+
+            foreach (var group in groups)
+            {
+                var gatherTask = group.currentTask as GatheringResourceTask;
+                if (gatherTask == null) continue;
+                if (group.currentPath != null) continue; // Still en route
+
+                // Already registered in gatheringAssignments means StartGathering was called
+                if (gatheringAssignments.ContainsKey(group.id)) continue;
+
+                var resourcePointID = gatherTask.ResourcePointID;
+                var resource = gameState.GetResourcePoint(resourcePointID);
+                if (resource == null)
+                {
+                    group.ClearTask();
+                    continue;
+                }
+
+                if (!group.coordinate.Equals(resource.coordinate)) continue;
+
+                // Arrived at resource — start gathering
+                bool success = StartGathering(group.id, resourcePointID);
+                if (success)
+                {
+                    changes.Add(new VillagerGroupTaskChangedChange
+                    {
+                        groupID = group.id,
+                        task = "gathering",
+                        targetCoordinate = resource.coordinate
+                    });
+                }
+                else
+                {
+                    group.ClearTask();
+                }
+            }
+
+            return changes;
+        }
+
         // MARK: - Collection Rate Management
 
         public void UpdateCollectionRates(Guid playerID)
@@ -613,7 +712,8 @@ namespace Sporefront.Engine
                     group.villagerCount,
                     resourcePoint.resourceType,
                     resourcePoint.coordinate,
-                    gameState
+                    gameState,
+                    playerID
                 );
 
                 ResourceType yieldType = resourcePoint.resourceType.ResourceYield();

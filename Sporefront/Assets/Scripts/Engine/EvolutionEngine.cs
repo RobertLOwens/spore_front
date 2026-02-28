@@ -488,6 +488,29 @@ namespace Sporefront.Engine
             child.entrenchedPenalty = RandBool() ? a.entrenchedPenalty : b.entrenchedPenalty;
             child.cityCenterValue = RandBool() ? a.cityCenterValue : b.cityCenterValue;
 
+            // Attack timeout (A)
+            child.attackTimeoutDuration = RandBool() ? a.attackTimeoutDuration : b.attackTimeoutDuration;
+            // Economy randomization (B)
+            child.economyRandomizationWeight = RandBool() ? a.economyRandomizationWeight : b.economyRandomizationWeight;
+            // Composition diversity (C)
+            child.compositionDiversityThreshold = RandBool() ? a.compositionDiversityThreshold : b.compositionDiversityThreshold;
+            child.compositionDiversityBonus = RandBool() ? a.compositionDiversityBonus : b.compositionDiversityBonus;
+            child.compositionTechBonus = RandBool() ? a.compositionTechBonus : b.compositionTechBonus;
+            child.compositionTimingEarlyThreshold = RandBool() ? a.compositionTimingEarlyThreshold : b.compositionTimingEarlyThreshold;
+            // Proactive defense (D)
+            child.proactiveDefenseWoodThreshold = RandBool() ? a.proactiveDefenseWoodThreshold : b.proactiveDefenseWoodThreshold;
+            child.proactiveDefenseStoneThreshold = RandBool() ? a.proactiveDefenseStoneThreshold : b.proactiveDefenseStoneThreshold;
+            child.earlyTowerGameTime = RandBool() ? a.earlyTowerGameTime : b.earlyTowerGameTime;
+            // Scouting (E)
+            child.maxScouts = RandBool() ? a.maxScouts : b.maxScouts;
+            child.scoutPatrolRadius = RandBool() ? a.scoutPatrolRadius : b.scoutPatrolRadius;
+            child.scoutEarlyGameThreshold = RandBool() ? a.scoutEarlyGameThreshold : b.scoutEarlyGameThreshold;
+            // Research planning (F)
+            child.researchSynergyWeight = RandBool() ? a.researchSynergyWeight : b.researchSynergyWeight;
+            child.researchCounterWeight = RandBool() ? a.researchCounterWeight : b.researchCounterWeight;
+            child.researchCompositionWeight = RandBool() ? a.researchCompositionWeight : b.researchCompositionWeight;
+            child.researchBreadthBonus = RandBool() ? a.researchBreadthBonus : b.researchBreadthBonus;
+
             return child;
         }
 
@@ -554,6 +577,29 @@ namespace Sporefront.Engine
             g.smallArmyBonus = MutateScore(g.smallArmyBonus, rate, magnitude, 0, 100);
             g.entrenchedPenalty = MutateScore(g.entrenchedPenalty, rate, magnitude, 0, 100);
             g.cityCenterValue = MutateScore(g.cityCenterValue, rate, magnitude, 20, 200);
+
+            // Attack timeout (A)
+            g.attackTimeoutDuration = MutateInterval(g.attackTimeoutDuration, rate, magnitude);
+            // Economy randomization (B)
+            g.economyRandomizationWeight = MutateThreshold(g.economyRandomizationWeight, rate, magnitude, 0.0, 0.5);
+            // Composition diversity (C)
+            g.compositionDiversityThreshold = MutateThreshold(g.compositionDiversityThreshold, rate, magnitude, 0.3, 0.8);
+            g.compositionDiversityBonus = MutateScore(g.compositionDiversityBonus, rate, magnitude, 0.0, 30.0);
+            g.compositionTechBonus = MutateScore(g.compositionTechBonus, rate, magnitude, 0.0, 30.0);
+            g.compositionTimingEarlyThreshold = MutateScore(g.compositionTimingEarlyThreshold, rate, magnitude, 120.0, 600.0);
+            // Proactive defense (D)
+            g.proactiveDefenseWoodThreshold = MutateCount(g.proactiveDefenseWoodThreshold, rate, 100, 600);
+            g.proactiveDefenseStoneThreshold = MutateCount(g.proactiveDefenseStoneThreshold, rate, 100, 600);
+            g.earlyTowerGameTime = MutateScore(g.earlyTowerGameTime, rate, magnitude, 120.0, 600.0);
+            // Scouting (E)
+            g.maxScouts = MutateCount(g.maxScouts, rate, 0, 4);
+            g.scoutPatrolRadius = MutateCount(g.scoutPatrolRadius, rate, 3, 10);
+            g.scoutEarlyGameThreshold = MutateScore(g.scoutEarlyGameThreshold, rate, magnitude, 120.0, 600.0);
+            // Research planning (F)
+            g.researchSynergyWeight = MutateScore(g.researchSynergyWeight, rate, magnitude, 0.0, 25.0);
+            g.researchCounterWeight = MutateScore(g.researchCounterWeight, rate, magnitude, 0.0, 25.0);
+            g.researchCompositionWeight = MutateScore(g.researchCompositionWeight, rate, magnitude, 0.0, 25.0);
+            g.researchBreadthBonus = MutateScore(g.researchBreadthBonus, rate, magnitude, 0.0, 15.0);
 
             return g;
         }
@@ -692,6 +738,29 @@ namespace Sporefront.Engine
             clone.smallArmyBonus = source.smallArmyBonus;
             clone.entrenchedPenalty = source.entrenchedPenalty;
             clone.cityCenterValue = source.cityCenterValue;
+
+            // Attack timeout (A)
+            clone.attackTimeoutDuration = source.attackTimeoutDuration;
+            // Economy randomization (B)
+            clone.economyRandomizationWeight = source.economyRandomizationWeight;
+            // Composition diversity (C)
+            clone.compositionDiversityThreshold = source.compositionDiversityThreshold;
+            clone.compositionDiversityBonus = source.compositionDiversityBonus;
+            clone.compositionTechBonus = source.compositionTechBonus;
+            clone.compositionTimingEarlyThreshold = source.compositionTimingEarlyThreshold;
+            // Proactive defense (D)
+            clone.proactiveDefenseWoodThreshold = source.proactiveDefenseWoodThreshold;
+            clone.proactiveDefenseStoneThreshold = source.proactiveDefenseStoneThreshold;
+            clone.earlyTowerGameTime = source.earlyTowerGameTime;
+            // Scouting (E)
+            clone.maxScouts = source.maxScouts;
+            clone.scoutPatrolRadius = source.scoutPatrolRadius;
+            clone.scoutEarlyGameThreshold = source.scoutEarlyGameThreshold;
+            // Research planning (F)
+            clone.researchSynergyWeight = source.researchSynergyWeight;
+            clone.researchCounterWeight = source.researchCounterWeight;
+            clone.researchCompositionWeight = source.researchCompositionWeight;
+            clone.researchBreadthBonus = source.researchBreadthBonus;
 
             return clone;
         }

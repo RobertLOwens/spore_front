@@ -316,19 +316,23 @@ namespace Sporefront.Visual
             nameLE.preferredWidth = 140;
             nameLE.preferredHeight = 30;
 
-            // Slider
-            slider = UIHelper.CreateSlider(row.transform, min, max, true, onChange);
-            slider.value = initialValue;
+            // Slider (don't pass onChange yet — value label must exist first)
+            slider = UIHelper.CreateSlider(row.transform, min, max, true, null);
             var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
             sliderLE.flexibleWidth = 1;
             sliderLE.preferredHeight = 30;
 
-            // Value label
+            // Value label (must exist before onChange fires)
             valueLabel = UIHelper.CreateLabel(row.transform, initialValue.ToString(),
                 13, SporefrontColors.SporeAmber, TextAnchor.MiddleRight);
             var valLE = valueLabel.gameObject.AddComponent<LayoutElement>();
             valLE.preferredWidth = 40;
             valLE.preferredHeight = 30;
+
+            // Now safe to set value and add listener
+            slider.value = initialValue;
+            if (onChange != null)
+                slider.onValueChanged.AddListener((v) => onChange(v));
         }
 
         // ================================================================

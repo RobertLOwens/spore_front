@@ -21,6 +21,9 @@ namespace Sporefront.Visual
         public static readonly float HexWidth = InnerRadius * 2f;  // ~1.732
         public static readonly float HexHeight = OuterRadius * 2f; // 2.0
 
+        // Isometric Y compression (0.5 = standard 2:1 isometric, 1.0 = flat top-down)
+        public const float IsometricYScale = 0.5f;
+
         // ================================================================
         // Coordinate Conversion
         // ================================================================
@@ -32,7 +35,7 @@ namespace Sporefront.Visual
         public static Vector3 HexToWorldPosition(HexCoordinate coord)
         {
             float x = coord.q * HexWidth + (coord.r % 2 != 0 ? InnerRadius : 0f);
-            float y = coord.r * (OuterRadius * 1.5f);
+            float y = coord.r * (OuterRadius * 1.5f) * IsometricYScale;
             return new Vector3(x, y, 0f);
         }
 
@@ -41,8 +44,9 @@ namespace Sporefront.Visual
         /// </summary>
         public static HexCoordinate WorldToHex(Vector3 worldPos)
         {
-            // Approximate row from y
-            int r = Mathf.RoundToInt(worldPos.y / (OuterRadius * 1.5f));
+            // Undo isometric Y compression, then approximate row from y
+            float unscaledY = worldPos.y / IsometricYScale;
+            int r = Mathf.RoundToInt(unscaledY / (OuterRadius * 1.5f));
             // Undo odd-row shift to get q
             float xOffset = (r % 2 != 0) ? InnerRadius : 0f;
             int q = Mathf.RoundToInt((worldPos.x - xOffset) / HexWidth);
@@ -66,7 +70,7 @@ namespace Sporefront.Visual
                 float angleRad = angleDeg * Mathf.Deg2Rad;
                 corners[i] = new Vector3(
                     OuterRadius * Mathf.Cos(angleRad),
-                    OuterRadius * Mathf.Sin(angleRad),
+                    OuterRadius * Mathf.Sin(angleRad) * IsometricYScale,
                     0f
                 );
             }
@@ -85,12 +89,13 @@ namespace Sporefront.Visual
         {
             // Rightmost tile: last column of an odd row (has offset)
             float maxX = (width - 1) * HexWidth + InnerRadius;
-            // Topmost tile: last row
-            float maxY = (height - 1) * OuterRadius * 1.5f;
+            // Topmost tile: last row (with isometric Y compression)
+            float maxY = (height - 1) * OuterRadius * 1.5f * IsometricYScale;
 
-            float padding = OuterRadius * 2f;
+            float paddingX = OuterRadius * 2f;
+            float paddingY = OuterRadius * 2f * IsometricYScale;
             var center = new Vector3(maxX / 2f, maxY / 2f, 0f);
-            var size = new Vector3(maxX + padding * 2f, maxY + padding * 2f, 0f);
+            var size = new Vector3(maxX + paddingX * 2f, maxY + paddingY * 2f, 0f);
             return new Bounds(center, size);
         }
     }

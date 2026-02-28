@@ -44,6 +44,17 @@ namespace Sporefront.Commands
             if (army.isEntrenching)
                 return EngineCommandResult.Failure("Army is already entrenching.");
 
+            // Check army has a commander
+            if (!army.commanderID.HasValue)
+                return EngineCommandResult.Failure("Army requires a commander to entrench.");
+
+            // Check commander stamina
+            var commander = state.GetCommander(army.commanderID.Value);
+            if (commander == null)
+                return EngineCommandResult.Failure("Commander not found.");
+            if (!commander.HasEnoughStamina())
+                return EngineCommandResult.Failure("Commander lacks stamina to issue this order.");
+
             // Check player has enough wood
             if (player.GetResource(ResourceType.Wood) < GameConfig.Entrenchment.WoodCost)
                 return EngineCommandResult.Failure("Insufficient wood for entrenchment.");
@@ -60,6 +71,14 @@ namespace Sporefront.Commands
 
             var player = state.GetPlayer(PlayerID);
             var army = state.GetArmy(armyID);
+
+            // Consume commander stamina
+            if (army.commanderID.HasValue)
+            {
+                var commander = state.GetCommander(army.commanderID.Value);
+                if (commander != null)
+                    commander.ConsumeStamina();
+            }
 
             // Deduct wood cost
             int oldWood = player.GetResource(ResourceType.Wood);

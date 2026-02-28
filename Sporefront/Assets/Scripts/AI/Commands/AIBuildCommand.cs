@@ -98,7 +98,7 @@ namespace Sporefront.AI.Commands
                 if (builder.coordinate.Equals(coordinate))
                 {
                     // Already on-site: start construction immediately
-                    building.StartConstruction(builder.villagerCount);
+                    building.StartConstruction(state.currentTime, builder.villagerCount);
                     changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
                 }
                 else
@@ -112,7 +112,7 @@ namespace Sporefront.AI.Commands
                     else
                     {
                         // No path found -- start anyway as fallback
-                        building.StartConstruction(1);
+                        building.StartConstruction(state.currentTime, 1);
                         builder.ClearTask();
                         changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
                     }
@@ -121,7 +121,7 @@ namespace Sporefront.AI.Commands
             else
             {
                 // No idle villager -- start construction without one (graceful fallback)
-                building.StartConstruction(1);
+                building.StartConstruction(state.currentTime, 1);
                 changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
             }
 

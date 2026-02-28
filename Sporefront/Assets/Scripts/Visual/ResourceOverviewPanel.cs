@@ -33,6 +33,12 @@ namespace Sporefront.Visual
         private RectTransform contentRT;
         private Guid localPlayerID;
 
+        // Throttled rebuild
+        private bool isDirty;
+        private float lastRebuildTime;
+        private const float RebuildInterval = 0.5f;
+        private GameState cachedGameState;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -53,7 +59,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 440x560
             panel = UIHelper.CreatePanel(backdrop.transform, "ResourceOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 440, 560);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalLargeH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Resource Overview",
@@ -87,12 +93,20 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================
 
         public void Show(GameState gameState)
         {
+            cachedGameState = gameState;
+            lastRebuildTime = Time.unscaledTime;
+            isDirty = false;
             Rebuild(gameState);
             backdrop.SetActive(true);
         }
@@ -106,10 +120,20 @@ namespace Sporefront.Visual
         public void Refresh(GameState gameState)
         {
             if (!IsVisible) return;
-            Rebuild(gameState);
+            cachedGameState = gameState;
+            isDirty = true;
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        private void Update()
+        {
+            if (!isDirty || !IsVisible || cachedGameState == null) return;
+            if (Time.unscaledTime - lastRebuildTime < RebuildInterval) return;
+            isDirty = false;
+            lastRebuildTime = Time.unscaledTime;
+            Rebuild(cachedGameState);
+        }
 
         // ================================================================
         // Rebuild
@@ -191,10 +215,12 @@ namespace Sporefront.Visual
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
             barLE.preferredHeight = 10;
 
-            // Row 2: Collection rate
+            // Row 2: Collection rate (net for food)
             var rateRow = UIHelper.CreateHorizontalRow(card.transform, 18f, 4f);
 
             double rate = player.GetCollectionRate(resType);
+            if (resType == ResourceType.Food)
+                rate -= foodInfo.adjustedRate;
             string rateSign = rate >= 0 ? "+" : "";
             Color rateColor = rate > 0.01 ? SporefrontColors.SporeGreen :
                 rate < -0.01 ? SporefrontColors.SporeRed : SporefrontColors.InkLight;
@@ -205,11 +231,11 @@ namespace Sporefront.Visual
             rateLE.flexibleWidth = 1;
             rateLE.preferredHeight = 18;
 
-            // Food-specific: consumption info
+            // Food-specific: consumption breakdown
             if (resType == ResourceType.Food)
             {
                 var consumeLabel = UIHelper.CreateLabel(rateRow.transform,
-                    $"Consumption: -{foodInfo.rate:F2}/s ({foodInfo.civilian}civ + {foodInfo.military}mil)",
+                    $"Consumption: -{foodInfo.adjustedRate:F2}/s ({foodInfo.civilian}civ + {foodInfo.military}mil)",
                     10, SporefrontColors.SporeRed, TextAnchor.MiddleRight);
                 var consumeLE = consumeLabel.gameObject.AddComponent<LayoutElement>();
                 consumeLE.flexibleWidth = 1;
@@ -350,7 +376,7 @@ namespace Sporefront.Visual
             if (bonuses.Count == 0) return;
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Active Bonuses",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 26;

@@ -44,6 +44,11 @@ namespace Sporefront.Visual
         // Cached game state for filter changes
         private GameState cachedGameState;
 
+        // Throttled rebuild
+        private bool isDirty;
+        private float lastRebuildTime;
+        private const float RebuildInterval = 0.5f;
+
         // ================================================================
         // Initialization
         // ================================================================
@@ -64,7 +69,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 420x520
             panel = UIHelper.CreatePanel(backdrop.transform, "EntitiesOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 420, 520);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Entities",
@@ -121,6 +126,11 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================
@@ -128,6 +138,8 @@ namespace Sporefront.Visual
         public void Show(GameState gameState)
         {
             cachedGameState = gameState;
+            lastRebuildTime = Time.unscaledTime;
+            isDirty = false;
             Rebuild(gameState);
             backdrop.SetActive(true);
         }
@@ -142,10 +154,19 @@ namespace Sporefront.Visual
         {
             if (!IsVisible) return;
             cachedGameState = gameState;
-            Rebuild(gameState);
+            isDirty = true;
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        private void Update()
+        {
+            if (!isDirty || !IsVisible || cachedGameState == null) return;
+            if (Time.unscaledTime - lastRebuildTime < RebuildInterval) return;
+            isDirty = false;
+            lastRebuildTime = Time.unscaledTime;
+            Rebuild(cachedGameState);
+        }
 
         // ================================================================
         // Filter
@@ -206,7 +227,7 @@ namespace Sporefront.Visual
                     // Section header
                     var sectionLabel = UIHelper.CreateLabel(contentRT,
                         $"Villager Groups ({villagerGroups.Count})",
-                        UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                        UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                         TextAnchor.MiddleLeft, true);
                     var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                     sectionLE.preferredHeight = 26;
@@ -230,7 +251,7 @@ namespace Sporefront.Visual
                     // Section header
                     var sectionLabel = UIHelper.CreateLabel(contentRT,
                         $"Armies ({armies.Count})",
-                        UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                        UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                         TextAnchor.MiddleLeft, true);
                     var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
                     sectionLE.preferredHeight = 26;
@@ -298,11 +319,7 @@ namespace Sporefront.Visual
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedID = group.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, false));
@@ -330,10 +347,10 @@ namespace Sporefront.Visual
             // Row 1: Name + status + location
             var topRow = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
-            string status = army.isEntrenched ? " [E]" : army.isInCombat ? " [C]" :
-                army.isRetreating ? " [R]" : "";
+            string status = UIHelper.FormatArmyStatus(army);
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
                 $"{army.name}{status}", 12, UIHelper.HeaderTextColor);
+            nameLabel.supportRichText = true;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
             nameLE.preferredHeight = 20;
@@ -368,18 +385,27 @@ namespace Sporefront.Visual
             cmdLE.flexibleWidth = 1;
             cmdLE.preferredHeight = 18;
 
-            // Row 3: Stamina bar
+            // Row 3: Stamina bar (commander stamina)
             var staminaRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
 
+            string staminaText = "—";
+            float staminaPct = 0f;
+            if (army.commanderID.HasValue)
+            {
+                var commander = gameState.GetCommander(army.commanderID.Value);
+                if (commander != null)
+                {
+                    staminaText = $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}";
+                    staminaPct = Mathf.Clamp01((float)(commander.stamina / CommanderData.MaxStamina));
+                }
+            }
+
             var staminaLabel = UIHelper.CreateLabel(staminaRow.transform,
-                $"Stamina: {(int)army.currentStamina}/{(int)army.maxStamina}", 10,
-                SporefrontColors.InkLight);
+                staminaText, 10, SporefrontColors.InkLight);
             var staminaTextLE = staminaLabel.gameObject.AddComponent<LayoutElement>();
             staminaTextLE.preferredWidth = 100;
             staminaTextLE.preferredHeight = 16;
 
-            float staminaPct = army.maxStamina > 0
-                ? Mathf.Clamp01((float)(army.currentStamina / army.maxStamina)) : 0f;
             Color staminaColor = staminaPct > 0.5f ? SporefrontColors.SporeTeal :
                 staminaPct > 0.25f ? SporefrontColors.SporeAmber : SporefrontColors.SporeRed;
 
@@ -394,11 +420,7 @@ namespace Sporefront.Visual
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedID = army.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, true));

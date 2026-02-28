@@ -206,4 +206,75 @@ namespace Sporefront.Models
         public override string DeduplicationKey => $"entrenchment_{ArmyName}";
         public override int Priority => 45;
     }
+
+    public class ArmyStrandedNotification : GameNotificationType
+    {
+        public string ArmyName;
+        public HexCoordinate Location;
+
+        public ArmyStrandedNotification(string armyName, HexCoordinate location)
+        {
+            ArmyName = armyName;
+            Location = location;
+        }
+
+        public override string Icon => "alert";
+        public override string Message => $"{ArmyName}: No home base available — army stranded";
+        public override string NotificationTitle => "Army Stranded";
+        public override HexCoordinate? Coordinate => Location;
+        public override string DeduplicationKey => $"armyStranded_{ArmyName}";
+        public override int Priority => 90;
+    }
+
+    public class ArmyRemobilizedNotification : GameNotificationType
+    {
+        public string ArmyName;
+        public HexCoordinate Location;
+
+        public ArmyRemobilizedNotification(string armyName, HexCoordinate location)
+        {
+            ArmyName = armyName;
+            Location = location;
+        }
+
+        public override string Icon => "combat";
+        public override string Message => $"{ArmyName} can now retreat to base";
+        public override string NotificationTitle => "Army Remobilized";
+        public override HexCoordinate? Coordinate => Location;
+        public override string DeduplicationKey => $"armyRemobilized_{ArmyName}";
+        public override int Priority => 50;
+    }
+
+    public class AttackCancelledNotification : GameNotificationType
+    {
+        public string ArmyName;
+        public HexCoordinate Location;
+
+        public AttackCancelledNotification(string armyName, HexCoordinate location)
+        {
+            ArmyName = armyName;
+            Location = location;
+        }
+
+        public override string Icon => "warning";
+        public override string Message => $"{ArmyName}: Target has moved — attack cancelled";
+        public override string NotificationTitle => "Attack Cancelled";
+        public override HexCoordinate? Coordinate => Location;
+        public override string DeduplicationKey => $"attackCancelled_{ArmyName}";
+        public override int Priority => 60;
+    }
+
+    public class CommandFailedNotification : GameNotificationType
+    {
+        public string Reason;
+
+        public CommandFailedNotification(string reason) { Reason = reason; }
+
+        public override string Icon => "warning";
+        public override string Message => Reason;
+        public override string NotificationTitle => "Command Failed";
+        public override HexCoordinate? Coordinate => null;
+        public override string DeduplicationKey => $"cmdFail_{Reason}";
+        public override int Priority => 30;
+    }
 }

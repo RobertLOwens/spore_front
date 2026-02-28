@@ -93,6 +93,11 @@ namespace Sporefront.Visual
             panel.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================
@@ -226,7 +231,7 @@ namespace Sporefront.Visual
             }
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Deploy Count",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -276,7 +281,7 @@ namespace Sporefront.Visual
         private void BuildJoinExistingTab(GameState gameState, BuildingData building)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Nearby Groups",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -370,7 +375,7 @@ namespace Sporefront.Visual
         private void BuildMergeSubPanel(GameState gameState)
         {
             var header = UIHelper.CreateLabel(contentRT, "Merge Groups",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 24;
@@ -461,7 +466,7 @@ namespace Sporefront.Visual
 
             // Split label
             var splitHeader = UIHelper.CreateLabel(contentRT, "Split Distribution",
-                UIHelper.DefaultHeaderFontSize - 2, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var splitHeaderLE = splitHeader.gameObject.AddComponent<LayoutElement>();
             splitHeaderLE.preferredHeight = 22;

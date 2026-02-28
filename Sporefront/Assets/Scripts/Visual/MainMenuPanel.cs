@@ -7,6 +7,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
@@ -23,6 +24,7 @@ namespace Sporefront.Visual
         public event Action OnEvolveAI;
         public event Action OnSpectateAI;
         public event Action OnAbout;
+        public event Action OnAccount;
 
         // ================================================================
         // State
@@ -30,6 +32,7 @@ namespace Sporefront.Visual
 
         private GameObject panel;
         private Text versionLabel;
+        private Text usernameLabel;
 
         private const float ButtonWidth = 260f;
         private const float ButtonHeight = 44f;
@@ -56,6 +59,7 @@ namespace Sporefront.Visual
 
         public void Show()
         {
+            RefreshUsername();
             panel.SetActive(true);
         }
 
@@ -108,6 +112,12 @@ namespace Sporefront.Visual
                 16, SporefrontColors.InkMid, TextAnchor.MiddleCenter);
             var subtitleLE = subtitle.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 28f;
+
+            // Username welcome label (shown when signed in)
+            usernameLabel = UIHelper.CreateLabel(centerColumn.transform, "",
+                14, SporefrontColors.SporeTeal, TextAnchor.MiddleCenter);
+            var userLE = usernameLabel.gameObject.AddComponent<LayoutElement>();
+            userLE.preferredHeight = 24f;
 
             // Spacer between title and buttons
             var titleSpacer = new GameObject("TitleSpacer", typeof(RectTransform), typeof(LayoutElement));
@@ -167,6 +177,10 @@ namespace Sporefront.Visual
             CreateMenuButton(centerColumn.transform, "About", SporefrontColors.ParchmentDark,
                 SporefrontColors.InkDark, () => OnAbout?.Invoke());
 
+            // Account button (shown when signed in)
+            CreateMenuButton(centerColumn.transform, "Account", SporefrontColors.ParchmentDark,
+                SporefrontColors.InkDark, () => OnAccount?.Invoke());
+
             // Flexible spacer at bottom
             var bottomSpacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
             bottomSpacer.transform.SetParent(centerColumn.transform, false);
@@ -202,6 +216,26 @@ namespace Sporefront.Visual
         {
             if (versionLabel != null)
                 versionLabel.text = version;
+        }
+
+        /// <summary>
+        /// Refresh username display from AuthService.
+        /// </summary>
+        public void RefreshUsername()
+        {
+            if (usernameLabel == null) return;
+
+            var auth = AuthService.Instance;
+            if (auth.CurrentState == AuthState.SignedIn && !string.IsNullOrEmpty(auth.CurrentDisplayName))
+            {
+                usernameLabel.text = $"Welcome, {auth.CurrentDisplayName}";
+                usernameLabel.gameObject.SetActive(true);
+            }
+            else
+            {
+                usernameLabel.text = "";
+                usernameLabel.gameObject.SetActive(false);
+            }
         }
     }
 }

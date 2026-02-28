@@ -168,7 +168,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -201,6 +201,7 @@ namespace Sporefront.Engine
         {
             var changes = new List<StateChange>();
             var completedCombats = new List<Guid>();
+            var combatsToClean = new List<ActiveCombat>();
 
             foreach (var kvp in new Dictionary<Guid, ActiveCombat>(activeCombats))
             {
@@ -267,15 +268,19 @@ namespace Sporefront.Engine
                         result = result
                     });
 
+                    // Grant commander XP
+                    var xpChanges = GrantCommanderCombatXP(combat, result, state);
+                    changes.AddRange(xpChanges);
+
                     // Save combat record to history (both basic and detailed)
                     CombatRecord combatRecord = CreateCombatRecord(combat, state);
-                    AddCombatRecord(combatRecord);
-
                     DetailedCombatRecord detailedRecord = CreateDetailedCombatRecord(combat, state);
+                    detailedRecord.Id = combatRecord.Id;  // Share ID for history lookup
+                    AddCombatRecord(combatRecord);
                     AddDetailedCombatRecord(detailedRecord);
 
-                    // Clean up combat flags on armies
-                    CleanupCombatFlags(combat, state);
+                    // Defer flag cleanup until after dictionary removal
+                    combatsToClean.Add(combat);
 
                     // Handle draw: both armies empty -- retreat or destroy both
                     if (!result.winnerID.HasValue && !result.loserID.HasValue)
@@ -293,8 +298,9 @@ namespace Sporefront.Engine
                                 changes.Add(new ArmyAutoRetreatingChange { armyID = armyID, path = retreatPath });
                             }
                             ArmyData army = state.GetArmy(armyID);
-                            if (army != null && army.IsEmpty() && !army.isRetreating)
+                            if (army != null && !army.isRetreating)
                             {
+                                // Army couldn't retreat — destroy (empty or surrounded)
                                 changes.Add(new ArmyDestroyedChange { armyID = armyID, coordinate = army.coordinate });
                                 state.RemoveArmy(armyID);
                             }
@@ -310,10 +316,11 @@ namespace Sporefront.Engine
                         {
                             changes.Add(new ArmyAutoRetreatingChange { armyID = loserID, path = retreatPath });
                         }
-                        // If army is empty and couldn't retreat, destroy it
+                        // If army couldn't retreat, destroy it (empty or surrounded)
                         ArmyData loserArmy = state.GetArmy(loserID);
-                        if (loserArmy != null && loserArmy.IsEmpty() && !loserArmy.isRetreating)
+                        if (loserArmy != null && !loserArmy.isRetreating)
                         {
+                            DebugLog.Log(string.Format("{0} is surrounded with no retreat — army destroyed", loserArmy.name));
                             changes.Add(new ArmyDestroyedChange { armyID = loserID, coordinate = loserArmy.coordinate });
                             state.RemoveArmy(loserID);
                         }
@@ -336,6 +343,12 @@ namespace Sporefront.Engine
             foreach (Guid id in completedCombats)
             {
                 activeCombats.Remove(id);
+            }
+
+            // Clean up combat flags after dictionary removal so isInCombat and activeCombats stay in sync
+            foreach (var combat in combatsToClean)
+            {
+                CleanupCombatFlags(combat, state);
             }
 
             return changes;
@@ -891,7 +904,7 @@ namespace Sporefront.Engine
             if (attacker == null || building == null)
             {
                 combat.isComplete = true;
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
             }
 
             var changes = new List<StateChange>();
@@ -906,6 +919,18 @@ namespace Sporefront.Engine
             {
                 damage += attackerStats.bonusVsBuildings;
                 damage *= siegeBuildingBonusMultiplier;
+            }
+
+            // Apply BuildingBludgeonArmor research bonus (defender's bonus reduces siege damage)
+            if (building.ownerID.HasValue)
+            {
+                var defender = state.GetPlayer(building.ownerID.Value);
+                if (defender != null)
+                {
+                    double armorBonus = defender.GetResearchBonus(
+                        ResearchBonusType.BuildingBludgeonArmor.ToString());
+                    damage = Math.Max(0, damage - armorBonus);
+                }
             }
 
             // Track damage for reporting
@@ -959,6 +984,19 @@ namespace Sporefront.Engine
                     buildingID = buildingID,
                     coordinate = building.coordinate
                 });
+
+                // Grant commander XP for building destruction
+                if (attacker.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(attacker.commanderID.Value);
+                    if (commander != null)
+                    {
+                        int xp = GameConfig.Commander.XPPerBuildingDestroyed
+                            + GameConfig.Commander.XPPerVictory;
+                        var xpChange = GrantXPToCommander(commander, xp);
+                        if (xpChange != null) changes.Add(xpChange);
+                    }
+                }
 
                 // Clean up attacker's combat flags
                 attacker.isInCombat = false;
@@ -1276,6 +1314,80 @@ namespace Sporefront.Engine
                 defenderCasualties: defenderCasualties,
                 combatDuration: combat.elapsedTime
             );
+        }
+
+        private List<StateChange> GrantCommanderCombatXP(ActiveCombat combat, CombatResultData result, GameState state)
+        {
+            var changes = new List<StateChange>();
+
+            // Calculate total kills per side
+            int attackerKills = 0;
+            if (result.defenderCasualties != null)
+                foreach (var kvp in result.defenderCasualties)
+                    attackerKills += kvp.Value;
+
+            int defenderKills = 0;
+            if (result.attackerCasualties != null)
+                foreach (var kvp in result.attackerCasualties)
+                    defenderKills += kvp.Value;
+
+            // Grant XP to attacker's lead commander
+            if (combat.attackerArmies.Count > 0)
+            {
+                var attackerArmy = state.GetArmy(combat.attackerArmies[0].armyID);
+                if (attackerArmy != null && attackerArmy.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(attackerArmy.commanderID.Value);
+                    if (commander != null)
+                    {
+                        bool isWinner = result.winnerID.HasValue && result.winnerID.Value == attackerArmy.id;
+                        int xp = attackerKills * GameConfig.Commander.XPPerKill
+                            + GameConfig.Commander.XPPerCombatParticipation
+                            + (isWinner ? GameConfig.Commander.XPPerVictory : 0);
+                        var change = GrantXPToCommander(commander, xp);
+                        if (change != null) changes.Add(change);
+                    }
+                }
+            }
+
+            // Grant XP to defender's lead commander
+            if (combat.defenderArmies.Count > 0)
+            {
+                var defenderArmy = state.GetArmy(combat.defenderArmies[0].armyID);
+                if (defenderArmy != null && defenderArmy.commanderID.HasValue)
+                {
+                    var commander = state.GetCommander(defenderArmy.commanderID.Value);
+                    if (commander != null)
+                    {
+                        bool isWinner = result.winnerID.HasValue && result.winnerID.Value == defenderArmy.id;
+                        int xp = defenderKills * GameConfig.Commander.XPPerKill
+                            + GameConfig.Commander.XPPerCombatParticipation
+                            + (isWinner ? GameConfig.Commander.XPPerVictory : 0);
+                        var change = GrantXPToCommander(commander, xp);
+                        if (change != null) changes.Add(change);
+                    }
+                }
+            }
+
+            return changes;
+        }
+
+        private CommanderXPGainedChange GrantXPToCommander(CommanderData commander, int xp)
+        {
+            if (xp <= 0) return null;
+            int oldLevel = commander.level;
+            CommanderRank oldRank = commander.rank;
+            commander.AddExperience(xp);
+            return new CommanderXPGainedChange
+            {
+                commanderID = commander.id,
+                xpGained = xp,
+                newXP = commander.experience,
+                newLevel = commander.level,
+                newRank = commander.rank,
+                didLevelUp = commander.level > oldLevel,
+                didRankUp = commander.rank.Index() > oldRank.Index()
+            };
         }
 
         private void CleanupCombatFlags(ActiveCombat combat, GameState state)
@@ -1618,7 +1730,7 @@ namespace Sporefront.Engine
         /// </summary>
         public List<StateChange> StartStackCombat(List<Guid> attackerArmyIDs, HexCoordinate coordinate, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             Guid attackerOwnerID = Guid.Empty;
             foreach (Guid id in attackerArmyIDs)
@@ -1638,7 +1750,7 @@ namespace Sporefront.Engine
             if (defensiveStack.IsEmpty)
             {
                 DebugLog.Log(string.Format("Stack combat: No defenders at {0}", coordinate));
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
             }
 
             var stackCombat = new StackCombat(coordinate, currentTime, attackerOwnerID);
@@ -1839,6 +1951,10 @@ namespace Sporefront.Engine
                     stackCombat.activePairings[index].winnerArmyID = result.winnerID;
                     stackCombat.activePairings[index].loserArmyID = result.loserID;
 
+                    // Grant commander XP for stack pairing
+                    var stackXpChanges = GrantCommanderCombatXP(combat, result, state);
+                    changes.AddRange(stackXpChanges);
+
                     // Handle draw: both armies empty -- retreat or destroy both
                     if (!result.winnerID.HasValue && !result.loserID.HasValue)
                     {
@@ -1916,8 +2032,9 @@ namespace Sporefront.Engine
 
                     // Save records
                     CombatRecord combatRecord = CreateCombatRecord(combat, state);
-                    AddCombatRecord(combatRecord);
                     DetailedCombatRecord detailedRecord = CreateDetailedCombatRecord(combat, state);
+                    detailedRecord.Id = combatRecord.Id;  // Share ID for history lookup
+                    AddCombatRecord(combatRecord);
                     AddDetailedCombatRecord(detailedRecord);
 
                     // Clean up combat flags and remove from activeCombats
@@ -2196,22 +2313,22 @@ namespace Sporefront.Engine
         /// </summary>
         public List<StateChange> AddDefenderToStackCombat(Guid armyID, HexCoordinate coordinate, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
             ArmyData army = gameState.GetArmy(armyID);
-            if (army == null || !army.ownerID.HasValue) return new List<StateChange>();
+            if (army == null || !army.ownerID.HasValue) return StateChange.EmptyChanges;
             Guid armyOwnerID = army.ownerID.Value;
 
             StackCombat stackCombat = GetStackCombatAt(coordinate);
-            if (stackCombat == null) return new List<StateChange>();
+            if (stackCombat == null) return StateChange.EmptyChanges;
 
             // Only join if this army is enemy of the attackers (i.e., friendly to defenders)
-            if (armyOwnerID == stackCombat.attackerOwnerID) return new List<StateChange>();
+            if (armyOwnerID == stackCombat.attackerOwnerID) return StateChange.EmptyChanges;
 
             // Don't join if already involved
-            if (stackCombat.InvolvesArmy(armyID)) return new List<StateChange>();
+            if (stackCombat.InvolvesArmy(armyID)) return StateChange.EmptyChanges;
 
             // Don't join if already in combat
-            if (army.isInCombat) return new List<StateChange>();
+            if (army.isInCombat) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -2516,16 +2633,32 @@ namespace Sporefront.Engine
             }
 
             // 3. Calculate path to destination
-            if (!retreatDestination.HasValue)
+            List<HexCoordinate> path = null;
+            if (retreatDestination.HasValue)
             {
-                DebugLog.Log(string.Format("{0} cannot find retreat path - staying in place", army.name));
-                return null;
+                path = state.mapData.FindPath(army.coordinate, retreatDestination.Value, ownerID, state);
             }
 
-            List<HexCoordinate> path = state.mapData.FindPath(army.coordinate, retreatDestination.Value, ownerID, state);
+            // 4. Last resort: scatter to nearest safe neighbor away from enemies
             if (path == null || path.Count == 0)
             {
-                DebugLog.Log(string.Format("{0} cannot find retreat path - staying in place", army.name));
+                retreatBuilding = null;
+                var neighbors = army.coordinate.Neighbors();
+                foreach (var neighbor in neighbors)
+                {
+                    if (!state.mapData.IsPassable(neighbor, ownerID, state)) continue;
+                    var enemiesNearby = state.GetEnemyArmiesInRange(neighbor, 1, ownerID);
+                    if (enemiesNearby.Count > 0) continue;
+                    retreatDestination = neighbor;
+                    path = new List<HexCoordinate> { neighbor };
+                    DebugLog.Log(string.Format("{0} scatter-retreating to {1}", army.name, neighbor));
+                    break;
+                }
+            }
+
+            if (path == null || path.Count == 0)
+            {
+                DebugLog.Log(string.Format("{0} cannot find any retreat path - surrounded", army.name));
                 return null;
             }
 
@@ -2535,7 +2668,7 @@ namespace Sporefront.Engine
             army.pathIndex = 0;
             army.movementProgress = 0.0;
 
-            string buildingName = retreatBuilding != null ? retreatBuilding.buildingType.DisplayName() : "unknown";
+            string buildingName = retreatBuilding != null ? retreatBuilding.buildingType.DisplayName() : "scatter";
             DebugLog.Log(string.Format("{0} retreating to {1}", army.name, buildingName));
 
             return path;

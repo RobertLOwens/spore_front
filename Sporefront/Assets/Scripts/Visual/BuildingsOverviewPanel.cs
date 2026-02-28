@@ -33,6 +33,10 @@ namespace Sporefront.Visual
         private RectTransform contentRT;
         private Guid localPlayerID;
 
+        // Fade animation
+        private CanvasGroup backdropCG;
+        private Coroutine fadeCoroutine;
+
         // Filter
         private enum FilterMode { All, Economic, Military }
         private FilterMode currentFilter = FilterMode.All;
@@ -43,6 +47,11 @@ namespace Sporefront.Visual
 
         // Cached game state for filter changes
         private GameState cachedGameState;
+
+        // Throttled rebuild
+        private bool isDirty;
+        private float lastRebuildTime;
+        private const float RebuildInterval = 0.5f;
 
         // ================================================================
         // Initialization
@@ -57,6 +66,7 @@ namespace Sporefront.Visual
                 new Color(0, 0, 0, 0.4f));
             var bdRT = backdrop.GetComponent<RectTransform>();
             UIHelper.StretchFull(bdRT);
+            backdropCG = backdrop.AddComponent<CanvasGroup>();
             var bdBtn = backdrop.AddComponent<Button>();
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Hide);
@@ -64,7 +74,7 @@ namespace Sporefront.Visual
             // Main panel -- centered 420x520
             panel = UIHelper.CreatePanel(backdrop.transform, "BuildingsOverviewPanel", UIHelper.PanelBg);
             var rt = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(rt, 420, 520);
+            UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Buildings",
@@ -118,6 +128,11 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
+        public void UpdateLocalPlayerID(Guid playerID)
+        {
+            localPlayerID = playerID;
+        }
+
         // ================================================================
         // Public API
         // ================================================================
@@ -125,24 +140,38 @@ namespace Sporefront.Visual
         public void Show(GameState gameState)
         {
             cachedGameState = gameState;
+            lastRebuildTime = Time.unscaledTime;
+            isDirty = false;
             Rebuild(gameState);
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
         }
 
         public void Hide()
         {
-            backdrop.SetActive(false);
             OnClose?.Invoke();
+            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
+            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
         }
 
         public void Refresh(GameState gameState)
         {
             if (!IsVisible) return;
             cachedGameState = gameState;
-            Rebuild(gameState);
+            isDirty = true;
         }
 
         public bool IsVisible => backdrop != null && backdrop.activeSelf;
+
+        private void Update()
+        {
+            if (!isDirty || !IsVisible || cachedGameState == null) return;
+            if (Time.unscaledTime - lastRebuildTime < RebuildInterval) return;
+            isDirty = false;
+            lastRebuildTime = Time.unscaledTime;
+            Rebuild(cachedGameState);
+        }
 
         // ================================================================
         // Filter
@@ -301,11 +330,12 @@ namespace Sporefront.Visual
             // Row 3: Construction/upgrade progress or status
             if (building.state == BuildingState.Constructing)
             {
+                int pctInt = Mathf.Clamp((int)(building.constructionProgress * 100), 0, 100);
                 var progressRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
-                var stateLabel = UIHelper.CreateLabel(progressRow.transform, "Constructing...", 10,
-                    SporefrontColors.SporeAmber);
+                var stateLabel = UIHelper.CreateLabel(progressRow.transform, $"Constructing {pctInt}%",
+                    UIConstants.FontCaption, SporefrontColors.SporeAmber);
                 var stateLabelLE = stateLabel.gameObject.AddComponent<LayoutElement>();
-                stateLabelLE.preferredWidth = 90;
+                stateLabelLE.preferredWidth = 100;
                 stateLabelLE.preferredHeight = 16;
 
                 var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
@@ -320,11 +350,13 @@ namespace Sporefront.Visual
             }
             else if (building.state == BuildingState.Upgrading)
             {
+                int pctInt = Mathf.Clamp((int)(building.upgradeProgress * 100), 0, 100);
                 var progressRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
                 var stateLabel = UIHelper.CreateLabel(progressRow.transform,
-                    $"Upgrading to Lv.{building.level + 1}...", 10, SporefrontColors.SporeAmber);
+                    $"Upgrading Lv.{building.level + 1} {pctInt}%",
+                    UIConstants.FontCaption, SporefrontColors.SporeAmber);
                 var stateLabelLE = stateLabel.gameObject.AddComponent<LayoutElement>();
-                stateLabelLE.preferredWidth = 120;
+                stateLabelLE.preferredWidth = 130;
                 stateLabelLE.preferredHeight = 16;
 
                 var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
@@ -349,11 +381,7 @@ namespace Sporefront.Visual
             // Make entire card tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            var colors = cardBtn.colors;
-            colors.normalColor = SporefrontColors.ParchmentMid;
-            colors.highlightedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(SporefrontColors.ParchmentMid, Color.black, 0.1f);
-            cardBtn.colors = colors;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
 
             var capturedID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedID));
@@ -373,15 +401,5 @@ namespace Sporefront.Visual
             return btn;
         }
 
-        private string FormatCost(Dictionary<ResourceType, int> cost)
-        {
-            var parts = new List<string>();
-            foreach (var kvp in cost)
-            {
-                if (kvp.Value > 0)
-                    parts.Add($"{UIHelper.ResourceIcon(kvp.Key)}{kvp.Value}");
-            }
-            return string.Join(" ", parts);
-        }
     }
 }

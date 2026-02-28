@@ -37,8 +37,23 @@ namespace Sporefront.Commands
                 return EngineCommandResult.Failure("You don't own this army");
 
             // Check army is not in combat
-            if (army.isInCombat || GameEngine.Instance.combatEngine.IsInCombat(armyID))
+            if (army.isInCombat)
                 return EngineCommandResult.Failure("Army is currently in combat");
+
+            // Check army is not stranded
+            if (army.isStranded)
+                return EngineCommandResult.Failure("Army is stranded — build a home base first");
+
+            // Check army has a commander
+            if (!army.commanderID.HasValue)
+                return EngineCommandResult.Failure("Army requires a commander to attack");
+
+            // Check commander stamina
+            CommanderData commander = state.GetCommander(army.commanderID.Value);
+            if (commander == null)
+                return EngineCommandResult.Failure("Commander not found");
+            if (!commander.HasEnoughStamina())
+                return EngineCommandResult.Failure("Commander lacks stamina to issue this order");
 
             // Check target coordinate is valid
             if (!state.mapData.IsValidCoordinate(targetCoordinate))
@@ -148,6 +163,14 @@ namespace Sporefront.Commands
             if (army == null)
                 return EngineCommandResult.Failure("Attacker not found");
 
+            // Consume commander stamina
+            if (army.commanderID.HasValue)
+            {
+                CommanderData cmdr = state.GetCommander(army.commanderID.Value);
+                if (cmdr != null)
+                    cmdr.ConsumeStamina();
+            }
+
             // Cancel entrenchment if army is entrenching or entrenched
             if (army.isEntrenching || army.isEntrenched)
             {
@@ -165,6 +188,9 @@ namespace Sporefront.Commands
 
             double currentTime = state.currentTime;
 
+            // Capture origin BEFORE moving — friendly armies at origin should join the attack
+            HexCoordinate attackerOrigin = army.coordinate;
+
             // Build defensive stack at the target
             DefensiveStack stack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
 
@@ -173,14 +199,19 @@ namespace Sporefront.Commands
 
             if (targetBuilding != null)
             {
+                // Move attacker to target tile first
+                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target building");
+                if (moveResult != null)
+                    return moveResult;
+
                 // Building combat scenario
                 if (stack.ArmyEntries.Count > 0)
                 {
                     // Defenders present - use stack combat
                     List<Guid> attackerArmyIDs = new List<Guid> { armyID };
 
-                    // Gather friendly armies at the attacker's position that can join
-                    List<ArmyData> friendlyArmies = state.GetArmies(army.coordinate);
+                    // Gather friendly armies at the attacker's ORIGIN position that can join
+                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
                     foreach (ArmyData ally in friendlyArmies)
                     {
                         if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
@@ -216,43 +247,25 @@ namespace Sporefront.Commands
                         changeBuilder.Add(buildingChange);
                 }
 
-                // If army needs to move to the target, find path and emit move change
-                if (army.coordinate.Distance(targetCoordinate) > 1)
-                {
-                    List<HexCoordinate> path = state.mapData.FindPath(
-                        army.coordinate, targetCoordinate, PlayerID, state,
-                        allowImpassableDestination: true);
-
-                    if (path != null && path.Count > 0)
-                    {
-                        changeBuilder.Add(new ArmyMovedChange
-                        {
-                            armyID = armyID,
-                            from = army.coordinate,
-                            to = targetCoordinate,
-                            path = path
-                        });
-                    }
-                    else
-                    {
-                        return EngineCommandResult.Failure("No path to target building");
-                    }
-                }
-
                 return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
 
             // Army or villager target (not on a building)
             if (stack.ArmyEntries.Count > 0)
             {
+                // Move attacker to target tile first
+                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target");
+                if (moveResult != null)
+                    return moveResult;
+
                 // Has army defenders
                 if (stack.ArmyEntries.Count > 1 || stack.HasEntrenchedDefenders)
                 {
                     // Multiple defenders or entrenched defenders - use stack combat
                     List<Guid> attackerArmyIDs = new List<Guid> { armyID };
 
-                    // Gather friendly armies at the attacker's position
-                    List<ArmyData> friendlyArmies = state.GetArmies(army.coordinate);
+                    // Gather friendly armies at the attacker's ORIGIN position
+                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
                     foreach (ArmyData ally in friendlyArmies)
                     {
                         if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
@@ -279,34 +292,16 @@ namespace Sporefront.Commands
                         changeBuilder.Add(combatChange);
                 }
 
-                // Move army to target if not adjacent
-                if (army.coordinate.Distance(targetCoordinate) > 1)
-                {
-                    List<HexCoordinate> path = state.mapData.FindPath(
-                        army.coordinate, targetCoordinate, PlayerID, state,
-                        allowImpassableDestination: true);
-
-                    if (path != null && path.Count > 0)
-                    {
-                        changeBuilder.Add(new ArmyMovedChange
-                        {
-                            armyID = armyID,
-                            from = army.coordinate,
-                            to = targetCoordinate,
-                            path = path
-                        });
-                    }
-                    else
-                    {
-                        return EngineCommandResult.Failure("No path to target");
-                    }
-                }
-
                 return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
 
             if (stack.OnlyVillagers)
             {
+                // Move attacker to target tile first
+                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target villagers");
+                if (moveResult != null)
+                    return moveResult;
+
                 // Only villagers at target - start villager combat
                 Guid firstVillagerID = stack.villagerGroupIDs[0];
                 StateChange villagerChange = GameEngine.Instance.combatEngine.StartVillagerCombat(
@@ -314,29 +309,6 @@ namespace Sporefront.Commands
 
                 if (villagerChange != null)
                     changeBuilder.Add(villagerChange);
-
-                // Move army to target if not adjacent
-                if (army.coordinate.Distance(targetCoordinate) > 1)
-                {
-                    List<HexCoordinate> path = state.mapData.FindPath(
-                        army.coordinate, targetCoordinate, PlayerID, state,
-                        allowImpassableDestination: true);
-
-                    if (path != null && path.Count > 0)
-                    {
-                        changeBuilder.Add(new ArmyMovedChange
-                        {
-                            armyID = armyID,
-                            from = army.coordinate,
-                            to = targetCoordinate,
-                            path = path
-                        });
-                    }
-                    else
-                    {
-                        return EngineCommandResult.Failure("No path to target villagers");
-                    }
-                }
 
                 return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
@@ -352,16 +324,20 @@ namespace Sporefront.Commands
 
             if (enemyCrossTile.Count > 0)
             {
+                // Move attacker to target tile first
+                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to entrenchment zone");
+                if (moveResult != null)
+                    return moveResult;
+
                 // Build defensive stack which gathers cross-tile entrenched into Tier 1
-                // Stack was already built above, but re-check since it may include cross-tile entries
                 DefensiveStack crossStack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
 
                 if (crossStack.ArmyEntries.Count > 0)
                 {
                     List<Guid> attackerArmyIDs = new List<Guid> { armyID };
 
-                    // Gather friendly armies at the attacker's position
-                    List<ArmyData> friendlyArmies = state.GetArmies(army.coordinate);
+                    // Gather friendly armies at the attacker's ORIGIN position
+                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
                     foreach (ArmyData ally in friendlyArmies)
                     {
                         if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
@@ -378,33 +354,55 @@ namespace Sporefront.Commands
                         changeBuilder.AddAll(stackChanges);
                 }
 
-                // Move army to target
-                if (army.coordinate.Distance(targetCoordinate) > 1)
-                {
-                    List<HexCoordinate> path = state.mapData.FindPath(
-                        army.coordinate, targetCoordinate, PlayerID, state,
-                        allowImpassableDestination: true);
-
-                    if (path != null && path.Count > 0)
-                    {
-                        changeBuilder.Add(new ArmyMovedChange
-                        {
-                            armyID = armyID,
-                            from = army.coordinate,
-                            to = targetCoordinate,
-                            path = path
-                        });
-                    }
-                    else
-                    {
-                        return EngineCommandResult.Failure("No path to entrenchment zone");
-                    }
-                }
-
                 return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
 
             return EngineCommandResult.Failure("No valid target found");
+        }
+
+        /// <summary>
+        /// Sets up army movement toward the target coordinate for walk-then-attack.
+        /// Returns null if army is already at target (combat starts immediately).
+        /// Returns a success result if army needs to walk first (caller should return it to skip immediate combat).
+        /// Returns a failure result if no path exists.
+        /// </summary>
+        private EngineCommandResult MoveAttackerToTarget(ArmyData army, HexCoordinate target,
+            GameState state, StateChangeBuilder changeBuilder, string failureMsg)
+        {
+            if (army.coordinate.Equals(target))
+                return null;
+
+            List<HexCoordinate> path;
+            if (army.coordinate.Distance(target) == 1)
+            {
+                path = new List<HexCoordinate> { target };
+            }
+            else
+            {
+                path = state.mapData.FindPath(
+                    army.coordinate, target, PlayerID, state,
+                    allowImpassableDestination: true);
+
+                if (path == null || path.Count == 0)
+                    return EngineCommandResult.Failure(failureMsg);
+            }
+
+            // Set walking path instead of teleporting
+            army.currentPath = path;
+            army.pathIndex = 0;
+            army.movementProgress = 0.0;
+            army.pendingAttackTarget = target;
+
+            changeBuilder.Add(new ArmyMovedChange
+            {
+                armyID = army.id,
+                from = army.coordinate,
+                to = target,
+                path = path
+            });
+
+            // Return success to signal caller that army is walking (skip immediate combat start)
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
     }
 }

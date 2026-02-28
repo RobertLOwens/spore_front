@@ -82,8 +82,12 @@ namespace Sporefront.Commands
                 }
             }
 
-            // Calculate output
-            int outputAmount = (int)(totalInput * BaseTradeRate);
+            // Calculate output with MarketRate research bonus
+            double tradeRate = BaseTradeRate;
+            double marketBonus = player.GetResearchBonus(
+                ResearchBonusType.MarketRate.ToString());
+            tradeRate = Math.Min(0.98, tradeRate + marketBonus);
+            int outputAmount = (int)(totalInput * tradeRate);
             if (outputAmount < 1) outputAmount = 1;
 
             // Add output resource
@@ -98,9 +102,10 @@ namespace Sporefront.Commands
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
 
-        public static int CalculateOutput(int totalInput)
+        public static int CalculateOutput(int totalInput, double marketBonus = 0.0)
         {
-            int result = (int)(totalInput * BaseTradeRate);
+            double rate = Math.Min(0.98, BaseTradeRate + marketBonus);
+            int result = (int)(totalInput * rate);
             return result < 1 && totalInput > 0 ? 1 : result;
         }
     }

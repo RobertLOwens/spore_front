@@ -291,7 +291,8 @@ namespace Sporefront.Engine
                         : new UnitUpgradeBonusData(0, 0, 0);
                     double effectiveHP = unitType.HP() + upgradeBonus.hpBonus;
                     double armorReduction = upgradeBonus.armorBonus * count;
-                    double effectiveDamage = Math.Max(0, Math.Min(remainingDamage, count * effectiveHP) - armorReduction);
+                    double damageAfterArmor = Math.Max(0, remainingDamage - armorReduction);
+                    double effectiveDamage = Math.Min(damageAfterArmor, count * effectiveHP);
                     double damageToApply = effectiveDamage;
                     int kills = sideState.ApplyDamage(damageToApply, unitType, effectiveHP);
 
@@ -346,14 +347,17 @@ namespace Sporefront.Engine
                     ? playerState.GetUnitUpgradeBonus(unitType)
                     : new UnitUpgradeBonusData(0, 0, 0);
                 double unitHealth = unitType.HP() + upgradeBonus.hpBonus;
-                int unitsKilled = Math.Min(count, (int)(remainingDamage / unitHealth));
+                double armorForType = upgradeBonus.armorBonus * count;
+                double reducedDamage = Math.Max(0, remainingDamage - armorForType);
+                int unitsKilled = Math.Min(count, (int)(reducedDamage / unitHealth));
 
                 if (unitsKilled > 0)
                 {
                     army.RemoveMilitaryUnits(unitType, unitsKilled);
                     casualties[unitType] = unitsKilled;
-                    remainingDamage -= unitsKilled * unitHealth;
                 }
+                double consumed = Math.Min(remainingDamage, unitsKilled * unitHealth + armorForType);
+                remainingDamage -= consumed;
             }
 
             return casualties;

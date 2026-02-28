@@ -5,8 +5,13 @@
 // ============================================================================
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Sporefront.Data;
+using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
@@ -25,9 +30,12 @@ namespace Sporefront.Visual
             {
                 if (_bodyFont == null)
                 {
-                    _bodyFont = Font.CreateDynamicFontFromOSFont("IM Fell English", DefaultBodyFontSize);
-                    if (_bodyFont == null)
-                        _bodyFont = Font.CreateDynamicFontFromOSFont("Arial", DefaultBodyFontSize);
+                    // Check if the font exists in available OS fonts before using it;
+                    // CreateDynamicFontFromOSFont never returns null even for missing fonts
+                    string[] osfonts = Font.GetOSInstalledFontNames();
+                    bool hasFellEnglish = System.Array.Exists(osfonts, f => f == "IM Fell English");
+                    _bodyFont = Font.CreateDynamicFontFromOSFont(
+                        hasFellEnglish ? "IM Fell English" : "Arial", DefaultBodyFontSize);
                 }
                 return _bodyFont;
             }
@@ -39,9 +47,10 @@ namespace Sporefront.Visual
             {
                 if (_headerFont == null)
                 {
-                    _headerFont = Font.CreateDynamicFontFromOSFont("MedievalSharp", DefaultHeaderFontSize);
-                    if (_headerFont == null)
-                        _headerFont = Font.CreateDynamicFontFromOSFont("Arial", DefaultHeaderFontSize);
+                    string[] osfonts = Font.GetOSInstalledFontNames();
+                    bool hasMedievalSharp = System.Array.Exists(osfonts, f => f == "MedievalSharp");
+                    _headerFont = Font.CreateDynamicFontFromOSFont(
+                        hasMedievalSharp ? "MedievalSharp" : "Arial", DefaultHeaderFontSize);
                 }
                 return _headerFont;
             }
@@ -51,18 +60,18 @@ namespace Sporefront.Visual
         // Style Constants
         // ================================================================
 
-        public const int DefaultBodyFontSize = 14;
-        public const int DefaultHeaderFontSize = 18;
+        public const int DefaultBodyFontSize = 18;
+        public const int DefaultHeaderFontSize = 23;
 
         public static readonly Color PanelBg = new Color(
-            SporefrontColors.ParchmentLight.r,
-            SporefrontColors.ParchmentLight.g,
-            SporefrontColors.ParchmentLight.b, 0.95f);
+            SporefrontColors.ParchmentMid.r,
+            SporefrontColors.ParchmentMid.g,
+            SporefrontColors.ParchmentMid.b, 0.95f);
 
         public static readonly Color HudBg = new Color(
             SporefrontColors.InkDark.r,
             SporefrontColors.InkDark.g,
-            SporefrontColors.InkDark.b, 0.9f);
+            SporefrontColors.InkDark.b, 1.0f);
 
         public static readonly Color ButtonBg = SporefrontColors.ParchmentDark;
         public static readonly Color ButtonText = SporefrontColors.InkBlack;
@@ -71,15 +80,157 @@ namespace Sporefront.Visual
         public static readonly Color HudTextColor = SporefrontColors.ParchmentLight;
 
         // ================================================================
+        // Rounded Corner Sprites
+        // ================================================================
+
+        public const int PanelCornerRadius = 20;
+        public const int ButtonCornerRadius = 15;
+        public const int SmallCornerRadius = 8;
+
+        private static readonly Dictionary<int, Sprite> _roundedRectCache = new Dictionary<int, Sprite>();
+
+        public static Sprite GetRoundedRectSprite(int cornerRadius)
+        {
+            if (_roundedRectCache.TryGetValue(cornerRadius, out var cached))
+                return cached;
+            var sprite = CreateRoundedRectSprite(cornerRadius);
+            _roundedRectCache[cornerRadius] = sprite;
+            return sprite;
+        }
+
+        private static Sprite CreateRoundedRectSprite(int cornerRadius)
+        {
+            int size = cornerRadius * 2 + 2;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            var pixels = new Color[size * size];
+            float r = cornerRadius;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float px = x + 0.5f;
+                    float py = y + 0.5f;
+
+                    float dx = Mathf.Max(r - px, px - (size - r), 0f);
+                    float dy = Mathf.Max(r - py, py - (size - r), 0f);
+
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    float alpha = Mathf.Clamp01(r - dist + 0.5f);
+
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            float border = cornerRadius;
+            return Sprite.Create(tex,
+                new Rect(0, 0, size, size),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0,
+                SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
+        }
+
+        // ================================================================
+        // Section Card
+        // ================================================================
+
+        /// <summary>
+        /// Creates a lightly-tinted card panel with a VerticalLayoutGroup and optional bold header.
+        /// Returns the VLG so callers can add children inside the card.
+        /// </summary>
+        public static VerticalLayoutGroup CreateSectionCard(Transform parent, string name, string headerText = null)
+        {
+            var cardColor = new Color(
+                SporefrontColors.ParchmentDark.r,
+                SporefrontColors.ParchmentDark.g,
+                SporefrontColors.ParchmentDark.b, 0.5f);
+
+            var card = CreatePanel(parent, name, cardColor, SmallCornerRadius);
+            var cardLE = card.AddComponent<LayoutElement>();
+            cardLE.flexibleWidth = 1;
+
+            var vlg = card.AddComponent<VerticalLayoutGroup>();
+            int pad = (int)UIConstants.SectionCardPadding;
+            vlg.padding = new RectOffset(pad, pad, pad, pad);
+            vlg.spacing = UIConstants.SectionCardSpacing;
+            vlg.childAlignment = TextAnchor.UpperLeft;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+
+            var csf = card.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (!string.IsNullOrEmpty(headerText))
+            {
+                var header = CreateLabel(card.transform, headerText,
+                    UIConstants.FontSubheader, HeaderTextColor,
+                    TextAnchor.MiddleLeft, true);
+                header.fontStyle = FontStyle.Bold;
+                var headerLE = header.gameObject.AddComponent<LayoutElement>();
+                headerLE.preferredHeight = 22;
+            }
+
+            return vlg;
+        }
+
+        // ================================================================
         // Element Creators
         // ================================================================
 
-        public static GameObject CreatePanel(Transform parent, string name, Color bgColor)
+        public static GameObject CreatePanel(Transform parent, string name, Color bgColor,
+            int cornerRadius = -1)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            go.GetComponent<Image>().color = bgColor;
-            return go;
+            int effectiveRadius = cornerRadius == -1 ? PanelCornerRadius : cornerRadius;
+
+            // Auto-skip rounding for transparent overlays and near-black backdrops
+            bool useRounding = effectiveRadius > 0
+                && bgColor.a >= 0.01f
+                && (bgColor.r + bgColor.g + bgColor.b) >= 0.05f;
+
+            if (useRounding)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Shadow));
+                go.transform.SetParent(parent, false);
+
+                var img = go.GetComponent<Image>();
+                img.color = bgColor;
+                img.sprite = GetRoundedRectSprite(effectiveRadius);
+                img.type = Image.Type.Sliced;
+
+                var shadow = go.GetComponent<Shadow>();
+                shadow.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.25f);
+                shadow.effectDistance = new Vector2(1.5f, -1.5f);
+
+                return go;
+            }
+            else
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
+                go.transform.SetParent(parent, false);
+                go.GetComponent<Image>().color = bgColor;
+
+                var outline = go.GetComponent<Outline>();
+                outline.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.3f);
+                outline.effectDistance = new Vector2(2f, -2f);
+
+                return go;
+            }
         }
 
         public static Text CreateLabel(Transform parent, string text, int fontSize = -1,
@@ -108,15 +259,13 @@ namespace Sporefront.Visual
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
 
-            go.GetComponent<Image>().color = bg;
+            var img = go.GetComponent<Image>();
+            img.color = bg;
+            img.sprite = GetRoundedRectSprite(ButtonCornerRadius);
+            img.type = Image.Type.Sliced;
 
             var btn = go.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.normalColor = bg;
-            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.15f);
-            colors.pressedColor = Color.Lerp(bg, Color.black, 0.1f);
-            colors.disabledColor = new Color(bg.r, bg.g, bg.b, 0.5f);
-            btn.colors = colors;
+            btn.colors = StandardButtonColors(bg);
 
             // Button label
             var label = CreateLabel(go.transform, text,
@@ -143,7 +292,7 @@ namespace Sporefront.Visual
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
-            hlg.childControlWidth = false;
+            hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             return hlg;
         }
@@ -176,11 +325,9 @@ namespace Sporefront.Visual
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            // Viewport with mask
-            var viewportGO = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            // Viewport with rect-based clipping (RectMask2D works reliably with URP)
+            var viewportGO = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
             viewportGO.transform.SetParent(scrollGO.transform, false);
-            viewportGO.GetComponent<Image>().color = Color.clear;
-            viewportGO.GetComponent<Mask>().showMaskGraphic = false;
             var vpRT = viewportGO.GetComponent<RectTransform>();
             StretchFull(vpRT);
 
@@ -203,7 +350,7 @@ namespace Sporefront.Visual
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
+            vlg.childControlHeight = true;
             vlg.padding = new RectOffset(8, 8, 8, 8);
 
             scrollRect.viewport = vpRT;
@@ -215,12 +362,12 @@ namespace Sporefront.Visual
         public static (Image bg, Image fill) CreateProgressBar(Transform parent, float height = 16f,
             Color? bgColor = null, Color? fillColor = null)
         {
-            var bgGO = CreatePanel(parent, "ProgressBar", bgColor ?? SporefrontColors.InkFaded);
+            var bgGO = CreatePanel(parent, "ProgressBar", bgColor ?? SporefrontColors.InkFaded, SmallCornerRadius);
             var bgRT = bgGO.GetComponent<RectTransform>();
             bgRT.sizeDelta = new Vector2(0, height);
             var bgImg = bgGO.GetComponent<Image>();
 
-            var fillGO = CreatePanel(bgGO.transform, "Fill", fillColor ?? SporefrontColors.SporeGreen);
+            var fillGO = CreatePanel(bgGO.transform, "Fill", fillColor ?? SporefrontColors.SporeGreen, SmallCornerRadius);
             var fillRT = fillGO.GetComponent<RectTransform>();
             fillRT.anchorMin = Vector2.zero;
             fillRT.anchorMax = new Vector2(0, 1);
@@ -244,7 +391,7 @@ namespace Sporefront.Visual
             rt.sizeDelta = new Vector2(0, 20);
 
             // Background
-            var bgGO = CreatePanel(go.transform, "Background", SporefrontColors.InkFaded);
+            var bgGO = CreatePanel(go.transform, "Background", SporefrontColors.InkFaded, SmallCornerRadius);
             var bgRT = bgGO.GetComponent<RectTransform>();
             StretchFull(bgRT);
             bgRT.offsetMin = new Vector2(0, 7);
@@ -258,7 +405,7 @@ namespace Sporefront.Visual
             fillAreaRT.offsetMin = new Vector2(5, 7);
             fillAreaRT.offsetMax = new Vector2(-5, -7);
 
-            var fillGO = CreatePanel(fillAreaGO.transform, "Fill", SporefrontColors.SporeAmber);
+            var fillGO = CreatePanel(fillAreaGO.transform, "Fill", SporefrontColors.SporeAmber, SmallCornerRadius);
             var fillRT = fillGO.GetComponent<RectTransform>();
             fillRT.anchorMin = Vector2.zero;
             fillRT.anchorMax = new Vector2(0, 1);
@@ -272,7 +419,7 @@ namespace Sporefront.Visual
             handleAreaRT.offsetMin = new Vector2(5, 0);
             handleAreaRT.offsetMax = new Vector2(-5, 0);
 
-            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentDeep);
+            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentDeep, SmallCornerRadius);
             var handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.sizeDelta = new Vector2(16, 0);
 
@@ -295,7 +442,7 @@ namespace Sporefront.Visual
         {
             var go = CreatePanel(parent, "Divider",
                 color ?? new Color(SporefrontColors.InkFaded.r, SporefrontColors.InkFaded.g,
-                    SporefrontColors.InkFaded.b, 0.3f));
+                    SporefrontColors.InkFaded.b, 0.3f), 0);
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, height);
             var le = go.AddComponent<LayoutElement>();
@@ -346,6 +493,176 @@ namespace Sporefront.Visual
                 case Sporefront.Models.ResourceType.Ore: return "O";
                 default: return "?";
             }
+        }
+
+        // ================================================================
+        // Shared Formatting Utilities
+        // ================================================================
+
+        /// <summary>
+        /// Unified cost string: "W50 S20 O10". Consolidates 4 duplicate implementations.
+        /// </summary>
+        public static string FormatCost(Dictionary<ResourceType, int> cost)
+        {
+            var parts = new List<string>();
+            foreach (var kvp in cost)
+            {
+                if (kvp.Value > 0)
+                    parts.Add($"{ResourceIcon(kvp.Key)}{kvp.Value}");
+            }
+            return string.Join(" ", parts);
+        }
+
+        /// <summary>
+        /// Rich-text color-coded army status: [E] teal, [C] red, [R] amber.
+        /// Returns empty string if no status flags are active.
+        /// </summary>
+        public static string FormatArmyStatus(ArmyData army)
+        {
+            if (army.isEntrenching)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[E...]</color>";
+            if (army.isEntrenched)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeTeal)}>[E]</color>";
+            if (army.isInCombat)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed)}>[C]</color>";
+            if (army.isRetreating)
+                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[R]</color>";
+            return "";
+        }
+
+        /// <summary>
+        /// Formats seconds as "2m 15s", or "Done" if <= 0.
+        /// </summary>
+        public static string FormatTime(double seconds)
+        {
+            if (seconds <= 0) return "Done";
+            int totalSeconds = (int)Math.Ceiling(seconds);
+            int m = totalSeconds / 60;
+            int s = totalSeconds % 60;
+            if (m > 0) return $"{m}m {s:D2}s";
+            return $"{s}s";
+        }
+
+        // ================================================================
+        // Button Color Helpers
+        // ================================================================
+
+        /// <summary>
+        /// Standard ColorBlock for buttons — unified hover/pressed/disabled values.
+        /// </summary>
+        public static ColorBlock StandardButtonColors(Color bg)
+        {
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = bg;
+            colors.highlightedColor = Color.Lerp(bg, Color.white, UIConstants.HoverLerpAmount);
+            colors.pressedColor = Color.Lerp(bg, Color.black, UIConstants.PressedLerpAmount);
+            colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
+            return colors;
+        }
+
+        /// <summary>
+        /// Card-style ColorBlock for overview panel items — subtle hover.
+        /// </summary>
+        public static ColorBlock CardButtonColors(Color bg)
+        {
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = bg;
+            colors.highlightedColor = Color.Lerp(bg, Color.white, 0.1f);
+            colors.pressedColor = Color.Lerp(bg, Color.black, 0.1f);
+            colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
+            return colors;
+        }
+
+        // ================================================================
+        // Progress Bar with Label
+        // ================================================================
+
+        /// <summary>
+        /// Progress bar with overlaid percentage text (e.g., "67%").
+        /// </summary>
+        public static (Image bg, Image fill, Text label) CreateProgressBarWithLabel(
+            Transform parent, float height = 16f,
+            Color? bgColor = null, Color? fillColor = null)
+        {
+            var result = CreateProgressBar(parent, height, bgColor, fillColor);
+
+            // Overlaid percentage label
+            var percentLabel = CreateLabel(result.bg.transform, "0%",
+                UIConstants.FontCaption, Color.white, TextAnchor.MiddleCenter);
+            var labelRT = percentLabel.GetComponent<RectTransform>();
+            StretchFull(labelRT);
+            percentLabel.fontStyle = FontStyle.Bold;
+
+            return (result.bg, result.fill, percentLabel);
+        }
+
+        // ================================================================
+        // Fade Helpers
+        // ================================================================
+
+        /// <summary>
+        /// Adds a hover tooltip to a UI element via EventTrigger.
+        /// </summary>
+        public static void AddTooltip(GameObject target, string text)
+        {
+            var trigger = target.GetComponent<EventTrigger>();
+            if (trigger == null) trigger = target.AddComponent<EventTrigger>();
+
+            var enterEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            enterEntry.callback.AddListener((data) =>
+            {
+                var ped = (PointerEventData)data;
+                if (TooltipManager.Instance != null)
+                    TooltipManager.Instance.Show(text, ped.position);
+            });
+            trigger.triggers.Add(enterEntry);
+
+            var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exitEntry.callback.AddListener((data) =>
+            {
+                if (TooltipManager.Instance != null)
+                    TooltipManager.Instance.Hide();
+            });
+            trigger.triggers.Add(exitEntry);
+        }
+
+        /// <summary>
+        /// Fades a CanvasGroup from 0 to 1 over the given duration.
+        /// </summary>
+        public static IEnumerator FadeIn(CanvasGroup cg, float duration = -1f)
+        {
+            float d = duration > 0 ? duration : UIConstants.PanelFadeDuration;
+            cg.alpha = 0f;
+            cg.interactable = false;
+            cg.blocksRaycasts = true;
+            float elapsed = 0f;
+            while (elapsed < d)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                cg.alpha = Mathf.Clamp01(elapsed / d);
+                yield return null;
+            }
+            cg.alpha = 1f;
+            cg.interactable = true;
+        }
+
+        /// <summary>
+        /// Fades a CanvasGroup from 1 to 0 over the given duration, then deactivates the GO.
+        /// </summary>
+        public static IEnumerator FadeOut(CanvasGroup cg, float duration = -1f)
+        {
+            float d = duration > 0 ? duration : UIConstants.PanelFadeDuration;
+            cg.interactable = false;
+            float elapsed = 0f;
+            while (elapsed < d)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                cg.alpha = Mathf.Clamp01(1f - elapsed / d);
+                yield return null;
+            }
+            cg.alpha = 0f;
+            cg.blocksRaycasts = false;
+            cg.gameObject.SetActive(false);
         }
     }
 }

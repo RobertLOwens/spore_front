@@ -56,6 +56,7 @@ namespace Sporefront.Data
 
         // State
         public bool isRetreating;
+        public bool isStranded;
 
         // Pending reinforcements
         public List<PendingReinforcement> pendingReinforcements = new List<PendingReinforcement>();
@@ -65,9 +66,10 @@ namespace Sporefront.Data
         public int pathIndex;
         public double movementProgress;
 
-        // Combat state
-        public bool isInCombat;
-        public Guid? combatTargetID;
+        // Combat state (transient — combat dictionaries are not serialized)
+        [System.NonSerialized] public bool isInCombat;
+        [System.NonSerialized] public Guid? combatTargetID;
+        public HexCoordinate? pendingAttackTarget;
 
         // Entrenchment state (transient)
         [System.NonSerialized] public bool isEntrenching;
@@ -78,9 +80,22 @@ namespace Sporefront.Data
         // Arrival time (transient)
         [System.NonSerialized] public double arrivalTime;
 
+        // Movement speed (transient, for visual interpolation)
+        [System.NonSerialized] public double movementSpeed;
+
         // Stamina
         public double currentStamina = 100.0;
         public double maxStamina = 100.0;
+
+        public void DrainStamina(double amount)
+        {
+            currentStamina = Math.Max(0.0, currentStamina - amount);
+        }
+
+        public void RegenerateStamina(double amount)
+        {
+            currentStamina = Math.Min(maxStamina, currentStamina + amount);
+        }
 
         public ArmyData(string name, HexCoordinate coordinate, Guid? ownerID = null)
         {

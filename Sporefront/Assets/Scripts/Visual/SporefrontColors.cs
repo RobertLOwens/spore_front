@@ -41,6 +41,31 @@ namespace Sporefront.Visual
         public static readonly Color SporeTeal   = HexColor("3A6B6B");
 
         // ================================================================
+        // Resource Node Colors
+        // ================================================================
+
+        public static readonly Color ResourceWood  = HexColor("5B4A2E");  // dark brown (trees/wood)
+        public static readonly Color ResourceFood  = HexColor("4A6B3A");  // muted green (forage/food)
+        public static readonly Color ResourceStone = HexColor("7A7060");  // gray-brown (stone)
+        public static readonly Color ResourceOre   = HexColor("5A5A6A");  // blue-gray (ore)
+        public static readonly Color ResourceHunt  = HexColor("6B4A3A");  // reddish-brown (animals)
+
+        public static Color GetResourceColor(ResourcePointType type)
+        {
+            switch (type)
+            {
+                case ResourcePointType.Trees:        return ResourceWood;
+                case ResourcePointType.Forage:       return ResourceFood;
+                case ResourcePointType.Farmland:     return ResourceFood;
+                case ResourcePointType.OreMine:      return ResourceOre;
+                case ResourcePointType.StoneQuarry:  return ResourceStone;
+                case ResourcePointType.Deer:         return ResourceHunt;
+                case ResourcePointType.WildBoar:     return ResourceHunt;
+                default:                             return InkMid;
+            }
+        }
+
+        // ================================================================
         // Hex Border
         // ================================================================
 
@@ -83,6 +108,17 @@ namespace Sporefront.Visual
         // ================================================================
         // Helpers
         // ================================================================
+
+        public static Color ParsePlayerColor(string hexColor)
+        {
+            if (string.IsNullOrEmpty(hexColor)) return InkMid;
+
+            string hex = hexColor.StartsWith("#") ? hexColor : "#" + hexColor;
+            Color color;
+            if (ColorUtility.TryParseHtmlString(hex, out color))
+                return color;
+            return InkMid;
+        }
 
         private static Color HexColor(string hex)
         {

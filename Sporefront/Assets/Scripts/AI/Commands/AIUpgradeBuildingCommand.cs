@@ -87,7 +87,7 @@ namespace Sporefront.AI.Commands
                 if (upgrader.coordinate.Equals(building.coordinate))
                 {
                     // Already on-site: start upgrade immediately
-                    building.StartUpgrade();
+                    building.StartUpgrade(state.currentTime);
                     changeBuilder.Add(new BuildingUpgradeStartedChange
                     {
                         buildingID = buildingID,
@@ -108,7 +108,7 @@ namespace Sporefront.AI.Commands
                     {
                         // No path found -- start upgrade as fallback
                         upgrader.ClearTask();
-                        building.StartUpgrade();
+                        building.StartUpgrade(state.currentTime);
                         changeBuilder.Add(new BuildingUpgradeStartedChange
                         {
                             buildingID = buildingID,
@@ -120,7 +120,7 @@ namespace Sporefront.AI.Commands
             else
             {
                 // No idle villager -- start upgrade without one (graceful fallback)
-                building.StartUpgrade();
+                building.StartUpgrade(state.currentTime);
                 changeBuilder.Add(new BuildingUpgradeStartedChange
                 {
                     buildingID = buildingID,

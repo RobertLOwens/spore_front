@@ -66,34 +66,36 @@ namespace Sporefront.Data
             this.ownerID = ownerID;
             this.rotation = rotation;
 
-            switch (buildingType)
-            {
-                case BuildingType.Wall:
-                    this.maxHealth = 600.0;
-                    break;
-                case BuildingType.Gate:
-                    this.maxHealth = 400.0;
-                    break;
-                default:
-                    this.maxHealth = buildingType.Category() == BuildingCategory.Military ? 500.0 : 200.0;
-                    break;
-            }
+            this.maxHealth = GetBaseHealth(buildingType);
             this.health = maxHealth;
+        }
+
+        public static double GetBaseHealth(BuildingType type)
+        {
+            switch (type)
+            {
+                case BuildingType.Wall: return GameConfig.BuildingHealth.Wall;
+                case BuildingType.Gate: return GameConfig.BuildingHealth.Gate;
+                default:
+                    return type.Category() == BuildingCategory.Military
+                        ? GameConfig.BuildingHealth.Military
+                        : GameConfig.BuildingHealth.Civilian;
+            }
         }
 
         // Construction Logic
 
-        public void StartConstruction(int builders = 1)
+        public void StartConstruction(double currentTime, int builders = 1)
         {
             state = BuildingState.Constructing;
-            constructionStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            constructionStartTime = currentTime;
             buildersAssigned = Math.Max(1, builders);
             constructionProgress = 0.0;
             constructionHP = 0.0;
-            lastConstructionUpdateTime = constructionStartTime;
+            lastConstructionUpdateTime = currentTime;
         }
 
-        public bool UpdateConstruction(double currentTime)
+        public bool UpdateConstruction(double currentTime, double speedMultiplier = 1.0)
         {
             if (state != BuildingState.Constructing) return false;
             if (buildersAssigned <= 0) return false;
@@ -104,7 +106,7 @@ namespace Sporefront.Data
 
             double baseHPRate = maxHealth / buildingType.BuildTime();
             double effective = GameConfig.Construction.EffectiveBuilders(buildersAssigned);
-            double hpGain = baseHPRate * effective * delta;
+            double hpGain = baseHPRate * effective * delta * speedMultiplier;
             constructionHP = Math.Min(maxHealth, constructionHP + hpGain);
             constructionProgress = constructionHP / maxHealth;
             lastConstructionUpdateTime = currentTime;
@@ -129,15 +131,7 @@ namespace Sporefront.Data
 
         public void ApplyBuildingHPBonus(double hpMultiplier = 1.0)
         {
-            double baseHealth;
-            switch (buildingType)
-            {
-                case BuildingType.Wall: baseHealth = 600.0; break;
-                case BuildingType.Gate: baseHealth = 400.0; break;
-                default:
-                    baseHealth = buildingType.Category() == BuildingCategory.Military ? 500.0 : 200.0;
-                    break;
-            }
+            double baseHealth = GetBaseHealth(buildingType);
 
             double levelMultiplier = 1.0;
             if (buildingType == BuildingType.Tower || buildingType == BuildingType.WoodenFort || buildingType == BuildingType.Castle)
@@ -172,23 +166,33 @@ namespace Sporefront.Data
             return buildingType.UpgradeTime(level);
         }
 
-        public void StartUpgrade()
+        public double? GetRemainingUpgradeTime(double currentTime)
+        {
+            if (state != BuildingState.Upgrading || !upgradeStartTime.HasValue) return null;
+            double? upgradeTime = GetUpgradeTime();
+            if (!upgradeTime.HasValue) return null;
+            double elapsed = currentTime - upgradeStartTime.Value;
+            return Math.Max(0, upgradeTime.Value - elapsed);
+        }
+
+        public void StartUpgrade(double currentTime)
         {
             if (!CanUpgrade || state != BuildingState.Completed) return;
             state = BuildingState.Upgrading;
-            upgradeStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            upgradeStartTime = currentTime;
             upgradeProgress = 0.0;
         }
 
-        public bool UpdateUpgrade(double currentTime)
+        public bool UpdateUpgrade(double currentTime, double speedMultiplier = 1.0)
         {
             if (state != BuildingState.Upgrading) return false;
             if (!upgradeStartTime.HasValue) return false;
             double? upgradeTime = GetUpgradeTime();
             if (!upgradeTime.HasValue) return false;
 
+            double effectiveTime = upgradeTime.Value / speedMultiplier;
             double elapsed = currentTime - upgradeStartTime.Value;
-            upgradeProgress = Math.Min(1.0, elapsed / upgradeTime.Value);
+            upgradeProgress = Math.Min(1.0, elapsed / effectiveTime);
 
             if (upgradeProgress >= 1.0)
             {
@@ -220,23 +224,23 @@ namespace Sporefront.Data
 
         // Demolition Logic
 
-        public double GetDemolitionTime() => buildingType.BuildTime() * 0.5;
+        public double GetDemolitionTime() => buildingType.BuildTime() * GameConfig.Demolition.TimeMultiplier;
 
         public Dictionary<ResourceType, int> GetDemolitionRefund()
         {
             var refund = new Dictionary<ResourceType, int>();
             foreach (var kvp in buildingType.BuildCost())
-                refund[kvp.Key] = (int)(kvp.Value * 0.25);
+                refund[kvp.Key] = (int)(kvp.Value * GameConfig.Demolition.RefundMultiplier);
             return refund;
         }
 
         public bool CanDemolish => buildingType != BuildingType.CityCenter && state == BuildingState.Completed;
 
-        public void StartDemolition(int demolishers = 1)
+        public void StartDemolition(double currentTime, int demolishers = 1)
         {
             if (!CanDemolish) return;
             state = BuildingState.Demolishing;
-            demolitionStartTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            demolitionStartTime = currentTime;
             demolishersAssigned = Math.Max(1, demolishers);
             demolitionProgress = 0.0;
         }
@@ -245,7 +249,7 @@ namespace Sporefront.Data
         {
             if (state != BuildingState.Demolishing || !demolitionStartTime.HasValue) return false;
             double elapsed = currentTime - demolitionStartTime.Value;
-            double demolisherMultiplier = 1.0 + (demolishersAssigned - 1) * 0.5;
+            double demolisherMultiplier = 1.0 + (demolishersAssigned - 1) * GameConfig.Demolition.DemolisherSpeedBonus;
             double effectiveTime = GetDemolitionTime() / demolisherMultiplier;
             demolitionProgress = Math.Min(1.0, elapsed / effectiveTime);
             return demolitionProgress >= 1.0;

@@ -45,22 +45,58 @@ namespace Sporefront.AI
 
             double threatLevel = gameState.GetThreatLevel(cityCenter.coordinate, playerID);
 
+            // Track threat trend for proactive defense
+            bool threatIsRising = false;
+            if (threatLevel > aiState.previousThreatLevel)
+            {
+                aiState.threatRisingCount++;
+                if (aiState.threatRisingCount >= 2) threatIsRising = true;
+            }
+            else
+            {
+                aiState.threatRisingCount = 0;
+            }
+            aiState.previousThreatLevel = threatLevel;
+
+            int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
+            bool hasBarracks = gameState.GetBuildingsForPlayer(playerID)
+                .Any(b => b.buildingType == BuildingType.Barracks && b.IsOperational);
+
             bool shouldBuildDefense;
             if (aiState.currentState == AIState.Peace)
             {
-                bool hasExcessResources = player.GetResource(ResourceType.Wood) > 500 &&
-                                          player.GetResource(ResourceType.Stone) > 400;
-                shouldBuildDefense = hasExcessResources;
+                if (threatIsRising)
+                {
+                    // Reduced thresholds when threat is rising
+                    shouldBuildDefense = player.GetResource(ResourceType.Wood) > 300 &&
+                                         player.GetResource(ResourceType.Stone) > 250;
+                }
+                else if (gameState.currentTime > 300.0 && towerCount == 0)
+                {
+                    // Build at least one tower after 5 minutes
+                    shouldBuildDefense = true;
+                }
+                else if (hasBarracks && towerCount == 0)
+                {
+                    // Build a tower once we have military infrastructure
+                    shouldBuildDefense = true;
+                }
+                else
+                {
+                    // Original high-resource threshold
+                    shouldBuildDefense = player.GetResource(ResourceType.Wood) > 500 &&
+                                         player.GetResource(ResourceType.Stone) > 400;
+                }
             }
             else
             {
                 shouldBuildDefense = threatLevel >= minThreatForDefenseBuilding ||
-                                     aiState.currentState == AIState.Defense;
+                                     aiState.currentState == AIState.Defense ||
+                                     threatIsRising;
             }
 
             if (!shouldBuildDefense) return commands;
 
-            int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
             int fortCount = gameState.GetBuildingCount(BuildingType.WoodenFort, playerID);
 
             if (towerCount < maxTowersPerAI)

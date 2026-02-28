@@ -33,7 +33,7 @@ namespace Sporefront.Engine
 
         public List<StateChange> Update(double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
 
             var changes = new List<StateChange>();
 
@@ -50,7 +50,7 @@ namespace Sporefront.Engine
                         if (group.currentTask is BuildingTask bt && bt.BuildingID == building.id &&
                             group.coordinate == building.coordinate && group.currentPath == null)
                         {
-                            building.StartConstruction(group.villagerCount);
+                            building.StartConstruction(currentTime, group.villagerCount);
                             changes.Add(new BuildingConstructionStartedChange { buildingID = building.id });
                             break;
                         }
@@ -66,7 +66,7 @@ namespace Sporefront.Engine
                             group.coordinate == building.coordinate && group.currentPath == null)
                         {
                             building.pendingUpgrade = false;
-                            building.StartUpgrade();
+                            building.StartUpgrade(currentTime);
                             group.ClearTask();
                             changes.Add(new BuildingUpgradeStartedChange
                             {
@@ -115,11 +115,21 @@ namespace Sporefront.Engine
 
         private List<StateChange> UpdateConstruction(BuildingData building, double currentTime)
         {
-            if (gameState == null) return new List<StateChange>();
+            if (gameState == null) return StateChange.EmptyChanges;
             var changes = new List<StateChange>();
 
+            // Look up owner's BuildingSpeed research bonus
+            double speedMultiplier = 1.0;
+            if (building.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(building.ownerID.Value);
+                if (owner != null)
+                    speedMultiplier = owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.BuildingSpeed.ToString());
+            }
+
             double previousProgress = building.constructionProgress;
-            bool completed = building.UpdateConstruction(currentTime);
+            bool completed = building.UpdateConstruction(currentTime, speedMultiplier);
 
             // Only emit progress change if it changed significantly
             if (Math.Abs(building.constructionProgress - previousProgress) > progressChangeThreshold)
@@ -133,6 +143,18 @@ namespace Sporefront.Engine
 
             if (completed)
             {
+                // Apply BuildingHP research bonus
+                if (building.ownerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(building.ownerID.Value);
+                    if (owner != null)
+                    {
+                        double hpMultiplier = owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.BuildingHP.ToString());
+                        building.ApplyBuildingHPBonus(hpMultiplier);
+                    }
+                }
+
                 // Find and release any villagers assigned to build this building
                 var builderChanges = ReleaseBuilders(building.id, gameState);
                 changes.AddRange(builderChanges);
@@ -178,8 +200,18 @@ namespace Sporefront.Engine
         {
             var changes = new List<StateChange>();
 
+            // Look up owner's BuildingSpeed research bonus
+            double speedMultiplier = 1.0;
+            if (building.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(building.ownerID.Value);
+                if (owner != null)
+                    speedMultiplier = owner.GetResearchBonusMultiplier(
+                        ResearchBonusType.BuildingSpeed.ToString());
+            }
+
             double previousProgress = building.upgradeProgress;
-            bool completed = building.UpdateUpgrade(currentTime);
+            bool completed = building.UpdateUpgrade(currentTime, speedMultiplier);
 
             // Only emit progress change if it changed significantly
             if (Math.Abs(building.upgradeProgress - previousProgress) > progressChangeThreshold)
@@ -193,6 +225,18 @@ namespace Sporefront.Engine
 
             if (completed)
             {
+                // Apply BuildingHP research bonus after upgrade
+                if (building.ownerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(building.ownerID.Value);
+                    if (owner != null)
+                    {
+                        double hpMultiplier = owner.GetResearchBonusMultiplier(
+                            ResearchBonusType.BuildingHP.ToString());
+                        building.ApplyBuildingHPBonus(hpMultiplier);
+                    }
+                }
+
                 changes.Add(new BuildingUpgradeCompletedChange
                 {
                     buildingID = building.id,
@@ -388,7 +432,7 @@ namespace Sporefront.Engine
             gameState.AddBuilding(building);
 
             // Start construction
-            building.StartConstruction(1);
+            building.StartConstruction(gameState.currentTime, 1);
 
             changes.Add(new BuildingPlacedChange
             {
@@ -454,19 +498,19 @@ namespace Sporefront.Engine
         public List<StateChange> StartUpgrade(Guid buildingID, Guid playerID)
         {
             if (gameState == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
             if (building == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var validation = CanStartUpgrade(buildingID, playerID);
             if (!validation.valid)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             // Deduct resources
             var upgradeCost = building.GetUpgradeCost();
@@ -480,7 +524,7 @@ namespace Sporefront.Engine
 
             // Start upgrade
             int targetLevel = building.level + 1;
-            building.StartUpgrade();
+            building.StartUpgrade(gameState.currentTime);
 
             return new List<StateChange>
             {
@@ -513,17 +557,17 @@ namespace Sporefront.Engine
         public List<StateChange> StartDemolition(Guid buildingID, Guid playerID, int demolishers = 1)
         {
             if (gameState == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var building = gameState.GetBuilding(buildingID);
             if (building == null)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
             var validation = CanStartDemolition(buildingID, playerID);
             if (!validation.valid)
-                return new List<StateChange>();
+                return StateChange.EmptyChanges;
 
-            building.StartDemolition(demolishers);
+            building.StartDemolition(gameState.currentTime, demolishers);
 
             return new List<StateChange>
             {

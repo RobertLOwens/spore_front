@@ -72,8 +72,9 @@ namespace Sporefront.Models
             for (int i = 0; i < distance; i++)
                 current = current.Neighbor(3); // West
 
-            for (int direction = 0; direction < 6; direction++)
+            for (int side = 0; side < 6; side++)
             {
+                int direction = (5 + side) % 6;
                 for (int i = 0; i < distance; i++)
                 {
                     results.Add(current);

@@ -22,6 +22,9 @@ namespace Sporefront.Data
         public int pathIndex;
         public double movementProgress;
 
+        // Movement speed (transient, for visual interpolation)
+        [System.NonSerialized] public double movementSpeed;
+
         // Gathering state
         public double gatheringAccumulator;
         public Guid? assignedResourcePointID;
