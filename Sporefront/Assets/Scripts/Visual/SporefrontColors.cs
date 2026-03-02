@@ -66,6 +66,34 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
+        // Dark UI Backgrounds (from style guide)
+        // ================================================================
+
+        public static readonly Color BgDeep     = HexColor("0D0B08"); // deepest background, HUD bars, map edges
+        public static readonly Color BgSection  = HexColor("151210"); // section/panel backgrounds
+        public static readonly Color BgCard     = HexColor("1A1611"); // card backgrounds
+        public static readonly Color BgElevated = HexColor("1E1B16"); // elevated panels, modals
+        public static readonly Color BgSurface  = HexColor("252219"); // interactive surfaces, buttons
+
+        // ================================================================
+        // Dark UI Borders
+        // ================================================================
+
+        public static readonly Color BorderSubtle = new Color(
+            ParchmentMid.r, ParchmentMid.g, ParchmentMid.b, 0.10f);
+        public static readonly Color BorderAccent = new Color(
+            ParchmentMid.r, ParchmentMid.g, ParchmentMid.b, 0.18f);
+
+        // ================================================================
+        // Light Accent Variants (hover/active states)
+        // ================================================================
+
+        public static readonly Color SporeRedLight    = HexColor("A85454");
+        public static readonly Color SporePurpleLight = HexColor("7A5478");
+        public static readonly Color SporeGreenLight  = HexColor("4A7A4A");
+        public static readonly Color SporeAmberLight  = HexColor("A8854A");
+
+        // ================================================================
         // Hex Border
         // ================================================================
 

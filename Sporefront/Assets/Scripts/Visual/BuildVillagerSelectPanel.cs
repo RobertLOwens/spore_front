@@ -82,7 +82,7 @@ namespace Sporefront.Visual
 
             // Building info label — fixed below header
             infoLabel = UIHelper.CreateLabel(modalPanel.transform, "",
-                UIConstants.FontSmall, SporefrontColors.InkLight);
+                UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
             var infoRT = infoLabel.GetComponent<RectTransform>();
             infoRT.anchorMin = new Vector2(0, 1);
             infoRT.anchorMax = new Vector2(1, 1);
@@ -100,7 +100,7 @@ namespace Sporefront.Visual
 
             // Back button at bottom
             var backBtn = UIHelper.CreateButton(modalPanel.transform, "Back",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 OnBackClicked);
             var backBtnRT = backBtn.GetComponent<RectTransform>();
             backBtnRT.anchorMin = new Vector2(0, 0);
@@ -204,7 +204,7 @@ namespace Sporefront.Visual
             if (groups == null || groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.InkFaded);
+                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 24;
                 return;
@@ -252,7 +252,7 @@ namespace Sporefront.Visual
                 nameLE.flexibleWidth = 1;
 
                 var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.InkLight);
+                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                 distLE.preferredWidth = 70;
 
@@ -260,12 +260,12 @@ namespace Sporefront.Visual
                 var infoRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
                 var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                     taskDesc, UIConstants.FontSmall,
-                    isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+                    isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
                 var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.InkLight);
+                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
                 walkLE.preferredWidth = 70;
 

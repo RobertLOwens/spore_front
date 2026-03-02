@@ -255,7 +255,7 @@ namespace Sporefront.Visual
 
             // Rotation label (between header and scroll)
             rotationLabel = UIHelper.CreateLabel(buildPanel.transform, "Rotation: 0",
-                UIConstants.FontSmall, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                UIConstants.FontSmall, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var rotLabelRT = rotationLabel.GetComponent<RectTransform>();
             rotLabelRT.anchorMin = new Vector2(0, 1);
             rotLabelRT.anchorMax = new Vector2(1, 1);
@@ -341,37 +341,35 @@ namespace Sporefront.Visual
             bool meetsLevel = currentCC >= requiredCC;
             bool available = canAfford && meetsLevel;
 
-            // Card background — lighter for available, muted for unavailable
+            // Card background — subtle light tint for available, dimmer for unavailable
             var cardBg = available
-                ? new Color(SporefrontColors.ParchmentLight.r, SporefrontColors.ParchmentLight.g,
-                    SporefrontColors.ParchmentLight.b, 0.6f)
-                : new Color(SporefrontColors.ParchmentDark.r, SporefrontColors.ParchmentDark.g,
-                    SporefrontColors.ParchmentDark.b, 0.35f);
+                ? new Color(1f, 1f, 1f, 0.06f)
+                : new Color(1f, 1f, 1f, 0.03f);
 
             var card = UIHelper.CreatePanel(parent, bt.ToString(), cardBg, UIHelper.SmallCornerRadius);
             var cardLE = card.AddComponent<LayoutElement>();
-            cardLE.preferredHeight = 90;
+            cardLE.preferredHeight = 100;
 
             var vlg = card.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2;
-            vlg.padding = new RectOffset(8, 8, 5, 5);
+            vlg.spacing = 6;
+            vlg.padding = new RectOffset(12, 12, 8, 8);
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
 
             // Row 1: Name + CC level badge
-            var nameRow = UIHelper.CreateHorizontalRow(card.transform, 26f, 4f);
+            var nameRow = UIHelper.CreateHorizontalRow(card.transform, 28f, 4f);
             var nameRowLE = nameRow.gameObject.AddComponent<LayoutElement>();
-            nameRowLE.preferredHeight = 26;
+            nameRowLE.preferredHeight = 28;
             var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                 bt.DisplayName(), UIConstants.FontBody,
-                available ? UIHelper.HeaderTextColor : SporefrontColors.InkFaded,
+                available ? UIHelper.HeaderTextColor : SporefrontColors.ParchmentShadow,
                 TextAnchor.MiddleLeft, false);
             nameLabel.fontStyle = FontStyle.Bold;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
-            nameLE.preferredHeight = 26;
+            nameLE.preferredHeight = 28;
 
             if (requiredCC > 1)
             {
@@ -386,15 +384,15 @@ namespace Sporefront.Visual
             // Row 2: Cost
             string costStr = UIHelper.FormatCost(cost);
             var costLabel = UIHelper.CreateLabel(card.transform, costStr, UIConstants.FontSmall,
-                canAfford ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
+                canAfford ? SporefrontColors.ParchmentShadow : SporefrontColors.SporeRed);
             costLabel.supportRichText = true;
             var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
             costLE.preferredHeight = 20;
 
             // Row 3: Rotate + Build buttons
-            var btnRow = UIHelper.CreateHorizontalRow(card.transform, 28f, 4f);
+            var btnRow = UIHelper.CreateHorizontalRow(card.transform, 32f, 4f);
             var btnRowLE = btnRow.gameObject.AddComponent<LayoutElement>();
-            btnRowLE.preferredHeight = 28;
+            btnRowLE.preferredHeight = 32;
 
             // Spacer to push buttons right
             var spacer = new GameObject("Spacer", typeof(RectTransform));
@@ -406,9 +404,9 @@ namespace Sporefront.Visual
             if (bt.HexSize() > 1 || bt.RequiresRotation())
             {
                 var rotateBtn = UIHelper.CreateButton(btnRow.transform, "Rotate",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontCaption, null);
+                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, null);
                 var rotBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
-                rotBtnLE.preferredWidth = 52;
+                rotBtnLE.preferredWidth = 62;
 
                 var capturedType = bt;
                 rotateBtn.onClick.AddListener(() =>
@@ -421,12 +419,12 @@ namespace Sporefront.Visual
 
             // Build button
             var buildBtn = UIHelper.CreateButton(btnRow.transform, "Build",
-                available ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
-                available ? UIHelper.HudTextColor : SporefrontColors.InkLight,
+                available ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow,
+                available ? UIHelper.HudTextColor : SporefrontColors.ParchmentShadow,
                 UIConstants.FontSmall, null);
             buildBtn.interactable = available;
             var buildBtnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
-            buildBtnLE.preferredWidth = 60;
+            buildBtnLE.preferredWidth = 72;
 
             if (available && buildCoord.HasValue)
             {
@@ -503,7 +501,7 @@ namespace Sporefront.Visual
             labelLE.flexibleWidth = 1;
 
             var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12,
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption,
                 () => Cancel());
             var btnLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
             btnLE.preferredWidth = 60;
@@ -546,14 +544,14 @@ namespace Sporefront.Visual
             btnRow.childAlignment = TextAnchor.MiddleCenter;
 
             var confirmBtn = UIHelper.CreateButton(btnRow.transform, "Confirm",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12,
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption,
                 () => ConfirmEntrenchAction());
             var confirmLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
             confirmLE.preferredWidth = 80;
             confirmLE.preferredHeight = 30;
 
             var cancelBtn = UIHelper.CreateButton(btnRow.transform, "Cancel",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption,
                 () => CancelEntrenchConfirm());
             var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
             cancelLE.preferredWidth = 80;

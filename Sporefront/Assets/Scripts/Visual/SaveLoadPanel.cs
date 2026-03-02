@@ -125,7 +125,7 @@ namespace Sporefront.Visual
             inputBGLE.flexibleWidth = 1;
             saveNameInput = inputBG.AddComponent<InputField>();
             var placeholder = UIHelper.CreateLabel(inputBG.transform, "Enter save name...",
-                13, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var placeholderRT = placeholder.GetComponent<RectTransform>();
             UIHelper.StretchFull(placeholderRT);
             placeholderRT.offsetMin = new Vector2(8, 0);
@@ -188,7 +188,7 @@ namespace Sporefront.Visual
             if (saves.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(slotContainer, "No saved games.",
-                    13, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -235,7 +235,7 @@ namespace Sporefront.Visual
 
             string details = $"{dateDisplay}  |  {info.mapWidth}x{info.mapHeight}";
             var detailLabel = UIHelper.CreateLabel(infoCol.transform, details,
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
             detailLE.preferredHeight = 18;
 

@@ -240,13 +240,13 @@ namespace Sporefront.Visual
             AddSectionHeader("PROGRESS");
 
             progressLabel = UIHelper.CreateLabel(contentRT, "Ready to start evolution.",
-                13, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var progressLabelLE = progressLabel.gameObject.AddComponent<LayoutElement>();
             progressLabelLE.preferredHeight = 22;
 
             // Progress bar
             var (bgImg, fillImg) = UIHelper.CreateProgressBar(contentRT, 16f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeAmber);
             progressBarFill = fillImg;
             var barLE = bgImg.gameObject.AddComponent<LayoutElement>();
             barLE.preferredHeight = 16;
@@ -257,7 +257,7 @@ namespace Sporefront.Visual
             AddSectionHeader("GENERATION HISTORY");
 
             // History text area (scrollable label in a panel)
-            var historyPanel = UIHelper.CreatePanel(contentRT, "HistoryPanel", SporefrontColors.ParchmentDark);
+            var historyPanel = UIHelper.CreatePanel(contentRT, "HistoryPanel", SporefrontColors.BgSurface);
             var historyPanelLE = historyPanel.AddComponent<LayoutElement>();
             historyPanelLE.preferredHeight = 200;
 
@@ -266,7 +266,7 @@ namespace Sporefront.Visual
             UIHelper.StretchFull(historyScrollRT);
 
             historyText = UIHelper.CreateLabel(historyContentRT, "No data yet.",
-                12, SporefrontColors.InkMid, TextAnchor.UpperLeft);
+                12, SporefrontColors.ParchmentShadow, TextAnchor.UpperLeft);
             historyText.horizontalOverflow = HorizontalWrapMode.Overflow;
             historyText.verticalOverflow = VerticalWrapMode.Overflow;
             var historyTextLE = historyText.gameObject.AddComponent<LayoutElement>();
@@ -282,12 +282,12 @@ namespace Sporefront.Visual
             AddSectionHeader("SAVED GENOMES");
 
             genomeEmptyLabel = UIHelper.CreateLabel(contentRT, "No genomes saved. Run evolution first.",
-                13, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var emptyLE = genomeEmptyLabel.gameObject.AddComponent<LayoutElement>();
             emptyLE.preferredHeight = 30;
 
             // Genome list scroll area
-            var genomeListPanel = UIHelper.CreatePanel(contentRT, "GenomeListPanel", SporefrontColors.ParchmentDark);
+            var genomeListPanel = UIHelper.CreatePanel(contentRT, "GenomeListPanel", SporefrontColors.BgSurface);
             var genomeListPanelLE = genomeListPanel.AddComponent<LayoutElement>();
             genomeListPanelLE.preferredHeight = 250;
 
@@ -385,7 +385,7 @@ namespace Sporefront.Visual
             string detail = string.Format("Gen {0} | Fitness: {1:F2} | WR: {2}%",
                 genome.generation, genome.fitness, genome.WinRatePercent);
             var detailLabel = UIHelper.CreateLabel(vlg.transform, detail,
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
             detailLE.preferredHeight = 16;
 
@@ -444,7 +444,7 @@ namespace Sporefront.Visual
         private void AddSectionHeader(string title)
         {
             var label = UIHelper.CreateLabel(contentRT, title,
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             label.fontStyle = FontStyle.Bold;
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 22;

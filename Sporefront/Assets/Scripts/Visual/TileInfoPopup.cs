@@ -101,8 +101,8 @@ namespace Sporefront.Visual
 
             // Content area (left side)
             var contentGO = UIHelper.CreatePanel(root.transform, "PopupContent",
-                new Color(SporefrontColors.ParchmentMid.r, SporefrontColors.ParchmentMid.g,
-                    SporefrontColors.ParchmentMid.b, 0.85f));
+                new Color(SporefrontColors.BgElevated.r, SporefrontColors.BgElevated.g,
+                    SporefrontColors.BgElevated.b, 0.95f));
             var contentRT = contentGO.GetComponent<RectTransform>();
             contentRT.anchorMin = new Vector2(0, 0);
             contentRT.anchorMax = new Vector2(0, 1);
@@ -169,8 +169,8 @@ namespace Sporefront.Visual
 
             // Quick action sidebar (right side)
             sidebar = UIHelper.CreatePanel(root.transform, "Sidebar",
-                new Color(SporefrontColors.InkMid.r, SporefrontColors.InkMid.g,
-                    SporefrontColors.InkMid.b, 0.90f));
+                new Color(SporefrontColors.BgSection.r, SporefrontColors.BgSection.g,
+                    SporefrontColors.BgSection.b, 0.90f));
             var sidebarRT = sidebar.GetComponent<RectTransform>();
             sidebarRT.anchorMin = new Vector2(1, 0);
             sidebarRT.anchorMax = new Vector2(1, 1);
@@ -190,7 +190,7 @@ namespace Sporefront.Visual
 
             // Create sidebar buttons
             infoBtn = CreateSidebarButton(sidebar.transform, "Info",
-                SporefrontColors.ParchmentDark, () =>
+                SporefrontColors.BgSurface, () =>
                 {
                     if (currentCoord.HasValue)
                         OnInfoRequested?.Invoke(currentCoord.Value);

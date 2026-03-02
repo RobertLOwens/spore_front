@@ -1,7 +1,8 @@
 // ============================================================================
 // FILE: Visual/GameSetupPanel.cs
-// PURPOSE: Full-screen game setup panel with map options, arena config, and
-//          preset selection. Port of GameSetupViewController.swift
+// PURPOSE: Two-screen game setup: Mode Select → Details (1v1 or Arena).
+//          Mode select shows two large cards; 1v1 details uses compact dropdown
+//          map selection in a narrow centered column.
 // ============================================================================
 
 using System;
@@ -72,11 +73,29 @@ namespace Sporefront.Visual
         public event Action OnBack;
 
         // ================================================================
+        // Screen State
+        // ================================================================
+
+        private enum SetupScreen { ModeSelect, Details }
+        private SetupScreen currentScreen = SetupScreen.ModeSelect;
+        private bool isArenaMode = false;
+
+        // ================================================================
         // State
         // ================================================================
 
         private GameObject panel;
         private RectTransform contentRT;
+
+        // Two-screen containers
+        private GameObject modeSelectContainer;
+        private GameObject detailsContainer;
+        private GameObject oneVsOneSection;
+        private Text headerTitle;
+
+        // Map dropdown
+        private Dropdown mapDropdown;
+        private Text mapDescriptionLabel;
 
         // Current selections
         private MapType selectedMapType = MapType.Arabia;
@@ -94,13 +113,7 @@ namespace Sporefront.Visual
         // UI references for arena section toggle
         private GameObject arenaSection;
         private GameObject standardStartButton;
-        private GameObject mapSelectionSection;
-        private GameObject standardSettingsSection;
         private MapType selectedOneVsOneMap = MapType.Arabia;
-
-        // Map card tracking for highlight toggling
-        private List<(Button btn, Image bg, Text nameLabel)> mapCards = new List<(Button, Image, Text)>();
-        private List<MapType> mapCardTypes = new List<MapType>();
 
         // Segmented button tracking
         private Dictionary<string, List<Button>> segmentGroups = new Dictionary<string, List<Button>>();
@@ -118,12 +131,32 @@ namespace Sporefront.Visual
         public void Initialize(Transform canvasTransform)
         {
             // Full-screen panel
-            panel = UIHelper.CreatePanel(canvasTransform, "GameSetupPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "GameSetupPanel", UIHelper.PanelBg, cornerRadius: 0);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
 
             // Header bar
-            var header = UIHelper.CreatePanel(panel.transform, "Header", SporefrontColors.ParchmentDark);
+            BuildHeader();
+
+            // Mode select container (direct child of panel, below header)
+            BuildModeSelectScreen();
+
+            // Details container with scroll view (direct child of panel, below header)
+            BuildDetailsContainer();
+
+            // Show mode select by default
+            TransitionToModeSelect();
+
+            panel.SetActive(false);
+        }
+
+        // ================================================================
+        // Header
+        // ================================================================
+
+        private void BuildHeader()
+        {
+            var header = UIHelper.CreatePanel(panel.transform, "Header", SporefrontColors.BgSection, cornerRadius: 0);
             var headerRT = header.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
             headerRT.anchorMax = new Vector2(1, 1);
@@ -137,40 +170,158 @@ namespace Sporefront.Visual
 
             var backBtn = UIHelper.CreateButton(headerRow.transform, "Back",
                 SporefrontColors.SporeRed, UIHelper.HudTextColor, 14,
-                () => OnBack?.Invoke());
+                () => HandleBack());
             var backBtnLE = backBtn.gameObject.AddComponent<LayoutElement>();
             backBtnLE.preferredWidth = 70;
 
-            var titleLabel = UIHelper.CreateLabel(headerRow.transform, "Game Setup",
+            headerTitle = UIHelper.CreateLabel(headerRow.transform, "New Game",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleCenter, true);
-            var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
+            var titleLE = headerTitle.gameObject.AddComponent<LayoutElement>();
             titleLE.flexibleWidth = 1;
 
             // Invisible balance spacer
             var spacerGO = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
             spacerGO.transform.SetParent(headerRow.transform, false);
             spacerGO.GetComponent<LayoutElement>().preferredWidth = 70;
+        }
 
-            // Scroll view for content
-            var scroll = UIHelper.CreateScrollView(panel.transform, "SetupScroll", out contentRT);
+        // ================================================================
+        // Mode Select Screen
+        // ================================================================
+
+        private void BuildModeSelectScreen()
+        {
+            modeSelectContainer = UIHelper.CreatePanel(panel.transform, "ModeSelectContainer", Color.clear);
+            var containerRT = modeSelectContainer.GetComponent<RectTransform>();
+            containerRT.anchorMin = new Vector2(0.15f, 0);
+            containerRT.anchorMax = new Vector2(0.85f, 1);
+            containerRT.offsetMin = new Vector2(0, 0);
+            containerRT.offsetMax = new Vector2(0, -50); // Below header
+
+            // VLG for vertical centering
+            var vlg = modeSelectContainer.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 0;
+            vlg.childAlignment = TextAnchor.MiddleCenter;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+
+            // Top flex spacer
+            var topSpacer = new GameObject("TopSpacer", typeof(RectTransform), typeof(LayoutElement));
+            topSpacer.transform.SetParent(modeSelectContainer.transform, false);
+            topSpacer.GetComponent<LayoutElement>().flexibleHeight = 1;
+
+            // Title
+            var title = UIHelper.CreateLabel(modeSelectContainer.transform, "Choose Game Mode",
+                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleCenter, true);
+            var titleLE = title.gameObject.AddComponent<LayoutElement>();
+            titleLE.preferredHeight = 40;
+
+            // Spacer between title and cards
+            var midSpacer = new GameObject("MidSpacer", typeof(RectTransform), typeof(LayoutElement));
+            midSpacer.transform.SetParent(modeSelectContainer.transform, false);
+            midSpacer.GetComponent<LayoutElement>().preferredHeight = 24;
+
+            // Cards row
+            var cardsRow = UIHelper.CreateHorizontalRow(modeSelectContainer.transform, 280f, 30f);
+            cardsRow.childAlignment = TextAnchor.MiddleCenter;
+            var cardsRowLE = cardsRow.gameObject.AddComponent<LayoutElement>();
+            cardsRowLE.preferredHeight = 280;
+
+            // 1v1 Card
+            BuildModeCard(cardsRow.transform, "1v1 Battle",
+                "Classic match against an AI opponent", false);
+
+            // Arena Card
+            BuildModeCard(cardsRow.transform, "Arena",
+                "Configure custom combat scenarios", true);
+
+            // Bottom flex spacer
+            var bottomSpacer = new GameObject("BottomSpacer", typeof(RectTransform), typeof(LayoutElement));
+            bottomSpacer.transform.SetParent(modeSelectContainer.transform, false);
+            bottomSpacer.GetComponent<LayoutElement>().flexibleHeight = 1;
+        }
+
+        private void BuildModeCard(Transform parent, string title, string subtitle, bool arena)
+        {
+            var card = UIHelper.CreatePanel(parent, $"ModeCard_{title}", SporefrontColors.BgElevated);
+            var cardLE = card.AddComponent<LayoutElement>();
+            cardLE.flexibleWidth = 1;
+            cardLE.preferredHeight = 280;
+
+            var cardVLG = card.AddComponent<VerticalLayoutGroup>();
+            cardVLG.spacing = 14f;
+            cardVLG.childAlignment = TextAnchor.MiddleCenter;
+            cardVLG.childForceExpandWidth = true;
+            cardVLG.childForceExpandHeight = false;
+            cardVLG.childControlWidth = true;
+            cardVLG.childControlHeight = false;
+            cardVLG.padding = new RectOffset(28, 28, 36, 36);
+
+            var titleLabel = UIHelper.CreateLabel(card.transform, title,
+                38, UIHelper.HeaderTextColor,
+                TextAnchor.MiddleCenter, true);
+            titleLabel.fontStyle = FontStyle.Bold;
+            var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
+            titleLE.preferredHeight = 50;
+
+            var subtitleLabel = UIHelper.CreateLabel(card.transform, subtitle,
+                UIConstants.FontBody, SporefrontColors.ParchmentShadow,
+                TextAnchor.MiddleCenter, false);
+            subtitleLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var subtitleLE = subtitleLabel.gameObject.AddComponent<LayoutElement>();
+            subtitleLE.preferredHeight = 52;
+
+            // Make card clickable
+            var btn = card.AddComponent<Button>();
+            btn.colors = UIHelper.CardButtonColors(SporefrontColors.BgElevated);
+
+            btn.onClick.AddListener(() =>
+            {
+                isArenaMode = arena;
+                if (arena)
+                    selectedMapType = MapType.Arena;
+                else
+                    selectedMapType = selectedOneVsOneMap;
+                TransitionToDetails();
+            });
+        }
+
+        // ================================================================
+        // Details Container
+        // ================================================================
+
+        private void BuildDetailsContainer()
+        {
+            detailsContainer = UIHelper.CreatePanel(panel.transform, "DetailsContainer", Color.clear);
+            var containerRT = detailsContainer.GetComponent<RectTransform>();
+            containerRT.anchorMin = Vector2.zero;
+            containerRT.anchorMax = Vector2.one;
+            containerRT.offsetMin = new Vector2(0, 0);
+            containerRT.offsetMax = new Vector2(0, -50); // Below header
+
+            // Scroll view inside details container
+            var scroll = UIHelper.CreateScrollView(detailsContainer.transform, "DetailsScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
-            scrollRT.anchorMin = Vector2.zero;
-            scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 0);
-            scrollRT.offsetMax = new Vector2(0, -50); // Below header
+            UIHelper.StretchFull(scrollRT);
 
             Rebuild();
-            panel.SetActive(false);
         }
 
         // ================================================================
         // Public API
         // ================================================================
 
-        public void Show()
+        public void Show(bool returnToDetails = false)
         {
             panel.SetActive(true);
+            if (returnToDetails)
+                TransitionToDetails();
+            else
+                TransitionToModeSelect();
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
         }
 
@@ -182,7 +333,37 @@ namespace Sporefront.Visual
         public bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
-        // Rebuild Content
+        // Navigation
+        // ================================================================
+
+        private void HandleBack()
+        {
+            if (currentScreen == SetupScreen.Details)
+                TransitionToModeSelect();
+            else
+                OnBack?.Invoke();
+        }
+
+        private void TransitionToModeSelect()
+        {
+            currentScreen = SetupScreen.ModeSelect;
+            modeSelectContainer.SetActive(true);
+            detailsContainer.SetActive(false);
+            headerTitle.text = "New Game";
+        }
+
+        private void TransitionToDetails()
+        {
+            currentScreen = SetupScreen.Details;
+            modeSelectContainer.SetActive(false);
+            detailsContainer.SetActive(true);
+            headerTitle.text = "Game Setup";
+            UpdateArenaSectionVisibility();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
+        }
+
+        // ================================================================
+        // Rebuild Content (Details Screen)
         // ================================================================
 
         private void Rebuild()
@@ -195,36 +376,9 @@ namespace Sporefront.Visual
             segmentSelections.Clear();
             playerUnitLabels.Clear();
             enemyUnitLabels.Clear();
-            mapCards.Clear();
-            mapCardTypes.Clear();
 
-            BuildGameModeSection();
-            UIHelper.CreateDivider(contentRT);
-            BuildMapSelectionSection();
-
-            // Standard settings container (hidden when Arena)
-            standardSettingsSection = UIHelper.CreatePanel(contentRT, "StandardSettings", Color.clear);
-            var ssVLG = standardSettingsSection.AddComponent<VerticalLayoutGroup>();
-            ssVLG.spacing = 4f;
-            ssVLG.childForceExpandWidth = true;
-            ssVLG.childForceExpandHeight = false;
-            ssVLG.childControlWidth = true;
-            ssVLG.childControlHeight = false;
-            var ssCSF = standardSettingsSection.AddComponent<ContentSizeFitter>();
-            ssCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var ssParent = standardSettingsSection.transform;
-
-            BuildMapSizeSection(ssParent);
-            UIHelper.CreateDivider(ssParent);
-            BuildResourceDensitySection(ssParent);
-            UIHelper.CreateDivider(ssParent);
-            BuildStartingResourcesSection(ssParent);
-            UIHelper.CreateDivider(ssParent);
-            BuildVisibilitySection(ssParent);
-            UIHelper.CreateDivider(ssParent);
-
-            // Standard start button (inside standard settings)
-            standardStartButton = BuildStartGameButton(ssParent);
+            // 1v1 section (narrow centered wrapper)
+            BuildOneVsOneSection();
 
             // Arena config section
             BuildArenaSection();
@@ -233,149 +387,313 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
-        // Game Mode (1v1 / Arena)
+        // 1v1 Section (narrow centered wrapper)
         // ================================================================
 
-        private void BuildGameModeSection()
+        private void BuildOneVsOneSection()
         {
-            var sectionLabel = UIHelper.CreateLabel(contentRT, "Game Mode",
+            // Outer wrapper: HLG with flex spacers for horizontal centering
+            oneVsOneSection = new GameObject("OneVsOneSection", typeof(RectTransform),
+                typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            oneVsOneSection.transform.SetParent(contentRT, false);
+
+            var hlg = oneVsOneSection.GetComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 0;
+            hlg.childAlignment = TextAnchor.UpperCenter;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = true;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+
+            var csf = oneVsOneSection.GetComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Left flex spacer
+            var leftSpacer = new GameObject("LeftSpacer", typeof(RectTransform), typeof(LayoutElement));
+            leftSpacer.transform.SetParent(oneVsOneSection.transform, false);
+            leftSpacer.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+            // Inner column (500px wide)
+            var innerColumn = new GameObject("InnerColumn", typeof(RectTransform),
+                typeof(VerticalLayoutGroup), typeof(LayoutElement), typeof(ContentSizeFitter));
+            innerColumn.transform.SetParent(oneVsOneSection.transform, false);
+
+            var innerLE = innerColumn.GetComponent<LayoutElement>();
+            innerLE.flexibleWidth = 3;
+
+            var innerVLG = innerColumn.GetComponent<VerticalLayoutGroup>();
+            innerVLG.spacing = 4f;
+            innerVLG.childForceExpandWidth = true;
+            innerVLG.childForceExpandHeight = false;
+            innerVLG.childControlWidth = true;
+            innerVLG.childControlHeight = false;
+            innerVLG.padding = new RectOffset(0, 0, 8, 8);
+
+            var innerCSF = innerColumn.GetComponent<ContentSizeFitter>();
+            innerCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var innerParent = innerColumn.transform;
+
+            // Map dropdown (full width)
+            BuildMapDropdownSection(innerParent);
+            UIHelper.CreateDivider(innerParent);
+
+            // Two-column settings grid
+            var settingsRow = new GameObject("SettingsGrid", typeof(RectTransform),
+                typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            settingsRow.transform.SetParent(innerParent, false);
+
+            var settingsHLG = settingsRow.GetComponent<HorizontalLayoutGroup>();
+            settingsHLG.spacing = 24f;
+            settingsHLG.childAlignment = TextAnchor.UpperCenter;
+            settingsHLG.childForceExpandWidth = true;
+            settingsHLG.childForceExpandHeight = true;
+            settingsHLG.childControlWidth = true;
+            settingsHLG.childControlHeight = true;
+
+            var settingsCSF = settingsRow.GetComponent<ContentSizeFitter>();
+            settingsCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Left column: Map Size, Starting Resources
+            var leftCol = new GameObject("LeftColumn", typeof(RectTransform),
+                typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            leftCol.transform.SetParent(settingsRow.transform, false);
+
+            leftCol.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+            var leftColVLG = leftCol.GetComponent<VerticalLayoutGroup>();
+            leftColVLG.spacing = 4f;
+            leftColVLG.childForceExpandWidth = true;
+            leftColVLG.childForceExpandHeight = false;
+            leftColVLG.childControlWidth = true;
+            leftColVLG.childControlHeight = false;
+
+            BuildMapSizeSection(leftCol.transform);
+            UIHelper.CreateDivider(leftCol.transform);
+            BuildStartingResourcesSection(leftCol.transform);
+
+            // Right column: Resource Density, Visibility
+            var rightCol = new GameObject("RightColumn", typeof(RectTransform),
+                typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            rightCol.transform.SetParent(settingsRow.transform, false);
+
+            rightCol.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+            var rightColVLG = rightCol.GetComponent<VerticalLayoutGroup>();
+            rightColVLG.spacing = 4f;
+            rightColVLG.childForceExpandWidth = true;
+            rightColVLG.childForceExpandHeight = false;
+            rightColVLG.childControlWidth = true;
+            rightColVLG.childControlHeight = false;
+
+            BuildResourceDensitySection(rightCol.transform);
+            UIHelper.CreateDivider(rightCol.transform);
+            BuildVisibilitySection(rightCol.transform);
+
+            UIHelper.CreateDivider(innerParent);
+
+            // Start Game button
+            standardStartButton = BuildStartGameButton(innerParent);
+
+            // Right flex spacer
+            var rightSpacer = new GameObject("RightSpacer", typeof(RectTransform), typeof(LayoutElement));
+            rightSpacer.transform.SetParent(oneVsOneSection.transform, false);
+            rightSpacer.GetComponent<LayoutElement>().flexibleWidth = 1;
+        }
+
+        // ================================================================
+        // Map Dropdown
+        // ================================================================
+
+        private void BuildMapDropdownSection(Transform parent)
+        {
+            var sectionLabel = UIHelper.CreateLabel(parent, "Select Map",
                 UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var row = UIHelper.CreateHorizontalRow(contentRT, 36f, 4f);
-            var buttons = new List<Button>();
+            // Dropdown container
+            var dropdownGO = new GameObject("MapDropdown", typeof(RectTransform),
+                typeof(Image), typeof(Dropdown));
+            dropdownGO.transform.SetParent(parent, false);
 
-            string[] names = { "1v1", "Arena" };
-            int currentIndex = selectedMapType == MapType.Arena ? 1 : 0;
+            var dropdownRT = dropdownGO.GetComponent<RectTransform>();
+            dropdownRT.sizeDelta = new Vector2(0, 36);
 
-            for (int i = 0; i < names.Length; i++)
-            {
-                int idx = i;
-                var btn = UIHelper.CreateButton(row.transform, names[i], null, null, 13, () =>
-                {
-                    if (idx == 0)
-                    {
-                        selectedMapType = selectedOneVsOneMap;
-                    }
-                    else
-                    {
-                        selectedMapType = MapType.Arena;
-                    }
-                    UpdateSegmentSelection("gameMode", idx);
-                    UpdateArenaSectionVisibility();
-                });
-                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 100;
-                btnLE.preferredHeight = 36;
-                buttons.Add(btn);
-            }
+            var dropdownImg = dropdownGO.GetComponent<Image>();
+            dropdownImg.color = SporefrontColors.BgSurface;
+            dropdownImg.sprite = UIHelper.GetRoundedRectSprite(UIHelper.ButtonCornerRadius);
+            dropdownImg.type = Image.Type.Sliced;
 
-            segmentGroups["gameMode"] = buttons;
-            segmentSelections["gameMode"] = currentIndex;
-            UpdateSegmentColors("gameMode");
-        }
+            var dropdownLE = dropdownGO.AddComponent<LayoutElement>();
+            dropdownLE.preferredHeight = 36;
 
-        // ================================================================
-        // Map Selection Cards (for 1v1 mode)
-        // ================================================================
+            mapDropdown = dropdownGO.GetComponent<Dropdown>();
 
-        private void BuildMapSelectionSection()
-        {
-            mapSelectionSection = UIHelper.CreatePanel(contentRT, "MapSelection", Color.clear);
-            var sectionVLG = mapSelectionSection.AddComponent<VerticalLayoutGroup>();
-            sectionVLG.spacing = 6f;
-            sectionVLG.childForceExpandWidth = true;
-            sectionVLG.childForceExpandHeight = false;
-            sectionVLG.childControlWidth = true;
-            sectionVLG.childControlHeight = false;
-            sectionVLG.padding = new RectOffset(0, 0, 4, 4);
+            // Caption text (selected item display)
+            var captionGO = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            captionGO.transform.SetParent(dropdownGO.transform, false);
+            var captionRT = captionGO.GetComponent<RectTransform>();
+            captionRT.anchorMin = Vector2.zero;
+            captionRT.anchorMax = Vector2.one;
+            captionRT.offsetMin = new Vector2(12, 2);
+            captionRT.offsetMax = new Vector2(-30, -2);
+            var captionText = captionGO.GetComponent<Text>();
+            captionText.font = UIHelper.BodyFont;
+            captionText.fontSize = UIConstants.FontBody;
+            captionText.color = UIHelper.BodyTextColor;
+            captionText.alignment = TextAnchor.MiddleLeft;
+            mapDropdown.captionText = captionText;
 
-            var sectionCSF = mapSelectionSection.AddComponent<ContentSizeFitter>();
-            sectionCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // Arrow indicator
+            var arrowGO = new GameObject("Arrow", typeof(RectTransform), typeof(Text));
+            arrowGO.transform.SetParent(dropdownGO.transform, false);
+            var arrowRT = arrowGO.GetComponent<RectTransform>();
+            arrowRT.anchorMin = new Vector2(1, 0);
+            arrowRT.anchorMax = new Vector2(1, 1);
+            arrowRT.pivot = new Vector2(1, 0.5f);
+            arrowRT.sizeDelta = new Vector2(28, 0);
+            arrowRT.anchoredPosition = new Vector2(-4, 0);
+            var arrowText = arrowGO.GetComponent<Text>();
+            arrowText.font = UIHelper.BodyFont;
+            arrowText.fontSize = UIConstants.FontCaption;
+            arrowText.color = SporefrontColors.ParchmentShadow;
+            arrowText.alignment = TextAnchor.MiddleCenter;
+            arrowText.text = "v";
+            arrowText.raycastTarget = false;
 
-            var headerLabel = UIHelper.CreateLabel(mapSelectionSection.transform, "Select Map",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var headerLE = headerLabel.gameObject.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 28;
+            // Template (dropdown list)
+            var templateGO = new GameObject("Template", typeof(RectTransform),
+                typeof(Image), typeof(ScrollRect));
+            templateGO.transform.SetParent(dropdownGO.transform, false);
+            var templateRT = templateGO.GetComponent<RectTransform>();
+            templateRT.anchorMin = new Vector2(0, 0);
+            templateRT.anchorMax = new Vector2(1, 0);
+            templateRT.pivot = new Vector2(0.5f, 1f);
+            templateRT.sizeDelta = new Vector2(0, 120);
+            var templateImg = templateGO.GetComponent<Image>();
+            templateImg.color = SporefrontColors.BgCard;
+            templateImg.sprite = UIHelper.GetRoundedRectSprite(UIHelper.SmallCornerRadius);
+            templateImg.type = Image.Type.Sliced;
 
-            var maps = new (MapType type, string name, string description)[]
-            {
-                (MapType.Arabia, "Arabia",
-                 "Open terrain with scattered hills and forests. Balanced starting positions with resources spread evenly across the map."),
-                (MapType.MountainValley, "Mountain Valley",
-                 "Two ridges separated by a resource-rich valley. Sparse hilltop starts force players downhill to contest forests, minerals, and game."),
-                (MapType.Random, "Random",
-                 "Randomly selects a map type for a unique experience every game."),
-            };
+            // Viewport inside template
+            var viewportGO = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+            viewportGO.transform.SetParent(templateGO.transform, false);
+            var vpRT = viewportGO.GetComponent<RectTransform>();
+            UIHelper.StretchFull(vpRT);
 
-            foreach (var (mapType, mapName, description) in maps)
-            {
-                BuildMapCard(mapSelectionSection.transform, mapType, mapName, description);
-            }
+            // Content inside viewport
+            var contentGO = new GameObject("Content", typeof(RectTransform));
+            contentGO.transform.SetParent(viewportGO.transform, false);
+            var contentItemRT = contentGO.GetComponent<RectTransform>();
+            contentItemRT.anchorMin = new Vector2(0, 1);
+            contentItemRT.anchorMax = new Vector2(1, 1);
+            contentItemRT.pivot = new Vector2(0.5f, 1f);
+            contentItemRT.sizeDelta = new Vector2(0, 0);
 
-            UpdateMapCardHighlights();
-        }
+            // Wire up scroll rect
+            var scrollRect = templateGO.GetComponent<ScrollRect>();
+            scrollRect.viewport = vpRT;
+            scrollRect.content = contentItemRT;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-        private void BuildMapCard(Transform parent, MapType mapType, string mapName, string description)
-        {
-            bool isSelected = mapType == selectedOneVsOneMap;
+            // Item template
+            var itemGO = new GameObject("Item", typeof(RectTransform), typeof(Toggle));
+            itemGO.transform.SetParent(contentItemRT.transform, false);
+            var itemRT = itemGO.GetComponent<RectTransform>();
+            itemRT.sizeDelta = new Vector2(0, 36);
+            itemRT.anchorMin = new Vector2(0, 0.5f);
+            itemRT.anchorMax = new Vector2(1, 0.5f);
 
-            // Card panel
-            var card = UIHelper.CreatePanel(parent, $"MapCard_{mapName}", SporefrontColors.ParchmentMid);
-            var cardVLG = card.AddComponent<VerticalLayoutGroup>();
-            cardVLG.spacing = 2f;
-            cardVLG.childForceExpandWidth = true;
-            cardVLG.childForceExpandHeight = false;
-            cardVLG.childControlWidth = true;
-            cardVLG.childControlHeight = false;
-            cardVLG.padding = new RectOffset(10, 10, 6, 6);
+            // Item background
+            var itemBgGO = new GameObject("Item Background", typeof(RectTransform), typeof(Image));
+            itemBgGO.transform.SetParent(itemGO.transform, false);
+            var itemBgRT = itemBgGO.GetComponent<RectTransform>();
+            UIHelper.StretchFull(itemBgRT);
+            var itemBgImg = itemBgGO.GetComponent<Image>();
+            itemBgImg.color = new Color(1, 1, 1, 0);
 
-            var cardLE = card.AddComponent<LayoutElement>();
-            cardLE.preferredHeight = 65;
+            // Item checkmark (hidden - we don't need it but Toggle requires a graphic)
+            var checkGO = new GameObject("Item Checkmark", typeof(RectTransform), typeof(Image));
+            checkGO.transform.SetParent(itemGO.transform, false);
+            var checkRT = checkGO.GetComponent<RectTransform>();
+            checkRT.anchorMin = new Vector2(0, 0.5f);
+            checkRT.anchorMax = new Vector2(0, 0.5f);
+            checkRT.sizeDelta = new Vector2(0, 0);
+            checkGO.GetComponent<Image>().color = Color.clear;
 
-            // Name label
-            var nameLabel = UIHelper.CreateLabel(card.transform, mapName,
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
-                TextAnchor.MiddleLeft, true);
-            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-            nameLE.preferredHeight = 22;
+            // Item label
+            var itemLabelGO = new GameObject("Item Label", typeof(RectTransform), typeof(Text));
+            itemLabelGO.transform.SetParent(itemGO.transform, false);
+            var itemLabelRT = itemLabelGO.GetComponent<RectTransform>();
+            itemLabelRT.anchorMin = Vector2.zero;
+            itemLabelRT.anchorMax = Vector2.one;
+            itemLabelRT.offsetMin = new Vector2(12, 2);
+            itemLabelRT.offsetMax = new Vector2(-12, -2);
+            var itemLabelText = itemLabelGO.GetComponent<Text>();
+            itemLabelText.font = UIHelper.BodyFont;
+            itemLabelText.fontSize = UIConstants.FontBody;
+            itemLabelText.color = UIHelper.BodyTextColor;
+            itemLabelText.alignment = TextAnchor.MiddleLeft;
 
-            // Description label
-            var descLabel = UIHelper.CreateLabel(card.transform, description,
-                UIConstants.FontCaption, SporefrontColors.InkMid,
+            // Wire toggle
+            var toggle = itemGO.GetComponent<Toggle>();
+            toggle.targetGraphic = itemBgImg;
+            toggle.graphic = checkGO.GetComponent<Image>();
+            toggle.isOn = false;
+
+            // Wire dropdown
+            mapDropdown.template = templateRT;
+            mapDropdown.itemText = itemLabelText;
+            templateGO.SetActive(false);
+
+            // Populate options
+            mapDropdown.ClearOptions();
+            mapDropdown.AddOptions(new List<string> { "Arabia", "Mountain Valley", "Random" });
+
+            // Set initial selection
+            int initialIndex = 0;
+            if (selectedOneVsOneMap == MapType.MountainValley) initialIndex = 1;
+            else if (selectedOneVsOneMap == MapType.Random) initialIndex = 2;
+            mapDropdown.value = initialIndex;
+
+            // Description label below dropdown
+            mapDescriptionLabel = UIHelper.CreateLabel(parent, GetMapDescription(selectedOneVsOneMap),
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
                 TextAnchor.UpperLeft, false);
-            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
-            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
-            descLE.preferredHeight = 32;
+            mapDescriptionLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = mapDescriptionLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 48;
 
-            // Make whole card clickable
-            var btn = card.AddComponent<Button>();
-            btn.transition = Selectable.Transition.None;
-            var capturedType = mapType;
-            btn.onClick.AddListener(() =>
+            // Listen for changes
+            mapDropdown.onValueChanged.AddListener((index) =>
             {
-                selectedOneVsOneMap = capturedType;
-                selectedMapType = capturedType;
-                UpdateMapCardHighlights();
+                switch (index)
+                {
+                    case 0: selectedOneVsOneMap = MapType.Arabia; break;
+                    case 1: selectedOneVsOneMap = MapType.MountainValley; break;
+                    case 2: selectedOneVsOneMap = MapType.Random; break;
+                }
+                selectedMapType = selectedOneVsOneMap;
+                mapDescriptionLabel.text = GetMapDescription(selectedOneVsOneMap);
             });
-
-            var cardImg = card.GetComponent<Image>();
-            mapCards.Add((btn, cardImg, nameLabel));
-            mapCardTypes.Add(mapType);
         }
 
-        private void UpdateMapCardHighlights()
+        private string GetMapDescription(MapType mapType)
         {
-            for (int i = 0; i < mapCards.Count; i++)
+            switch (mapType)
             {
-                bool isSelected = mapCardTypes[i] == selectedOneVsOneMap;
-                var (btn, bg, nameLabel) = mapCards[i];
-
-                bg.color = isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentMid;
-                nameLabel.color = isSelected ? UIHelper.HudTextColor : UIHelper.HeaderTextColor;
+                case MapType.Arabia:
+                    return "Open terrain with scattered hills and forests. Balanced starting positions with resources spread evenly across the map.";
+                case MapType.MountainValley:
+                    return "Two ridges separated by a resource-rich valley. Sparse hilltop starts force players downhill to contest forests, minerals, and game.";
+                case MapType.Random:
+                    return "Randomly selects a map type for a unique experience every game.";
+                default:
+                    return "";
             }
         }
 
@@ -390,6 +708,14 @@ namespace Sporefront.Visual
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
+
+            var descLabel = UIHelper.CreateLabel(parent,
+                "Controls map dimensions and distance between starting positions.",
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
 
             var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
@@ -426,6 +752,14 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
+            var descLabel = UIHelper.CreateLabel(parent,
+                "How many resource nodes are placed across the map.",
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
+
             var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
 
@@ -461,6 +795,14 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
+            var descLabel = UIHelper.CreateLabel(parent,
+                "The amount of food, wood, and stone each player begins with.",
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
+
             var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();
 
@@ -495,6 +837,14 @@ namespace Sporefront.Visual
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
+
+            var descLabel = UIHelper.CreateLabel(parent,
+                "Normal uses fog of war. Full reveals the entire map.",
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
 
             var row = UIHelper.CreateHorizontalRow(parent, 36f, 4f);
             var buttons = new List<Button>();

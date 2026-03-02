@@ -149,7 +149,7 @@ namespace Sporefront.Visual
 
             AddCenteredLabel(winnerText, 22, winnerColor, true);
             AddCenteredLabel(string.Format("Duration: {0:F1}s", result.combatDuration),
-                14, SporefrontColors.InkLight, false);
+                14, SporefrontColors.ParchmentShadow, false);
             AddSpacer(10);
 
             // Attacker section
@@ -184,7 +184,7 @@ namespace Sporefront.Visual
             AddSectionHeader("WIN RATE", UIHelper.HeaderTextColor);
             BuildWinRateBar("Attacker", attackerWins, total, AttackerWinColor);
             BuildWinRateBar("Defender", defenderWins, total, DefenderWinColor);
-            BuildWinRateBar("Draw", draws, total, SporefrontColors.InkLight);
+            BuildWinRateBar("Draw", draws, total, SporefrontColors.ParchmentShadow);
             AddSpacer(10);
 
             // Averages section
@@ -228,7 +228,7 @@ namespace Sporefront.Visual
                 }
 
                 string text = string.Format("Run {0}: {1} - {2:F1}s", i + 1, winnerStr, result.combatDuration);
-                var label = UIHelper.CreateLabel(contentRT, "  " + text, 12, color, TextAnchor.MiddleLeft);
+                var label = UIHelper.CreateLabel(contentRT, "  " + text, UIConstants.FontCaption, color, TextAnchor.MiddleLeft);
                 var le = label.gameObject.AddComponent<LayoutElement>();
                 le.preferredHeight = 22;
             }
@@ -283,7 +283,7 @@ namespace Sporefront.Visual
             nameLE.preferredWidth = 80;
 
             // Bar background
-            var barBg = UIHelper.CreatePanel(row.transform, "BarBg", SporefrontColors.ParchmentDark);
+            var barBg = UIHelper.CreatePanel(row.transform, "BarBg", SporefrontColors.BgSurface);
             var barBgLE = barBg.AddComponent<LayoutElement>();
             barBgLE.flexibleWidth = 1;
             barBgLE.preferredHeight = 20;
@@ -299,7 +299,7 @@ namespace Sporefront.Visual
             // Count label
             string countText = string.Format("{0}/{1} ({2}%)", count, total, (int)(pct * 100));
             var countLabel = UIHelper.CreateLabel(row.transform, countText,
-                11, SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 90;
         }
@@ -312,7 +312,7 @@ namespace Sporefront.Visual
         {
             if (scenarioConfig == null) return;
 
-            AddSectionHeader("MODIFIERS", SporefrontColors.InkLight);
+            AddSectionHeader("MODIFIERS", SporefrontColors.ParchmentShadow);
 
             // Terrain
             string terrainName = scenarioConfig.enemyTerrain.ToString();
@@ -400,7 +400,7 @@ namespace Sporefront.Visual
         private void AddInfoLabel(string text)
         {
             var label = UIHelper.CreateLabel(contentRT, "  " + text,
-                12, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 20;
         }

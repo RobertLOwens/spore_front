@@ -30,12 +30,9 @@ namespace Sporefront.Visual
             {
                 if (_bodyFont == null)
                 {
-                    // Check if the font exists in available OS fonts before using it;
-                    // CreateDynamicFontFromOSFont never returns null even for missing fonts
-                    string[] osfonts = Font.GetOSInstalledFontNames();
-                    bool hasFellEnglish = System.Array.Exists(osfonts, f => f == "IM Fell English");
-                    _bodyFont = Font.CreateDynamicFontFromOSFont(
-                        hasFellEnglish ? "IM Fell English" : "Arial", DefaultBodyFontSize);
+                    var f = Resources.Load<Font>("Fonts/IMFellEnglish-Regular");
+                    _bodyFont = (f != null && f.dynamic) ? f
+                        : Font.CreateDynamicFontFromOSFont("Arial", DefaultBodyFontSize);
                 }
                 return _bodyFont;
             }
@@ -47,10 +44,9 @@ namespace Sporefront.Visual
             {
                 if (_headerFont == null)
                 {
-                    string[] osfonts = Font.GetOSInstalledFontNames();
-                    bool hasMedievalSharp = System.Array.Exists(osfonts, f => f == "MedievalSharp");
-                    _headerFont = Font.CreateDynamicFontFromOSFont(
-                        hasMedievalSharp ? "MedievalSharp" : "Arial", DefaultHeaderFontSize);
+                    var f = Resources.Load<Font>("Fonts/MedievalSharp-Regular");
+                    _headerFont = (f != null && f.dynamic) ? f
+                        : Font.CreateDynamicFontFromOSFont("Arial", DefaultHeaderFontSize);
                 }
                 return _headerFont;
             }
@@ -64,28 +60,28 @@ namespace Sporefront.Visual
         public const int DefaultHeaderFontSize = 23;
 
         public static readonly Color PanelBg = new Color(
-            SporefrontColors.ParchmentMid.r,
-            SporefrontColors.ParchmentMid.g,
-            SporefrontColors.ParchmentMid.b, 0.95f);
+            SporefrontColors.BgElevated.r,
+            SporefrontColors.BgElevated.g,
+            SporefrontColors.BgElevated.b, 0.95f);
 
         public static readonly Color HudBg = new Color(
-            SporefrontColors.InkDark.r,
-            SporefrontColors.InkDark.g,
-            SporefrontColors.InkDark.b, 1.0f);
+            SporefrontColors.BgDeep.r,
+            SporefrontColors.BgDeep.g,
+            SporefrontColors.BgDeep.b, 1.0f);
 
-        public static readonly Color ButtonBg = SporefrontColors.ParchmentDark;
-        public static readonly Color ButtonText = SporefrontColors.InkBlack;
-        public static readonly Color BodyTextColor = SporefrontColors.InkDark;
-        public static readonly Color HeaderTextColor = SporefrontColors.InkBlack;
+        public static readonly Color ButtonBg = SporefrontColors.BgSurface;
+        public static readonly Color ButtonText = SporefrontColors.ParchmentMid;
+        public static readonly Color BodyTextColor = SporefrontColors.ParchmentMid;
+        public static readonly Color HeaderTextColor = SporefrontColors.ParchmentLight;
         public static readonly Color HudTextColor = SporefrontColors.ParchmentLight;
 
         // ================================================================
         // Rounded Corner Sprites
         // ================================================================
 
-        public const int PanelCornerRadius = 20;
-        public const int ButtonCornerRadius = 15;
-        public const int SmallCornerRadius = 8;
+        public const int PanelCornerRadius = 12;
+        public const int ButtonCornerRadius = 10;
+        public const int SmallCornerRadius = 6;
 
         private static readonly Dictionary<int, Sprite> _roundedRectCache = new Dictionary<int, Sprite>();
 
@@ -148,10 +144,7 @@ namespace Sporefront.Visual
         /// </summary>
         public static VerticalLayoutGroup CreateSectionCard(Transform parent, string name, string headerText = null)
         {
-            var cardColor = new Color(
-                SporefrontColors.ParchmentDark.r,
-                SporefrontColors.ParchmentDark.g,
-                SporefrontColors.ParchmentDark.b, 0.5f);
+            var cardColor = new Color(1f, 1f, 1f, 0.06f);
 
             var card = CreatePanel(parent, name, cardColor, SmallCornerRadius);
             var cardLE = card.AddComponent<LayoutElement>();
@@ -177,7 +170,7 @@ namespace Sporefront.Visual
                     TextAnchor.MiddleLeft, true);
                 header.fontStyle = FontStyle.Bold;
                 var headerLE = header.gameObject.AddComponent<LayoutElement>();
-                headerLE.preferredHeight = 22;
+                headerLE.preferredHeight = 26;
             }
 
             return vlg;
@@ -192,45 +185,28 @@ namespace Sporefront.Visual
         {
             int effectiveRadius = cornerRadius == -1 ? PanelCornerRadius : cornerRadius;
 
-            // Auto-skip rounding for transparent overlays and near-black backdrops
+            // Auto-skip rounding for transparent overlays and very dark/invisible panels
             bool useRounding = effectiveRadius > 0
                 && bgColor.a >= 0.01f
-                && (bgColor.r + bgColor.g + bgColor.b) >= 0.05f;
+                && (bgColor.r + bgColor.g + bgColor.b) >= 0.02f;
+
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
+            go.transform.SetParent(parent, false);
+
+            var img = go.GetComponent<Image>();
+            img.color = bgColor;
 
             if (useRounding)
             {
-                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Shadow));
-                go.transform.SetParent(parent, false);
-
-                var img = go.GetComponent<Image>();
-                img.color = bgColor;
                 img.sprite = GetRoundedRectSprite(effectiveRadius);
                 img.type = Image.Type.Sliced;
-
-                var shadow = go.GetComponent<Shadow>();
-                shadow.effectColor = new Color(
-                    SporefrontColors.InkFaded.r,
-                    SporefrontColors.InkFaded.g,
-                    SporefrontColors.InkFaded.b, 0.25f);
-                shadow.effectDistance = new Vector2(1.5f, -1.5f);
-
-                return go;
             }
-            else
-            {
-                var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Outline));
-                go.transform.SetParent(parent, false);
-                go.GetComponent<Image>().color = bgColor;
 
-                var outline = go.GetComponent<Outline>();
-                outline.effectColor = new Color(
-                    SporefrontColors.InkFaded.r,
-                    SporefrontColors.InkFaded.g,
-                    SporefrontColors.InkFaded.b, 0.3f);
-                outline.effectDistance = new Vector2(2f, -2f);
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = SporefrontColors.BorderSubtle;
+            outline.effectDistance = new Vector2(1f, -1f);
 
-                return go;
-            }
+            return go;
         }
 
         public static Text CreateLabel(Transform parent, string text, int fontSize = -1,
@@ -267,11 +243,15 @@ namespace Sporefront.Visual
             var btn = go.GetComponent<Button>();
             btn.colors = StandardButtonColors(bg);
 
-            // Button label
+            // Button label with internal padding
             var label = CreateLabel(go.transform, text,
                 fontSize > 0 ? fontSize : DefaultBodyFontSize,
                 textColor ?? ButtonText, TextAnchor.MiddleCenter);
-            StretchFull(label.GetComponent<RectTransform>());
+            var labelRT = label.GetComponent<RectTransform>();
+            labelRT.anchorMin = Vector2.zero;
+            labelRT.anchorMax = Vector2.one;
+            labelRT.offsetMin = new Vector2(UIConstants.ButtonPaddingH, UIConstants.ButtonPaddingV);
+            labelRT.offsetMax = new Vector2(-UIConstants.ButtonPaddingH, -UIConstants.ButtonPaddingV);
 
             if (onClick != null)
                 btn.onClick.AddListener(() => onClick());
@@ -279,7 +259,7 @@ namespace Sporefront.Visual
             return btn;
         }
 
-        public static HorizontalLayoutGroup CreateHorizontalRow(Transform parent, float height = 30f, float spacing = 4f)
+        public static HorizontalLayoutGroup CreateHorizontalRow(Transform parent, float height = 34f, float spacing = 8f)
         {
             var go = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             go.transform.SetParent(parent, false);
@@ -297,7 +277,7 @@ namespace Sporefront.Visual
             return hlg;
         }
 
-        public static VerticalLayoutGroup CreateVerticalGroup(Transform parent, float spacing = 4f)
+        public static VerticalLayoutGroup CreateVerticalGroup(Transform parent, float spacing = 8f)
         {
             var go = new GameObject("VGroup", typeof(RectTransform), typeof(VerticalLayoutGroup));
             go.transform.SetParent(parent, false);
@@ -309,7 +289,8 @@ namespace Sporefront.Visual
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
             vlg.childControlHeight = false;
-            vlg.padding = new RectOffset(8, 8, 8, 8);
+            int pad = (int)UIConstants.ScrollContentPadding;
+            vlg.padding = new RectOffset(pad, pad, pad, pad);
             return vlg;
         }
 
@@ -346,12 +327,13 @@ namespace Sporefront.Visual
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             var vlg = contentGO.GetComponent<VerticalLayoutGroup>();
-            vlg.spacing = 4f;
+            vlg.spacing = UIConstants.ScrollContentSpacing;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
-            vlg.padding = new RectOffset(8, 8, 8, 8);
+            int scrollPad = (int)UIConstants.ScrollContentPadding;
+            vlg.padding = new RectOffset(scrollPad, scrollPad, scrollPad, scrollPad);
 
             scrollRect.viewport = vpRT;
             scrollRect.content = contentRT;
@@ -419,7 +401,7 @@ namespace Sporefront.Visual
             handleAreaRT.offsetMin = new Vector2(5, 0);
             handleAreaRT.offsetMax = new Vector2(-5, 0);
 
-            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentDeep, SmallCornerRadius);
+            var handleGO = CreatePanel(handleAreaGO.transform, "Handle", SporefrontColors.ParchmentShadow, SmallCornerRadius);
             var handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.sizeDelta = new Vector2(16, 0);
 
@@ -441,8 +423,7 @@ namespace Sporefront.Visual
         public static Image CreateDivider(Transform parent, Color? color = null, float height = 1f)
         {
             var go = CreatePanel(parent, "Divider",
-                color ?? new Color(SporefrontColors.InkFaded.r, SporefrontColors.InkFaded.g,
-                    SporefrontColors.InkFaded.b, 0.3f), 0);
+                color ?? SporefrontColors.BorderAccent, 0);
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, height);
             var le = go.AddComponent<LayoutElement>();
@@ -555,7 +536,7 @@ namespace Sporefront.Visual
             var colors = ColorBlock.defaultColorBlock;
             colors.normalColor = bg;
             colors.highlightedColor = Color.Lerp(bg, Color.white, UIConstants.HoverLerpAmount);
-            colors.pressedColor = Color.Lerp(bg, Color.black, UIConstants.PressedLerpAmount);
+            colors.pressedColor = Color.Lerp(bg, Color.white, UIConstants.PressedLerpAmount);
             colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
             return colors;
         }
@@ -568,7 +549,7 @@ namespace Sporefront.Visual
             var colors = ColorBlock.defaultColorBlock;
             colors.normalColor = bg;
             colors.highlightedColor = Color.Lerp(bg, Color.white, 0.1f);
-            colors.pressedColor = Color.Lerp(bg, Color.black, 0.1f);
+            colors.pressedColor = Color.Lerp(bg, Color.white, 0.08f);
             colors.disabledColor = new Color(bg.r, bg.g, bg.b, UIConstants.DisabledAlpha);
             return colors;
         }

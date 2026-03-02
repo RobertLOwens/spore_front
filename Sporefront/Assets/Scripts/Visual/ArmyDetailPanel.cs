@@ -80,18 +80,18 @@ namespace Sporefront.Visual
             var scroll = UIHelper.CreateScrollView(panel.transform, "ArmyScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 40);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = Vector2.zero;
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Close);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Close);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -234,8 +234,8 @@ namespace Sporefront.Visual
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 28;
 
-            var statusLabel = UIHelper.CreateLabel(contentRT, status, 13,
-                SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+            var statusLabel = UIHelper.CreateLabel(contentRT, status, UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.preferredHeight = 20;
 
@@ -328,15 +328,15 @@ namespace Sporefront.Visual
                 {
                     if (kvp.Value <= 0) continue;
                     var label = UIHelper.CreateLabel(contentRT,
-                        $"  {kvp.Key.DisplayName()}: {kvp.Value}", 12);
+                        $"  {kvp.Key.DisplayName()}: {kvp.Value}", UIConstants.FontCaption);
                     var le = label.gameObject.AddComponent<LayoutElement>();
                     le.preferredHeight = 20;
                 }
             }
 
             var totalLabel = UIHelper.CreateLabel(contentRT,
-                $"  Total: {army.GetTotalUnits()} units", 12,
-                SporefrontColors.InkLight);
+                $"  Total: {army.GetTotalUnits()} units", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow);
             var totalLE = totalLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.preferredHeight = 20;
         }
@@ -354,12 +354,12 @@ namespace Sporefront.Visual
             sectionLE.preferredHeight = 22;
 
             var nameLabel = UIHelper.CreateLabel(contentRT,
-                $"  {commander.name} — {commander.rank}", 12);
+                $"  {commander.name} — {commander.rank}", UIConstants.FontCaption);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredHeight = 20;
 
             var specialtyLabel = UIHelper.CreateLabel(contentRT,
-                $"  Specialty: {commander.specialty}", 12, SporefrontColors.InkLight);
+                $"  Specialty: {commander.specialty}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var specLE = specialtyLabel.gameObject.AddComponent<LayoutElement>();
             specLE.preferredHeight = 20;
 
@@ -375,8 +375,8 @@ namespace Sporefront.Visual
 
         private void CreateStatLabel(Transform parent, string abbrev, int value)
         {
-            var label = UIHelper.CreateLabel(parent, $"{abbrev}:{value}", 11,
-                SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+            var label = UIHelper.CreateLabel(parent, $"{abbrev}:{value}", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 50;
         }
@@ -396,7 +396,7 @@ namespace Sporefront.Visual
             if (commander != null)
             {
                 var label = UIHelper.CreateLabel(row.transform,
-                    $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}", 12);
+                    $"Stamina: {(int)commander.stamina}/{(int)CommanderData.MaxStamina}", UIConstants.FontCaption);
                 var labelLE = label.gameObject.AddComponent<LayoutElement>();
                 labelLE.preferredWidth = 130;
                 staminaLabel = label;
@@ -414,7 +414,7 @@ namespace Sporefront.Visual
             else
             {
                 var label = UIHelper.CreateLabel(row.transform,
-                    "No Commander", 12, SporefrontColors.InkFaded);
+                    "No Commander", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                 var labelLE = label.gameObject.AddComponent<LayoutElement>();
                 labelLE.flexibleWidth = 1;
             }
@@ -437,13 +437,13 @@ namespace Sporefront.Visual
                 var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
 
                 var infoLabel = UIHelper.CreateLabel(row.transform,
-                    $"{reinforcement.GetTotalUnits()} units en route", 12);
+                    $"{reinforcement.GetTotalUnits()} units en route", UIConstants.FontCaption);
                 var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
                 infoLE.flexibleWidth = 1;
 
                 var capturedID = reinforcement.reinforcementID;
                 var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
-                    SporefrontColors.SporeRed, UIHelper.HudTextColor, 11, () =>
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                     {
                         var cmd = new CancelReinforcementCommand(localPlayerID, capturedID);
                         GameEngine.Instance.ExecuteCommand(cmd);
@@ -466,7 +466,7 @@ namespace Sporefront.Visual
             if (!army.isInCombat)
             {
                 var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12, () =>
+                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, () =>
                     {
                         Close();
                         OnMoveRequested?.Invoke(army.id);
@@ -480,7 +480,7 @@ namespace Sporefront.Visual
             if (!army.isEntrenched && !army.isEntrenching && !army.isInCombat)
             {
                 var entrenchBtn = UIHelper.CreateButton(row.transform, "Entrench",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, 12, () =>
+                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, () =>
                     {
                         var cmd = new EntrenchCommand(localPlayerID, army.id);
                         GameEngine.Instance.ExecuteCommand(cmd);
@@ -500,7 +500,7 @@ namespace Sporefront.Visual
                     var capturedBuildingID = building.id;
                     var capturedArmyID = army.id;
                     var garrisonBtn = UIHelper.CreateButton(row.transform, "Garrison",
-                        SporefrontColors.SporeTeal, UIHelper.HudTextColor, 12, () =>
+                        SporefrontColors.SporeTeal, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                         {
                             var cmd = new GarrisonArmyCommand(localPlayerID, capturedArmyID, capturedBuildingID);
                             GameEngine.Instance.ExecuteCommand(cmd);
@@ -516,7 +516,7 @@ namespace Sporefront.Visual
             if (!army.isRetreating)
             {
                 var retreatBtn = UIHelper.CreateButton(row.transform, "Retreat",
-                    SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                     {
                         var cmd = new RetreatCommand(localPlayerID, army.id);
                         GameEngine.Instance.ExecuteCommand(cmd);
@@ -530,7 +530,7 @@ namespace Sporefront.Visual
             if (!army.isInCombat && !army.isRetreating)
             {
                 var attackBtn = UIHelper.CreateButton(row.transform, "Attack",
-                    SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                    SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                     {
                         Close();
                         OnAttackRequested?.Invoke(army.id);

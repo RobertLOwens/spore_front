@@ -47,7 +47,7 @@ namespace Sporefront.Visual
         // Colors
         private static readonly Color Slot1Color = new Color(0.4f, 0.6f, 1.0f, 1.0f);   // blue
         private static readonly Color Slot2Color = new Color(1.0f, 0.4f, 0.4f, 1.0f);   // red
-        private static readonly Color UnselectedColor = SporefrontColors.InkFaded;
+        private static readonly Color UnselectedColor = SporefrontColors.ParchmentShadow;
 
         // ================================================================
         // Initialization
@@ -119,7 +119,7 @@ namespace Sporefront.Visual
             UIHelper.CreateDivider(panel.transform, SporefrontColors.ParchmentShadow, 2f);
 
             // ---- Slot Container ----
-            var slotContainer = UIHelper.CreatePanel(panel.transform, "SlotContainer", SporefrontColors.ParchmentDark);
+            var slotContainer = UIHelper.CreatePanel(panel.transform, "SlotContainer", SporefrontColors.BgSurface);
             var slotContainerLE = slotContainer.AddComponent<LayoutElement>();
             slotContainerLE.preferredHeight = 65;
 
@@ -155,7 +155,7 @@ namespace Sporefront.Visual
 
             // VS label
             var vsLabel = UIHelper.CreateLabel(slotRow.transform, "vs",
-                14, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                14, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             vsLabel.fontStyle = FontStyle.Bold;
             var vsLE = vsLabel.gameObject.AddComponent<LayoutElement>();
             vsLE.preferredWidth = 30;
@@ -185,12 +185,12 @@ namespace Sporefront.Visual
 
             // Instruction label
             instructionLabel = UIHelper.CreateLabel(panel.transform, "Tap a genome to fill Slot 1",
-                12, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                12, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var instrLE = instructionLabel.gameObject.AddComponent<LayoutElement>();
             instrLE.preferredHeight = 22;
 
             // ---- Genome List ----
-            var listPanel = UIHelper.CreatePanel(panel.transform, "GenomeListArea", SporefrontColors.ParchmentDark);
+            var listPanel = UIHelper.CreatePanel(panel.transform, "GenomeListArea", SporefrontColors.BgSurface);
             var listPanelLE = listPanel.AddComponent<LayoutElement>();
             listPanelLE.flexibleHeight = 1;
             listPanelLE.minHeight = 200;
@@ -212,7 +212,7 @@ namespace Sporefront.Visual
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Cancel",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 13, () => OnClose?.Invoke());
+                SporefrontColors.BgSurface, UIHelper.ButtonText, 13, () => OnClose?.Invoke());
             var closeLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeLE.preferredHeight = 36;
         }
@@ -239,7 +239,7 @@ namespace Sporefront.Visual
             if (genomes.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(genomeListContentRT, "No genomes saved.",
-                    13, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -294,7 +294,7 @@ namespace Sporefront.Visual
             string detail = string.Format("Gen {0} | Fitness: {1:F2} | WR: {2}%",
                 genome.generation, genome.fitness, genome.WinRatePercent);
             var detailLabel = UIHelper.CreateLabel(rowVLG.transform, detail,
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
             detailLE.preferredHeight = 16;
 

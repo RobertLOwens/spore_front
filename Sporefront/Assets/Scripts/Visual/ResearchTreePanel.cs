@@ -1,10 +1,11 @@
 // ============================================================================
 // FILE: Visual/ResearchTreePanel.cs
-// PURPOSE: Modal panel for research tree — branch columns, node states, progress
-//          Ported from ResearchViewController.swift
+// PURPOSE: Modal panel for research tree — track-per-row section cards,
+//          connection lines, enhanced lock states, anchored popup, progress
 // ============================================================================
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -31,7 +32,9 @@ namespace Sporefront.Visual
 
         private GameObject backdrop;
         private GameObject panel;
+        private RectTransform panelRT;
         private RectTransform treeContentRT;
+        private ScrollRect treeScroll;
         private Guid localPlayerID;
         private ResearchCategory currentCategory = ResearchCategory.Economic;
         private ResearchType? selectedNode;
@@ -50,15 +53,26 @@ namespace Sporefront.Visual
         private GameObject nodeDetailPopup;
         private RectTransform nodeDetailContentRT;
 
+        // Connection lines
+        private UILineRenderer lineRenderer;
+        private Dictionary<ResearchType, RectTransform> nodePositions = new Dictionary<ResearchType, RectTransform>();
+        private Coroutine pendingLineDrawCoroutine;
+
+        // Tier header references
+        private RectTransform tierHeaderRT;
+
         // ================================================================
         // Constants
         // ================================================================
 
-        private const float NodeWidth = 140f;
-        private const float NodeHeight = 44f;
-        private const float NodeSpacingV = 12f;
-        private const float BranchSpacingH = 20f;
-        private const float BranchHeaderHeight = 40f;
+        private const float NodeWidth = 148f;
+        private const float NodeHeight = 50f;
+        private const float NodeSpacingH = 10f;
+        private const float TrackRowHeight = 54f;
+        private const float TrackLabelWidth = 120f;
+        private const float BranchHeaderH = 38f;
+        private const float PopupWidth = 320f;
+        private const float PopupHeight = 280f;
 
         // ================================================================
         // Initialization
@@ -77,10 +91,13 @@ namespace Sporefront.Visual
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Hide);
 
-            // Main panel — centered 750x550
+            // Main panel — 80% of screen via anchors
             panel = UIHelper.CreatePanel(backdrop.transform, "ResearchTreePanel", UIHelper.PanelBg);
-            var panelRT = panel.GetComponent<RectTransform>();
-            UIHelper.SetFixedSize(panelRT, UIConstants.ModalXLW, UIConstants.ModalLargeH);
+            panelRT = panel.GetComponent<RectTransform>();
+            panelRT.anchorMin = new Vector2(0.1f, 0.1f);
+            panelRT.anchorMax = new Vector2(0.9f, 0.9f);
+            panelRT.offsetMin = Vector2.zero;
+            panelRT.offsetMax = Vector2.zero;
 
             // Title
             var titleLabel = UIHelper.CreateLabel(panel.transform, "Research Tree",
@@ -99,44 +116,65 @@ namespace Sporefront.Visual
             // Tab buttons (below active research)
             BuildTabButtons();
 
+            // Tier column headers (fixed above scroll area)
+            BuildTierHeaders();
+
             // Scrollable tree area
-            var treeScroll = UIHelper.CreateScrollView(panel.transform, "TreeScroll", out treeContentRT);
-            treeScroll.horizontal = true;
+            treeScroll = UIHelper.CreateScrollView(panel.transform, "TreeScroll", out treeContentRT);
+            treeScroll.horizontal = false;
+            treeScroll.vertical = true;
             var treeScrollRT = treeScroll.GetComponent<RectTransform>();
             treeScrollRT.anchorMin = new Vector2(0, 0);
             treeScrollRT.anchorMax = new Vector2(1, 1);
-            treeScrollRT.offsetMin = new Vector2(6, 44);
-            treeScrollRT.offsetMax = new Vector2(-6, -106);
+            treeScrollRT.offsetMin = new Vector2(6, 48);
+            treeScrollRT.offsetMax = new Vector2(-6, -130);
 
-            // Override content layout for horizontal tree
+            // Override content layout for section cards stacked vertically
             var contentVLG = treeContentRT.GetComponent<VerticalLayoutGroup>();
-            if (contentVLG != null) DestroyImmediate(contentVLG);
-            var hlg = treeContentRT.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = BranchSpacingH;
-            hlg.childAlignment = TextAnchor.UpperLeft;
-            hlg.childForceExpandWidth = false;
-            hlg.childForceExpandHeight = false;
-            hlg.childControlWidth = false;
-            hlg.childControlHeight = false;
-            hlg.padding = new RectOffset(8, 8, 8, 8);
+            if (contentVLG != null)
+            {
+                contentVLG.spacing = 12;
+                contentVLG.childAlignment = TextAnchor.UpperLeft;
+                contentVLG.childForceExpandWidth = true;
+                contentVLG.childForceExpandHeight = false;
+                contentVLG.childControlWidth = true;
+                contentVLG.childControlHeight = true;
+                contentVLG.padding = new RectOffset(8, 8, 8, 8);
+            }
 
-            // Content size fitter - need both horizontal and vertical for scroll
+            // Content size fitter
             var csf = treeContentRT.GetComponent<ContentSizeFitter>();
-            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Line renderer for connection lines (child of content, behind nodes)
+            var lineGO = new GameObject("ConnectionLines", typeof(RectTransform), typeof(CanvasRenderer));
+            lineGO.transform.SetParent(treeContentRT, false);
+            lineGO.transform.SetAsFirstSibling();
+            lineRenderer = lineGO.AddComponent<UILineRenderer>();
+            lineRenderer.raycastTarget = false;
+            var lineRT = lineGO.GetComponent<RectTransform>();
+            lineRT.anchorMin = Vector2.zero;
+            lineRT.anchorMax = Vector2.one;
+            lineRT.offsetMin = Vector2.zero;
+            lineRT.offsetMax = Vector2.zero;
+
+            // Exclude line renderer from VLG layout
+            var lineLE = lineGO.AddComponent<LayoutElement>();
+            lineLE.ignoreLayout = true;
 
             // Node detail popup (hidden by default)
             BuildNodeDetailPopup();
 
-            // Close button
+            // Close button — bottom-right
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
                 SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontSmall, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
-            closeBtnRT.anchorMin = new Vector2(0.5f, 0);
-            closeBtnRT.anchorMax = new Vector2(0.5f, 0);
-            closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.sizeDelta = new Vector2(120, 32);
-            closeBtnRT.anchoredPosition = new Vector2(0, 8);
+            closeBtnRT.anchorMin = new Vector2(1, 0);
+            closeBtnRT.anchorMax = new Vector2(1, 0);
+            closeBtnRT.pivot = new Vector2(1, 0);
+            closeBtnRT.sizeDelta = new Vector2(120, 36);
+            closeBtnRT.anchoredPosition = new Vector2(-12, 8);
 
             backdrop.SetActive(false);
         }
@@ -153,8 +191,8 @@ namespace Sporefront.Visual
         private void BuildActiveResearchBar()
         {
             activeResearchBar = UIHelper.CreatePanel(panel.transform, "ActiveResearchBar",
-                new Color(SporefrontColors.InkDark.r, SporefrontColors.InkDark.g,
-                    SporefrontColors.InkDark.b, 0.3f));
+                new Color(SporefrontColors.BgSection.r, SporefrontColors.BgSection.g,
+                    SporefrontColors.BgSection.b, 0.6f));
             var barRT = activeResearchBar.GetComponent<RectTransform>();
             barRT.anchorMin = new Vector2(0, 1);
             barRT.anchorMax = new Vector2(1, 1);
@@ -171,19 +209,19 @@ namespace Sporefront.Visual
             hlg.childControlHeight = true;
 
             activeNameLabel = UIHelper.CreateLabel(activeResearchBar.transform,
-                "No active research", UIConstants.FontCaption, SporefrontColors.InkLight);
+                "No active research", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var nameLE = activeNameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredWidth = 180;
 
             var (bg, fill) = UIHelper.CreateProgressBar(activeResearchBar.transform, 14f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeTeal);
             activeProgressFill = fill;
             var barBgLE = bg.gameObject.AddComponent<LayoutElement>();
             barBgLE.flexibleWidth = 1;
             barBgLE.preferredHeight = 14;
 
             activeProgressLabel = UIHelper.CreateLabel(activeResearchBar.transform,
-                "", UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                "", UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var progLabelLE = activeProgressLabel.gameObject.AddComponent<LayoutElement>();
             progLabelLE.preferredWidth = 60;
 
@@ -220,7 +258,7 @@ namespace Sporefront.Visual
             hlg.childControlHeight = true;
 
             economicTabBtn = UIHelper.CreateButton(tabContainer.transform, "Economic",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontSmall, () =>
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontSmall, () =>
                 {
                     currentCategory = ResearchCategory.Economic;
                     selectedNode = null;
@@ -232,7 +270,7 @@ namespace Sporefront.Visual
             econTabLE.preferredHeight = 28;
 
             militaryTabBtn = UIHelper.CreateButton(tabContainer.transform, "Military",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontSmall, () =>
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontSmall, () =>
                 {
                     currentCategory = ResearchCategory.Military;
                     selectedNode = null;
@@ -245,6 +283,48 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
+        // Tier Column Headers
+        // ================================================================
+
+        private void BuildTierHeaders()
+        {
+            var headerContainer = UIHelper.CreatePanel(panel.transform, "TierHeaders", Color.clear);
+            tierHeaderRT = headerContainer.GetComponent<RectTransform>();
+            tierHeaderRT.anchorMin = new Vector2(0, 1);
+            tierHeaderRT.anchorMax = new Vector2(1, 1);
+            tierHeaderRT.pivot = new Vector2(0.5f, 1);
+            tierHeaderRT.offsetMin = new Vector2(6, -130);
+            tierHeaderRT.offsetMax = new Vector2(-6, -106);
+
+            var hlg = headerContainer.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = NodeSpacingH;
+            hlg.padding = new RectOffset(8, 8, 0, 0);
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = true;
+            hlg.childControlWidth = false;
+            hlg.childControlHeight = true;
+
+            // Spacer: scroll padding + section card padding + track label width
+            float spacerWidth = UIConstants.ScrollContentPadding + UIConstants.SectionCardPadding + TrackLabelWidth;
+            var spacer = new GameObject("Spacer", typeof(RectTransform));
+            spacer.transform.SetParent(headerContainer.transform, false);
+            var spacerLE = spacer.AddComponent<LayoutElement>();
+            spacerLE.preferredWidth = spacerWidth;
+            spacerLE.preferredHeight = 20;
+
+            // Tier labels
+            for (int tier = 1; tier <= 3; tier++)
+            {
+                var tierLabel = UIHelper.CreateLabel(headerContainer.transform,
+                    $"Tier {tier}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
+                    TextAnchor.MiddleCenter);
+                var tierLE = tierLabel.gameObject.AddComponent<LayoutElement>();
+                tierLE.preferredWidth = NodeWidth;
+                tierLE.preferredHeight = 20;
+            }
+        }
+
+        // ================================================================
         // Node Detail Popup
         // ================================================================
 
@@ -253,11 +333,10 @@ namespace Sporefront.Visual
             nodeDetailPopup = UIHelper.CreatePanel(panel.transform, "NodeDetailPopup",
                 new Color(UIHelper.PanelBg.r, UIHelper.PanelBg.g, UIHelper.PanelBg.b, 0.98f));
             var popupRT = nodeDetailPopup.GetComponent<RectTransform>();
-            popupRT.anchorMin = new Vector2(0.5f, 0);
-            popupRT.anchorMax = new Vector2(0.5f, 0);
-            popupRT.pivot = new Vector2(0.5f, 0);
-            popupRT.sizeDelta = new Vector2(350, 240);
-            popupRT.anchoredPosition = new Vector2(0, 44);
+            popupRT.anchorMin = new Vector2(0.5f, 0.5f);
+            popupRT.anchorMax = new Vector2(0.5f, 0.5f);
+            popupRT.pivot = new Vector2(0, 0.5f);
+            popupRT.sizeDelta = new Vector2(PopupWidth, PopupHeight);
 
             var scroll = UIHelper.CreateScrollView(nodeDetailPopup.transform, "PopupScroll", out nodeDetailContentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
@@ -267,7 +346,7 @@ namespace Sporefront.Visual
 
             // Close popup button
             var closePopup = UIHelper.CreateButton(nodeDetailPopup.transform, "X",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                 {
                     selectedNode = null;
                     nodeDetailPopup.SetActive(false);
@@ -296,6 +375,11 @@ namespace Sporefront.Visual
 
         public void Hide()
         {
+            if (pendingLineDrawCoroutine != null)
+            {
+                StopCoroutine(pendingLineDrawCoroutine);
+                pendingLineDrawCoroutine = null;
+            }
             backdrop.SetActive(false);
             OnClose?.Invoke();
         }
@@ -323,23 +407,51 @@ namespace Sporefront.Visual
             // Update tab highlighting
             UpdateTabHighlights();
 
-            // Clear tree content
+            // Clear tree content (skip line renderer at index 0)
             for (int i = treeContentRT.childCount - 1; i >= 0; i--)
-                Destroy(treeContentRT.GetChild(i).gameObject);
+            {
+                var child = treeContentRT.GetChild(i);
+                if (child.GetComponent<UILineRenderer>() != null) continue;
+                Destroy(child.gameObject);
+            }
+
+            nodePositions.Clear();
 
             // Get branches for current category
             var branches = GetBranchesForCategory(currentCategory);
 
             foreach (var branch in branches)
             {
-                BuildBranchColumn(branch, player, gameState);
+                BuildBranchSection(branch, player, gameState);
             }
+
+            // Deferred line drawing — cancel any pending draw
+            if (pendingLineDrawCoroutine != null)
+                StopCoroutine(pendingLineDrawCoroutine);
+            lineRenderer.Clear();
+            pendingLineDrawCoroutine = StartCoroutine(DeferredDrawLines(player, gameState));
+
+            // Move line renderer to back
+            lineRenderer.transform.SetAsFirstSibling();
 
             // Update node detail if selected
             if (selectedNode.HasValue)
             {
                 RebuildNodeDetail(selectedNode.Value, player, gameState);
             }
+        }
+
+        private IEnumerator DeferredDrawLines(PlayerState player, GameState gameState)
+        {
+            yield return null; // wait one frame for layout to settle
+            if (!backdrop.activeSelf)
+            {
+                pendingLineDrawCoroutine = null;
+                yield break;
+            }
+            LayoutRebuilder.ForceRebuildLayoutImmediate(treeContentRT);
+            DrawConnectionLines(player, gameState);
+            pendingLineDrawCoroutine = null;
         }
 
         // ================================================================
@@ -371,7 +483,7 @@ namespace Sporefront.Visual
             }
 
             activeNameLabel.text = "No active research";
-            activeNameLabel.color = SporefrontColors.InkLight;
+            activeNameLabel.color = SporefrontColors.ParchmentShadow;
             var defaultFillRT = activeProgressFill.GetComponent<RectTransform>();
             defaultFillRT.anchorMax = new Vector2(0, 1);
             activeProgressLabel.text = "";
@@ -387,81 +499,112 @@ namespace Sporefront.Visual
             {
                 var econImg = economicTabBtn.GetComponent<Image>();
                 econImg.color = currentCategory == ResearchCategory.Economic
-                    ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark;
+                    ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface;
             }
             if (militaryTabBtn != null)
             {
                 var milImg = militaryTabBtn.GetComponent<Image>();
                 milImg.color = currentCategory == ResearchCategory.Military
-                    ? SporefrontColors.SporeRed : SporefrontColors.ParchmentDark;
+                    ? SporefrontColors.SporeRed : SporefrontColors.BgSurface;
             }
         }
 
         // ================================================================
-        // Branch Column
+        // Branch Section (section card with header + track rows)
         // ================================================================
 
-        private void BuildBranchColumn(ResearchBranch branch, PlayerState player, GameState gameState)
+        private void BuildBranchSection(ResearchBranch branch, PlayerState player, GameState gameState)
         {
-            var columnGO = new GameObject("Branch_" + branch, typeof(RectTransform));
-            columnGO.transform.SetParent(treeContentRT, false);
+            var cardVLG = UIHelper.CreateSectionCard(treeContentRT, "Branch_" + branch);
 
-            var vlg = columnGO.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = NodeSpacingV;
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childForceExpandWidth = false;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = false;
-            vlg.childControlHeight = false;
-            vlg.padding = new RectOffset(4, 4, 4, 8);
+            // --- Header row ---
+            var headerRow = UIHelper.CreateHorizontalRow(cardVLG.transform, BranchHeaderH, 8f);
+            headerRow.childForceExpandWidth = false;
+            headerRow.childForceExpandHeight = true;
+            headerRow.childControlWidth = false;
+            headerRow.childControlHeight = true;
 
-            var columnLE = columnGO.AddComponent<LayoutElement>();
-            columnLE.preferredWidth = NodeWidth + 8;
-
-            // Branch header
-            var headerPanel = UIHelper.CreatePanel(columnGO.transform, "BranchHeader",
-                SporefrontColors.ParchmentDark);
-            var headerPanelLE = headerPanel.AddComponent<LayoutElement>();
-            headerPanelLE.preferredWidth = NodeWidth;
-            headerPanelLE.preferredHeight = BranchHeaderHeight;
-
-            var headerVLG = headerPanel.AddComponent<VerticalLayoutGroup>();
-            headerVLG.padding = new RectOffset(4, 4, 2, 2);
-            headerVLG.spacing = 1;
-            headerVLG.childForceExpandWidth = true;
-            headerVLG.childForceExpandHeight = false;
-            headerVLG.childControlWidth = true;
-            headerVLG.childControlHeight = false;
-
-            var branchName = UIHelper.CreateLabel(headerPanel.transform, branch.DisplayName(),
-                UIConstants.FontSmall, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+            // Branch name
+            var branchName = UIHelper.CreateLabel(headerRow.transform, branch.DisplayName(),
+                UIConstants.FontSubheader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+            branchName.fontStyle = FontStyle.Bold;
             var bnLE = branchName.gameObject.AddComponent<LayoutElement>();
-            bnLE.preferredHeight = 18;
+            bnLE.preferredWidth = TrackLabelWidth;
+            bnLE.preferredHeight = BranchHeaderH;
+
+            // Progress count
+            var researchTypes = GetResearchTypesInBranch(branch);
+            int completedCount = researchTypes.Count(rt =>
+                player.completedResearch.Contains(rt.ToString()));
+            int totalCount = researchTypes.Count;
+
+            var progressLabel = UIHelper.CreateLabel(headerRow.transform,
+                $"{completedCount}/{totalCount}",
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
+            var progLE = progressLabel.gameObject.AddComponent<LayoutElement>();
+            progLE.preferredWidth = 40;
+
+            // Progress bar
+            var (progBg, progFill) = UIHelper.CreateProgressBar(headerRow.transform, 8f,
+                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+            var progBgLE = progBg.gameObject.AddComponent<LayoutElement>();
+            progBgLE.preferredHeight = 8;
+            progBgLE.flexibleWidth = 1;
+
+            if (totalCount > 0)
+            {
+                var fillRT = progFill.GetComponent<RectTransform>();
+                fillRT.anchorMax = new Vector2((float)completedCount / totalCount, 1);
+            }
 
             // Gate building info
             var gateBuilding = branch.GateBuildingType();
             if (gateBuilding.HasValue)
             {
-                var gateLabel = UIHelper.CreateLabel(headerPanel.transform,
-                    $"Requires: {gateBuilding.Value.DisplayName()}", 11,
-                    SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                var gateLabel = UIHelper.CreateLabel(headerRow.transform,
+                    $"Requires: {gateBuilding.Value.DisplayName()}",
+                    UIConstants.FontCaption, SporefrontColors.SporeAmber, TextAnchor.MiddleRight);
                 var gateLE = gateLabel.gameObject.AddComponent<LayoutElement>();
-                gateLE.preferredHeight = 14;
-            }
-            else
-            {
-                var noGateLabel = UIHelper.CreateLabel(headerPanel.transform,
-                    "No building required", 11,
-                    SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
-                var noGateLE = noGateLabel.gameObject.AddComponent<LayoutElement>();
-                noGateLE.preferredHeight = 14;
+                gateLE.preferredWidth = 140;
             }
 
-            // Research nodes in this branch
-            var researchTypes = GetResearchTypesInBranch(branch);
-            foreach (var rt in researchTypes)
+            // --- Track rows ---
+            var tracks = GetTracksInBranch(branch);
+            foreach (var track in tracks)
             {
-                BuildResearchNode(columnGO.transform, rt, player, gameState);
+                BuildTrackRow(cardVLG.transform, track, player, gameState);
+            }
+        }
+
+        // ================================================================
+        // Track Row (single HLG: label + 3 nodes)
+        // ================================================================
+
+        private void BuildTrackRow(Transform parent, List<ResearchType> track, PlayerState player, GameState gameState)
+        {
+            var row = UIHelper.CreateHorizontalRow(parent, TrackRowHeight, NodeSpacingH);
+            row.childForceExpandWidth = false;
+            row.childForceExpandHeight = false;
+            row.childControlWidth = false;
+            row.childControlHeight = false;
+            row.childAlignment = TextAnchor.MiddleLeft;
+            row.padding = new RectOffset(0, 0, 2, 2);
+
+            var rowLE = row.gameObject.AddComponent<LayoutElement>();
+            rowLE.preferredHeight = TrackRowHeight;
+
+            // Track label
+            string trackName = GetTrackDisplayName(track[0]);
+            var trackLabel = UIHelper.CreateLabel(row.transform, trackName,
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
+            var labelLE = trackLabel.gameObject.AddComponent<LayoutElement>();
+            labelLE.preferredWidth = TrackLabelWidth;
+            labelLE.preferredHeight = NodeHeight;
+
+            // Nodes ordered by tier
+            foreach (var rt in track.OrderBy(r => r.Tier()))
+            {
+                BuildResearchNode(row.transform, rt, player, gameState);
             }
         }
 
@@ -472,28 +615,53 @@ namespace Sporefront.Visual
         private void BuildResearchNode(Transform parent, ResearchType researchType,
             PlayerState player, GameState gameState)
         {
-            var state = GetNodeState(researchType, player);
+            var state = GetNodeState(researchType, player, gameState);
 
             Color nodeBg;
             Color textColor;
+            string statusText;
+
             switch (state)
             {
                 case NodeState.Completed:
                     nodeBg = SporefrontColors.SporeGreen;
                     textColor = UIHelper.HudTextColor;
+                    statusText = "Completed";
                     break;
                 case NodeState.Researching:
                     nodeBg = SporefrontColors.SporeTeal;
                     textColor = UIHelper.HudTextColor;
+                    statusText = "Researching...";
                     break;
                 case NodeState.Available:
-                    nodeBg = SporefrontColors.ParchmentLight;
+                    nodeBg = SporefrontColors.BgCard;
                     textColor = UIHelper.BodyTextColor;
+                    statusText = "Available";
                     break;
-                default: // Locked
-                    nodeBg = new Color(SporefrontColors.InkDark.r, SporefrontColors.InkDark.g,
-                        SporefrontColors.InkDark.b, 0.6f);
-                    textColor = SporefrontColors.InkFaded;
+                case NodeState.LockedPrereq:
+                    nodeBg = new Color(SporefrontColors.BgSection.r, SporefrontColors.BgSection.g,
+                        SporefrontColors.BgSection.b, 0.5f);
+                    textColor = SporefrontColors.ParchmentShadow;
+                    statusText = GetPrereqLockText(researchType, player);
+                    break;
+                case NodeState.LockedBuilding:
+                    nodeBg = new Color(SporefrontColors.BgSection.r, SporefrontColors.BgSection.g,
+                        SporefrontColors.BgSection.b, 0.5f);
+                    textColor = new Color(SporefrontColors.SporeAmber.r, SporefrontColors.SporeAmber.g,
+                        SporefrontColors.SporeAmber.b, 0.7f);
+                    statusText = GetBuildingLockText(researchType);
+                    break;
+                case NodeState.LockedCCLevel:
+                    nodeBg = new Color(SporefrontColors.BgSection.r, SporefrontColors.BgSection.g,
+                        SporefrontColors.BgSection.b, 0.5f);
+                    textColor = new Color(SporefrontColors.SporeAmber.r, SporefrontColors.SporeAmber.g,
+                        SporefrontColors.SporeAmber.b, 0.7f);
+                    statusText = $"Need: CC Lv.{researchType.CityCenterLevelRequirement()}";
+                    break;
+                default:
+                    nodeBg = SporefrontColors.BgSection;
+                    textColor = SporefrontColors.ParchmentShadow;
+                    statusText = "Locked";
                     break;
             }
 
@@ -503,8 +671,8 @@ namespace Sporefront.Visual
             nodeLE.preferredHeight = NodeHeight;
 
             var nodeVLG = nodePanel.AddComponent<VerticalLayoutGroup>();
-            nodeVLG.padding = new RectOffset(4, 4, 3, 3);
-            nodeVLG.spacing = 1;
+            nodeVLG.padding = new RectOffset(6, 6, 4, 4);
+            nodeVLG.spacing = 2;
             nodeVLG.childForceExpandWidth = true;
             nodeVLG.childForceExpandHeight = false;
             nodeVLG.childControlWidth = true;
@@ -512,22 +680,18 @@ namespace Sporefront.Visual
 
             var nameLabel = UIHelper.CreateLabel(nodePanel.transform,
                 researchType.DisplayName(), UIConstants.FontCaption, textColor, TextAnchor.MiddleCenter);
-            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
-            nameLE.preferredHeight = 18;
+            var nameNLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameNLE.preferredHeight = 22;
 
             // Status indicator
-            string statusText;
-            switch (state)
-            {
-                case NodeState.Completed: statusText = "[Done]"; break;
-                case NodeState.Researching: statusText = "[Researching...]"; break;
-                case NodeState.Available: statusText = $"Tier {researchType.Tier()}"; break;
-                default: statusText = "Locked"; break;
-            }
             var statusLabel = UIHelper.CreateLabel(nodePanel.transform, statusText, 11,
                 textColor, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.preferredHeight = 13;
+
+            // Store node position for connection lines
+            var nodeRT = nodePanel.GetComponent<RectTransform>();
+            nodePositions[researchType] = nodeRT;
 
             // Click handler
             var capturedType = researchType;
@@ -537,7 +701,116 @@ namespace Sporefront.Visual
             {
                 selectedNode = capturedType;
                 nodeDetailPopup.SetActive(true);
+                PositionPopupNearNode(nodeRT);
+                RebuildNodeDetail(capturedType, GameEngine.Instance.GetGameState().GetPlayer(localPlayerID),
+                    GameEngine.Instance.GetGameState());
             });
+        }
+
+        // ================================================================
+        // Connection Lines
+        // ================================================================
+
+        private void DrawConnectionLines(PlayerState player, GameState gameState)
+        {
+            var allTypes = GetResearchTypesInBranch(GetBranchesForCategory(currentCategory));
+
+            foreach (var rt in allTypes)
+            {
+                var prereqs = rt.Prerequisites();
+                if (prereqs.Length == 0) continue;
+
+                RectTransform targetRT;
+                if (!nodePositions.TryGetValue(rt, out targetRT)) continue;
+
+                foreach (var prereq in prereqs)
+                {
+                    RectTransform sourceRT;
+                    if (!nodePositions.TryGetValue(prereq, out sourceRT)) continue;
+
+                    // Get positions relative to the content container
+                    Vector2 sourcePos = GetNodeRightEdge(sourceRT);
+                    Vector2 targetPos = GetNodeLeftEdge(targetRT);
+
+                    Color lineColor = GetLineColor(prereq, rt, player);
+                    lineRenderer.AddLPath(sourcePos, targetPos, lineColor);
+                }
+            }
+        }
+
+        private Vector2 GetNodeRightEdge(RectTransform nodeRT)
+        {
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(treeContentRT, nodeRT);
+            return new Vector2((float)bounds.max.x, (float)bounds.center.y);
+        }
+
+        private Vector2 GetNodeLeftEdge(RectTransform nodeRT)
+        {
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(treeContentRT, nodeRT);
+            return new Vector2((float)bounds.min.x, (float)bounds.center.y);
+        }
+
+        private Color GetLineColor(ResearchType source, ResearchType target, PlayerState player)
+        {
+            bool sourceCompleted = player.completedResearch.Contains(source.ToString());
+            bool targetCompleted = player.completedResearch.Contains(target.ToString());
+
+            if (sourceCompleted && targetCompleted)
+                return new Color(SporefrontColors.SporeGreen.r, SporefrontColors.SporeGreen.g,
+                    SporefrontColors.SporeGreen.b, 0.6f);
+
+            if (sourceCompleted)
+            {
+                // Check if target is available (all prereqs met)
+                var prereqs = target.Prerequisites();
+                bool allPrereqsMet = prereqs.All(p => player.completedResearch.Contains(p.ToString()));
+                if (allPrereqsMet)
+                    return new Color(SporefrontColors.SporeTeal.r, SporefrontColors.SporeTeal.g,
+                        SporefrontColors.SporeTeal.b, 0.8f);
+                else
+                    return new Color(SporefrontColors.ParchmentShadow.r, SporefrontColors.ParchmentShadow.g,
+                        SporefrontColors.ParchmentShadow.b, 0.4f);
+            }
+
+            return new Color(SporefrontColors.ParchmentShadow.r, SporefrontColors.ParchmentShadow.g,
+                SporefrontColors.ParchmentShadow.b, 0.2f);
+        }
+
+        // ================================================================
+        // Popup Positioning
+        // ================================================================
+
+        private void PositionPopupNearNode(RectTransform nodeRT)
+        {
+            var popupRT = nodeDetailPopup.GetComponent<RectTransform>();
+
+            // Convert node center to panel local space
+            Vector3 worldPos = nodeRT.TransformPoint(nodeRT.rect.center);
+            Vector2 localPos;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                panelRT, RectTransformUtility.WorldToScreenPoint(null, worldPos),
+                null, out localPos);
+
+            // Default: right of node
+            popupRT.anchorMin = new Vector2(0.5f, 0.5f);
+            popupRT.anchorMax = new Vector2(0.5f, 0.5f);
+            popupRT.pivot = new Vector2(0, 0.5f);
+            float xPos = localPos.x + NodeWidth / 2f + 10f;
+            float yPos = localPos.y;
+
+            // Edge clamp
+            float panelW = panelRT.rect.width;
+            float panelH = panelRT.rect.height;
+
+            if (xPos + PopupWidth > panelW / 2f)
+            {
+                popupRT.pivot = new Vector2(1, 0.5f);
+                xPos = localPos.x - NodeWidth / 2f - 10f;
+            }
+            yPos = Mathf.Clamp(yPos, -panelH / 2f + PopupHeight / 2f + 10f,
+                panelH / 2f - PopupHeight / 2f - 10f);
+
+            popupRT.anchoredPosition = new Vector2(xPos, yPos);
         }
 
         // ================================================================
@@ -549,7 +822,7 @@ namespace Sporefront.Visual
             for (int i = nodeDetailContentRT.childCount - 1; i >= 0; i--)
                 Destroy(nodeDetailContentRT.GetChild(i).gameObject);
 
-            var state = GetNodeState(researchType, player);
+            var state = GetNodeState(researchType, player, gameState);
 
             // Name
             var nameLabel = UIHelper.CreateLabel(nodeDetailContentRT,
@@ -561,7 +834,7 @@ namespace Sporefront.Visual
 
             // Description
             var descLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                researchType.Description(), UIConstants.FontCaption, SporefrontColors.InkLight,
+                researchType.Description(), UIConstants.FontCaption, SporefrontColors.ParchmentShadow,
                 TextAnchor.MiddleLeft);
             var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
             descLE.preferredHeight = 20;
@@ -597,7 +870,7 @@ namespace Sporefront.Visual
             {
                 var prereqNames = prereqs.Select(p => p.DisplayName()).ToArray();
                 var prereqLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                    $"Requires: {string.Join(", ", prereqNames)}", UIConstants.FontCaption, SporefrontColors.InkLight);
+                    $"Requires: {string.Join(", ", prereqNames)}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                 var prereqLE = prereqLabel.gameObject.AddComponent<LayoutElement>();
                 prereqLE.preferredHeight = 18;
             }
@@ -608,9 +881,19 @@ namespace Sporefront.Visual
             {
                 var bldgLabel = UIHelper.CreateLabel(nodeDetailContentRT,
                     $"Building: {buildingReq.Value.buildingType.DisplayName()} Lv.{buildingReq.Value.level}",
-                    UIConstants.FontCaption, SporefrontColors.InkLight);
+                    UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                 var bldgLE = bldgLabel.gameObject.AddComponent<LayoutElement>();
                 bldgLE.preferredHeight = 18;
+            }
+
+            // CC level requirement
+            int ccReq = researchType.CityCenterLevelRequirement();
+            if (ccReq > 1)
+            {
+                var ccLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                    $"City Center: Level {ccReq}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                var ccLE = ccLabel.gameObject.AddComponent<LayoutElement>();
+                ccLE.preferredHeight = 18;
             }
 
             UIHelper.CreateDivider(nodeDetailContentRT);
@@ -620,14 +903,14 @@ namespace Sporefront.Visual
             if (bonuses.Length > 0)
             {
                 var bonusHeader = UIHelper.CreateLabel(nodeDetailContentRT, "Bonuses:",
-                    12, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, false);
+                    UIConstants.FontCaption, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, false);
                 var bonusHeaderLE = bonusHeader.gameObject.AddComponent<LayoutElement>();
                 bonusHeaderLE.preferredHeight = 18;
 
                 foreach (var bonus in bonuses)
                 {
                     var bonusLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                        $"  {bonus.DisplayString}", 11, SporefrontColors.SporeGreen);
+                        $"  {bonus.DisplayString}", UIConstants.FontCaption, SporefrontColors.SporeGreen);
                     var bLE = bonusLabel.gameObject.AddComponent<LayoutElement>();
                     bLE.preferredHeight = 16;
                 }
@@ -635,68 +918,86 @@ namespace Sporefront.Visual
 
             UIHelper.CreateDivider(nodeDetailContentRT);
 
-            // Start Research button (only if available)
-            if (state == NodeState.Available)
+            // Action / status area
+            switch (state)
             {
-                bool canAfford = player != null && player.CanAfford(cost);
-                var capturedType = researchType;
+                case NodeState.Available:
+                    bool canAfford = player != null && player.CanAfford(cost);
+                    var capturedType = researchType;
 
-                var startBtn = UIHelper.CreateButton(nodeDetailContentRT, "Start Research",
-                    canAfford ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
-                    canAfford ? UIHelper.HudTextColor : SporefrontColors.InkLight, UIConstants.FontSmall, () =>
+                    var startBtn = UIHelper.CreateButton(nodeDetailContentRT, "Start Research",
+                        canAfford ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow,
+                        canAfford ? UIHelper.HudTextColor : SporefrontColors.ParchmentShadow, UIConstants.FontSmall, () =>
+                        {
+                            OnStartResearch?.Invoke(capturedType);
+                            selectedNode = null;
+                            nodeDetailPopup.SetActive(false);
+                        });
+                    startBtn.interactable = canAfford;
+                    var startLE = startBtn.gameObject.AddComponent<LayoutElement>();
+                    startLE.preferredHeight = 34;
+
+                    if (!canAfford)
                     {
-                        OnStartResearch?.Invoke(capturedType);
-                        selectedNode = null;
-                        nodeDetailPopup.SetActive(false);
-                    });
-                startBtn.interactable = canAfford;
-                var startLE = startBtn.gameObject.AddComponent<LayoutElement>();
-                startLE.preferredHeight = 34;
+                        var affordLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                            "Insufficient resources", UIConstants.FontCaption, SporefrontColors.SporeRed,
+                            TextAnchor.MiddleCenter);
+                        var affordLE = affordLabel.gameObject.AddComponent<LayoutElement>();
+                        affordLE.preferredHeight = 16;
+                    }
+                    break;
 
-                if (!canAfford)
-                {
-                    var affordLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                        "Insufficient resources", UIConstants.FontCaption, SporefrontColors.SporeRed,
+                case NodeState.Completed:
+                    var completeLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        "Research Complete", 13, SporefrontColors.SporeGreen,
                         TextAnchor.MiddleCenter);
-                    var affordLE = affordLabel.gameObject.AddComponent<LayoutElement>();
-                    affordLE.preferredHeight = 16;
-                }
-            }
-            else if (state == NodeState.Completed)
-            {
-                var completeLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                    "Research Complete", 13, SporefrontColors.SporeGreen,
-                    TextAnchor.MiddleCenter);
-                var compLE = completeLabel.gameObject.AddComponent<LayoutElement>();
-                compLE.preferredHeight = 28;
-            }
-            else if (state == NodeState.Researching)
-            {
-                var researchingLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                    "Currently Researching...", 13, SporefrontColors.SporeTeal,
-                    TextAnchor.MiddleCenter);
-                var resLE = researchingLabel.gameObject.AddComponent<LayoutElement>();
-                resLE.preferredHeight = 28;
-            }
-            else
-            {
-                var lockedLabel = UIHelper.CreateLabel(nodeDetailContentRT,
-                    "Prerequisites not met", 12, SporefrontColors.SporeRed,
-                    TextAnchor.MiddleCenter);
-                var lockLE = lockedLabel.gameObject.AddComponent<LayoutElement>();
-                lockLE.preferredHeight = 28;
+                    var compLE = completeLabel.gameObject.AddComponent<LayoutElement>();
+                    compLE.preferredHeight = 28;
+                    break;
+
+                case NodeState.Researching:
+                    var researchingLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        "Currently Researching...", 13, SporefrontColors.SporeTeal,
+                        TextAnchor.MiddleCenter);
+                    var resLE = researchingLabel.gameObject.AddComponent<LayoutElement>();
+                    resLE.preferredHeight = 28;
+                    break;
+
+                case NodeState.LockedPrereq:
+                    var prereqLockLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        GetPrereqLockText(researchType, player), UIConstants.FontCaption,
+                        SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+                    var prereqLockLE = prereqLockLabel.gameObject.AddComponent<LayoutElement>();
+                    prereqLockLE.preferredHeight = 28;
+                    break;
+
+                case NodeState.LockedBuilding:
+                    var bldgLockLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        GetBuildingLockText(researchType), UIConstants.FontCaption,
+                        SporefrontColors.SporeAmber, TextAnchor.MiddleCenter);
+                    var bldgLockLE = bldgLockLabel.gameObject.AddComponent<LayoutElement>();
+                    bldgLockLE.preferredHeight = 28;
+                    break;
+
+                case NodeState.LockedCCLevel:
+                    var ccLockLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        $"Need: City Center Level {researchType.CityCenterLevelRequirement()}",
+                        UIConstants.FontCaption, SporefrontColors.SporeAmber, TextAnchor.MiddleCenter);
+                    var ccLockLE = ccLockLabel.gameObject.AddComponent<LayoutElement>();
+                    ccLockLE.preferredHeight = 28;
+                    break;
             }
         }
 
         // ================================================================
-        // Helpers
+        // Enhanced Node State
         // ================================================================
 
-        private enum NodeState { Locked, Available, Researching, Completed }
+        private enum NodeState { LockedPrereq, LockedBuilding, LockedCCLevel, Available, Researching, Completed }
 
-        private NodeState GetNodeState(ResearchType researchType, PlayerState player)
+        private NodeState GetNodeState(ResearchType researchType, PlayerState player, GameState gameState)
         {
-            if (player == null) return NodeState.Locked;
+            if (player == null) return NodeState.LockedPrereq;
 
             // Completed
             if (player.completedResearch.Contains(researchType.ToString()))
@@ -711,14 +1012,112 @@ namespace Sporefront.Visual
             foreach (var prereq in prereqs)
             {
                 if (!player.completedResearch.Contains(prereq.ToString()))
-                    return NodeState.Locked;
+                    return NodeState.LockedPrereq;
+            }
+
+            // Check building requirement
+            var buildingReq = researchType.BuildingRequirement();
+            if (buildingReq.HasValue)
+            {
+                bool hasBldg = false;
+                var buildings = gameState.GetBuildingsForPlayer(localPlayerID);
+                foreach (var bld in buildings)
+                {
+                    if (bld.buildingType == buildingReq.Value.buildingType &&
+                        bld.level >= buildingReq.Value.level &&
+                        (bld.state == BuildingState.Completed || bld.state == BuildingState.Upgrading))
+                    {
+                        hasBldg = true;
+                        break;
+                    }
+                }
+                if (!hasBldg) return NodeState.LockedBuilding;
             }
 
             // Check CC level
-            // (Simplified - assumes CC meets requirement if prereqs are met)
+            int ccReq = researchType.CityCenterLevelRequirement();
+            if (ccReq > 1)
+            {
+                int ccLevel = gameState.GetCityCenterLevel(localPlayerID);
+                if (ccLevel < ccReq) return NodeState.LockedCCLevel;
+            }
 
             return NodeState.Available;
         }
+
+        // ================================================================
+        // Lock Text Helpers
+        // ================================================================
+
+        private string GetPrereqLockText(ResearchType researchType, PlayerState player)
+        {
+            var prereqs = researchType.Prerequisites();
+            foreach (var prereq in prereqs)
+            {
+                if (!player.completedResearch.Contains(prereq.ToString()))
+                    return $"Need: {prereq.DisplayName()}";
+            }
+            return "Locked";
+        }
+
+        private string GetBuildingLockText(ResearchType researchType)
+        {
+            var req = researchType.BuildingRequirement();
+            if (req.HasValue)
+                return $"Need: {req.Value.buildingType.DisplayName()}";
+            return "Need: Building";
+        }
+
+        // ================================================================
+        // Track Grouping Helpers
+        // ================================================================
+
+        private string GetTrackName(ResearchType rt)
+        {
+            string name = rt.ToString();
+            if (name.EndsWith("III")) return name.Substring(0, name.Length - 3);
+            if (name.EndsWith("II")) return name.Substring(0, name.Length - 2);
+            if (name.EndsWith("I")) return name.Substring(0, name.Length - 1);
+            return name;
+        }
+
+        private List<List<ResearchType>> GetTracksInBranch(ResearchBranch branch)
+        {
+            var branchTypes = GetResearchTypesInBranch(branch);
+            var trackMap = new Dictionary<string, List<ResearchType>>();
+            var trackOrder = new List<string>();
+
+            foreach (var rt in branchTypes)
+            {
+                string trackName = GetTrackName(rt);
+                if (!trackMap.ContainsKey(trackName))
+                {
+                    trackMap[trackName] = new List<ResearchType>();
+                    trackOrder.Add(trackName);
+                }
+                trackMap[trackName].Add(rt);
+            }
+
+            var result = new List<List<ResearchType>>();
+            foreach (var tn in trackOrder)
+            {
+                result.Add(trackMap[tn].OrderBy(r => r.Tier()).ToList());
+            }
+            return result;
+        }
+
+        private string GetTrackDisplayName(ResearchType tierOneType)
+        {
+            string displayName = tierOneType.DisplayName();
+            // Strip trailing " I" suffix
+            if (displayName.EndsWith(" I") && !displayName.EndsWith(" II") && !displayName.EndsWith(" III"))
+                return displayName.Substring(0, displayName.Length - 2);
+            return displayName;
+        }
+
+        // ================================================================
+        // Branch / Category Helpers
+        // ================================================================
 
         private ResearchBranch[] GetBranchesForCategory(ResearchCategory category)
         {
@@ -747,6 +1146,16 @@ namespace Sporefront.Visual
         {
             var allTypes = (ResearchType[])Enum.GetValues(typeof(ResearchType));
             return allTypes.Where(rt => rt.Branch() == branch)
+                           .OrderBy(rt => rt.Tier())
+                           .ThenBy(rt => rt.ToString())
+                           .ToList();
+        }
+
+        private List<ResearchType> GetResearchTypesInBranch(ResearchBranch[] branches)
+        {
+            var allTypes = (ResearchType[])Enum.GetValues(typeof(ResearchType));
+            var branchSet = new HashSet<ResearchBranch>(branches);
+            return allTypes.Where(rt => branchSet.Contains(rt.Branch()))
                            .OrderBy(rt => rt.Tier())
                            .ThenBy(rt => rt.ToString())
                            .ToList();

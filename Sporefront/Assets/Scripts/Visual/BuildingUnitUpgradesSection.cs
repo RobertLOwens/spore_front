@@ -36,8 +36,8 @@ namespace Sporefront.Visual
                     currentUnit = unitType;
                     int tier = player != null ? player.GetUnitUpgradeTier(unitType) : 0;
                     var unitHeader = UIHelper.CreateLabel(contentRT,
-                        $"{unitType.DisplayName()} (Tier {tier})", 12,
-                        SporefrontColors.InkDark, TextAnchor.MiddleLeft, true);
+                        $"{unitType.DisplayName()} (Tier {tier})", UIConstants.FontCaption,
+                        SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft, true);
                     var unitHeaderLE = unitHeader.gameObject.AddComponent<LayoutElement>();
                     unitHeaderLE.preferredHeight = 20;
                 }
@@ -71,15 +71,15 @@ namespace Sporefront.Visual
                 else if (!prereqMet || !levelMet)
                 {
                     statusText = "Locked";
-                    statusColor = SporefrontColors.InkFaded;
+                    statusColor = SporefrontColors.ParchmentShadow;
                 }
                 else
                 {
                     statusText = $"Tier {upgrade.Tier()}";
-                    statusColor = SporefrontColors.InkMid;
+                    statusColor = SporefrontColors.ParchmentShadow;
                 }
 
-                var statusLabel = UIHelper.CreateLabel(row.transform, statusText, 11, statusColor);
+                var statusLabel = UIHelper.CreateLabel(row.transform, statusText, UIConstants.FontCaption, statusColor);
                 var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
                 statusLE.preferredWidth = 45;
 
@@ -87,8 +87,8 @@ namespace Sporefront.Visual
                 if (!completed)
                 {
                     var cost = upgrade.Cost();
-                    var costLabel = UIHelper.CreateLabel(row.transform, UIHelper.FormatCost(cost), 10,
-                        (canStart || isActive) ? SporefrontColors.InkLight : SporefrontColors.InkFaded);
+                    var costLabel = UIHelper.CreateLabel(row.transform, UIHelper.FormatCost(cost), UIConstants.FontCaption,
+                        (canStart || isActive) ? SporefrontColors.ParchmentShadow : SporefrontColors.ParchmentShadow);
                     costLabel.supportRichText = true;
                     var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
                     costLE.flexibleWidth = 1;
@@ -106,8 +106,8 @@ namespace Sporefront.Visual
                     var capturedUpgrade = upgrade;
                     var capturedBuildingID2 = currentBuildingID;
                     var btn = UIHelper.CreateButton(row.transform, "Upgrade",
-                        canStart ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
-                        canStart ? UIHelper.ButtonText : SporefrontColors.InkLight, 11, () =>
+                        canStart ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow,
+                        canStart ? UIHelper.ButtonText : SporefrontColors.ParchmentShadow, UIConstants.FontCaption, () =>
                         {
                             if (!capturedBuildingID2.HasValue) return;
                             var cmd = new UpgradeUnitCommand(localPlayerID,
@@ -129,7 +129,7 @@ namespace Sporefront.Visual
 
                     var progressRow = UIHelper.CreateHorizontalRow(contentRT, 16f, 4f);
                     var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                        SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+                        SporefrontColors.ParchmentShadow, SporefrontColors.SporeTeal);
                     var fillRT = fill.GetComponent<RectTransform>();
                     fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)pct), 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -138,7 +138,7 @@ namespace Sporefront.Visual
 
                     var timeLabel = UIHelper.CreateLabel(progressRow.transform,
                         $"~{UIHelper.FormatTime(remaining)}", UIConstants.FontCaption,
-                        SporefrontColors.InkLight);
+                        SporefrontColors.ParchmentShadow);
                     var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
                     timeLE.preferredWidth = 45;
                 }

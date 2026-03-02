@@ -12,22 +12,22 @@ namespace Sporefront.Visual
         // Spacing Scale
         // ================================================================
 
-        public const float SpaceXS = 3f;
-        public const float SpaceSM = 5f;
-        public const float SpaceMD = 10f;
-        public const float SpaceLG = 15f;
-        public const float SpaceXL = 20f;
+        public const float SpaceXS = 6f;
+        public const float SpaceSM = 8f;
+        public const float SpaceMD = 16f;
+        public const float SpaceLG = 24f;
+        public const float SpaceXL = 32f;
 
         // ================================================================
         // Font Scale
         // ================================================================
 
-        public const int FontCaption = 13;
-        public const int FontSmall = 14;
+        public const int FontCaption = 14;
+        public const int FontSmall = 15;
         public const int FontBody = 18;
-        public const int FontSubheader = 20;
-        public const int FontHeader = 23;
-        public const int FontTitle = 28;
+        public const int FontSubheader = 21;
+        public const int FontHeader = 24;
+        public const int FontTitle = 30;
 
         // ================================================================
         // Layout Chrome
@@ -59,8 +59,20 @@ namespace Sporefront.Visual
         public const float ModalBuildMenuH = 725f;
 
         // Section card layout
-        public const float SectionCardPadding = 13f;
-        public const float SectionCardSpacing = 8f;
+        public const float SectionCardPadding = 16f;
+        public const float SectionCardSpacing = 12f;
+
+        // ================================================================
+        // Interactive Element Sizing
+        // ================================================================
+
+        public const float MinButtonHeight = 36f;
+        public const float ButtonPaddingH = 12f;
+        public const float ButtonPaddingV = 6f;
+
+        // Scroll content defaults
+        public const float ScrollContentSpacing = 10f;
+        public const float ScrollContentPadding = 14f;
 
         // ================================================================
         // Interaction
@@ -68,7 +80,7 @@ namespace Sporefront.Visual
 
         public const float HoverLerpAmount = 0.15f;
         public const float PressedLerpAmount = 0.12f;
-        public const float DisabledAlpha = 0.5f;
+        public const float DisabledAlpha = 0.35f;
 
         // ================================================================
         // Animation

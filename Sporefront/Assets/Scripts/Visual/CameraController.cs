@@ -73,8 +73,8 @@ namespace Sporefront.Visual
             cam.orthographicSize = zoomLevel;
             targetZoom = zoomLevel;
 
-            // Set background to parchment
-            cam.backgroundColor = SporefrontColors.ParchmentLight;
+            // Set background to dark — map edges fade to dark instead of light
+            cam.backgroundColor = SporefrontColors.BgDeep;
         }
 
         private void Update()

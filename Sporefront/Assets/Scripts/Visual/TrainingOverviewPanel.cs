@@ -78,18 +78,18 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 40);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = new Vector2(0, -36);
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -207,19 +207,19 @@ namespace Sporefront.Visual
             // Empty state
             if (trainingCount == 0)
             {
-                var emptyCard = UIHelper.CreatePanel(contentRT, "EmptyCard", SporefrontColors.ParchmentMid);
+                var emptyCard = UIHelper.CreatePanel(contentRT, "EmptyCard", SporefrontColors.BgCard);
                 var emptyCardLE = emptyCard.AddComponent<LayoutElement>();
                 emptyCardLE.preferredHeight = 60;
                 emptyCardLE.flexibleWidth = 1;
 
                 var emptyLabel = UIHelper.CreateLabel(emptyCard.transform, "No active training",
-                    UIHelper.DefaultBodyFontSize, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    UIHelper.DefaultBodyFontSize, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var emptyLabelRT = emptyLabel.GetComponent<RectTransform>();
                 UIHelper.StretchFull(emptyLabelRT);
 
                 var hintLabel = UIHelper.CreateLabel(contentRT,
                     "Train units from military buildings or villagers from the City Center.",
-                    11, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 hintLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
                 var hintLE = hintLabel.gameObject.AddComponent<LayoutElement>();
                 hintLE.preferredHeight = 36;
@@ -233,7 +233,7 @@ namespace Sporefront.Visual
         private void BuildMilitaryTrainingRow(BuildingData building, TrainingQueueEntry entry,
             GameState gameState)
         {
-            var card = UIHelper.CreatePanel(contentRT, "MilitaryTrainCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "MilitaryTrainCard", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 68;
             cardLE.flexibleWidth = 1;
@@ -257,7 +257,7 @@ namespace Sporefront.Visual
 
             var unitLabel = UIHelper.CreateLabel(topRow.transform,
                 $"{entry.unitType.DisplayName()} x{entry.quantity}", 12,
-                SporefrontColors.InkDark, TextAnchor.MiddleRight);
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
             unitLE.preferredWidth = 120;
             unitLE.preferredHeight = 20;
@@ -270,13 +270,13 @@ namespace Sporefront.Visual
             var progressRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
 
             var progressLabel = UIHelper.CreateLabel(progressRow.transform,
-                $"{(int)(progressFloat * 100)}%", 10, SporefrontColors.InkLight);
+                $"{(int)(progressFloat * 100)}%", 10, SporefrontColors.ParchmentShadow);
             var progressLabelLE = progressLabel.gameObject.AddComponent<LayoutElement>();
             progressLabelLE.preferredWidth = 35;
             progressLabelLE.preferredHeight = 16;
 
             var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeTeal);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(progressFloat, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -292,14 +292,14 @@ namespace Sporefront.Visual
 
             var timeLabel = UIHelper.CreateLabel(card.transform,
                 $"~{UIHelper.FormatTime(remaining)} remaining",
-                UIConstants.FontCaption, SporefrontColors.InkLight);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 16;
 
             // Make card tappable to open building detail
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.BgCard);
 
             var capturedBuildingID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedBuildingID));
@@ -312,7 +312,7 @@ namespace Sporefront.Visual
         private void BuildVillagerTrainingRow(BuildingData building, VillagerTrainingEntry entry,
             GameState gameState)
         {
-            var card = UIHelper.CreatePanel(contentRT, "VillagerTrainCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "VillagerTrainCard", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 68;
             cardLE.flexibleWidth = 1;
@@ -336,7 +336,7 @@ namespace Sporefront.Visual
 
             var unitLabel = UIHelper.CreateLabel(topRow.transform,
                 $"Villager x{entry.quantity}", 12,
-                SporefrontColors.InkDark, TextAnchor.MiddleRight);
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
             unitLE.preferredWidth = 100;
             unitLE.preferredHeight = 20;
@@ -348,13 +348,13 @@ namespace Sporefront.Visual
             var progressRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
 
             var progressLabel = UIHelper.CreateLabel(progressRow.transform,
-                $"{(int)(progressFloat * 100)}%", 10, SporefrontColors.InkLight);
+                $"{(int)(progressFloat * 100)}%", 10, SporefrontColors.ParchmentShadow);
             var progressLabelLE = progressLabel.gameObject.AddComponent<LayoutElement>();
             progressLabelLE.preferredWidth = 35;
             progressLabelLE.preferredHeight = 16;
 
             var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(progressFloat, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -368,14 +368,14 @@ namespace Sporefront.Visual
 
             var timeLabel = UIHelper.CreateLabel(card.transform,
                 $"~{UIHelper.FormatTime(remaining)} remaining",
-                UIConstants.FontCaption, SporefrontColors.InkLight);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 16;
 
             // Make card tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.BgCard);
 
             var capturedBuildingID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedBuildingID));

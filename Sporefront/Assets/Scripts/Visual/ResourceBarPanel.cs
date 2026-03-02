@@ -251,7 +251,7 @@ namespace Sporefront.Visual
         private void CreateNotificationButton(Transform parent)
         {
             notificationButton = UIHelper.CreateButton(parent, "[M]",
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
                 14, () => OnNotificationClicked?.Invoke());
             var btnRT = notificationButton.GetComponent<RectTransform>();
             btnRT.sizeDelta = new Vector2(44, 44);
@@ -293,7 +293,7 @@ namespace Sporefront.Visual
         private void CreateEllipsisButton(Transform parent)
         {
             ellipsisButton = UIHelper.CreateButton(parent, "...",
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
                 18, () =>
                 {
                     if (ellipsisDropdown != null)
@@ -314,12 +314,12 @@ namespace Sporefront.Visual
             rt.anchorMax = new Vector2(1, 1);
             rt.pivot = new Vector2(1, 1);
             rt.anchoredPosition = new Vector2(-8, -84);
-            rt.sizeDelta = new Vector2(160, 0);
+            rt.sizeDelta = new Vector2(180, 0);
 
             // Vertical layout
             var vlg = ellipsisDropdown.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(4, 4, 4, 4);
-            vlg.spacing = 2;
+            vlg.padding = new RectOffset(6, 6, 6, 6);
+            vlg.spacing = 4;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
 
@@ -328,36 +328,36 @@ namespace Sporefront.Visual
 
             // Combat Log button
             var combatLogBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Combat Log",
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
                 14, () =>
                 {
                     ellipsisDropdown.SetActive(false);
                     OnCombatLogClicked?.Invoke();
                 });
             var clLE = combatLogBtn.gameObject.AddComponent<LayoutElement>();
-            clLE.preferredHeight = 36;
+            clLE.preferredHeight = 38;
 
             // Settings button
             var settingsBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Settings",
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
                 14, () =>
                 {
                     ellipsisDropdown.SetActive(false);
                     OnSettingsClicked?.Invoke();
                 });
             var sLE = settingsBtn.gameObject.AddComponent<LayoutElement>();
-            sLE.preferredHeight = 36;
+            sLE.preferredHeight = 38;
 
             // Main Menu button
             var menuBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Main Menu",
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
                 14, () =>
                 {
                     ellipsisDropdown.SetActive(false);
                     OnMainMenuClicked?.Invoke();
                 });
             var mLE = menuBtn.gameObject.AddComponent<LayoutElement>();
-            mLE.preferredHeight = 36;
+            mLE.preferredHeight = 38;
 
             ellipsisDropdown.SetActive(false);
         }

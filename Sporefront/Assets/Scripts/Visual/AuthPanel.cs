@@ -106,13 +106,13 @@ namespace Sporefront.Visual
 
             // Title
             var title = UIHelper.CreateLabel(centerColumn.transform, "SPOREFRONT",
-                32, SporefrontColors.InkBlack, TextAnchor.MiddleCenter, true);
+                32, SporefrontColors.ParchmentLight, TextAnchor.MiddleCenter, true);
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 60f;
 
             // Subtitle
             var subtitle = UIHelper.CreateLabel(centerColumn.transform, "Sign in to play",
-                16, SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+                16, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var subtitleLE = subtitle.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 28f;
 
@@ -187,7 +187,7 @@ namespace Sporefront.Visual
 
             // Toggle button
             toggleButton = UIHelper.CreateButton(centerColumn.transform, "Don't have an account? Register",
-                Color.clear, SporefrontColors.InkMid, UIConstants.FontSmall, OnToggleClicked);
+                Color.clear, SporefrontColors.ParchmentShadow, UIConstants.FontSmall, OnToggleClicked);
             toggleLabel = toggleButton.GetComponentInChildren<Text>();
             var toggleLE = toggleButton.gameObject.AddComponent<LayoutElement>();
             toggleLE.preferredHeight = 30f;
@@ -252,7 +252,7 @@ namespace Sporefront.Visual
 
                 isProcessing = true;
                 submitButton.interactable = false;
-                ShowStatus("Creating account...", SporefrontColors.InkMid);
+                ShowStatus("Creating account...", SporefrontColors.ParchmentShadow);
 
                 AuthService.Instance.SignUp(email, password, (success, error) =>
                 {
@@ -273,7 +273,7 @@ namespace Sporefront.Visual
             {
                 isProcessing = true;
                 submitButton.interactable = false;
-                ShowStatus("Signing in...", SporefrontColors.InkMid);
+                ShowStatus("Signing in...", SporefrontColors.ParchmentShadow);
 
                 AuthService.Instance.SignIn(email, password, (success, error) =>
                 {
@@ -301,7 +301,7 @@ namespace Sporefront.Visual
                 return;
             }
 
-            ShowStatus("Sending reset email...", SporefrontColors.InkMid);
+            ShowStatus("Sending reset email...", SporefrontColors.ParchmentShadow);
             AuthService.Instance.SendPasswordReset(email, (success, error) =>
             {
                 if (success)
@@ -347,7 +347,7 @@ namespace Sporefront.Visual
             var input = inputBG.AddComponent<InputField>();
 
             var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
-                13, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var placeholderRT = placeholderText.GetComponent<RectTransform>();
             UIHelper.StretchFull(placeholderRT);
             placeholderRT.offsetMin = new Vector2(8, 0);

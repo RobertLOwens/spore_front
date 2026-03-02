@@ -84,7 +84,7 @@ namespace Sporefront.Visual
 
             // Capacity label
             capacityLabel = UIHelper.CreateLabel(panel.transform, "Pop: -/-",
-                12, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var capRT = capacityLabel.GetComponent<RectTransform>();
             capRT.anchorMin = new Vector2(0, 1);
             capRT.anchorMax = new Vector2(1, 1);
@@ -115,13 +115,13 @@ namespace Sporefront.Visual
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -190,7 +190,7 @@ namespace Sporefront.Visual
         private void SetFilterActive(Button btn, bool active)
         {
             var img = btn.GetComponent<Image>();
-            img.color = active ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark;
+            img.color = active ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface;
         }
 
         // ================================================================
@@ -267,7 +267,7 @@ namespace Sporefront.Visual
             if (entityCount == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No entities found.",
-                    UIHelper.DefaultBodyFontSize, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    UIHelper.DefaultBodyFontSize, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
             }
@@ -279,7 +279,7 @@ namespace Sporefront.Visual
 
         private void BuildVillagerRow(VillagerGroupData group)
         {
-            var card = UIHelper.CreatePanel(contentRT, "VillagerCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "VillagerCard", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 52;
             cardLE.flexibleWidth = 1;
@@ -296,14 +296,14 @@ namespace Sporefront.Visual
             var topRow = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
-                $"{group.name} x{group.villagerCount}", 12, UIHelper.HeaderTextColor);
+                $"{group.name} x{group.villagerCount}", UIConstants.FontCaption, UIHelper.HeaderTextColor);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
             nameLE.preferredHeight = 20;
 
             var locLabel = UIHelper.CreateLabel(topRow.transform,
-                $"({group.coordinate.q},{group.coordinate.r})", 11,
-                SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                $"({group.coordinate.q},{group.coordinate.r})", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.preferredWidth = 60;
             locLE.preferredHeight = 20;
@@ -311,15 +311,15 @@ namespace Sporefront.Visual
             // Row 2: Current task
             string taskName = group.currentTask != null ? group.currentTask.DisplayName : "Idle";
             Color taskColor = (group.currentTask != null && !group.currentTask.IsIdle)
-                ? SporefrontColors.SporeGreen : SporefrontColors.InkLight;
-            var taskLabel = UIHelper.CreateLabel(card.transform, $"Task: {taskName}", 11, taskColor);
+                ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow;
+            var taskLabel = UIHelper.CreateLabel(card.transform, $"Task: {taskName}", UIConstants.FontCaption, taskColor);
             var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
             taskLE.preferredHeight = 18;
 
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.BgCard);
 
             var capturedID = group.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, false));
@@ -331,7 +331,7 @@ namespace Sporefront.Visual
 
         private void BuildArmyRow(ArmyData army, GameState gameState)
         {
-            var card = UIHelper.CreatePanel(contentRT, "ArmyCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "ArmyCard", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 72;
             cardLE.flexibleWidth = 1;
@@ -349,15 +349,15 @@ namespace Sporefront.Visual
 
             string status = UIHelper.FormatArmyStatus(army);
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
-                $"{army.name}{status}", 12, UIHelper.HeaderTextColor);
+                $"{army.name}{status}", UIConstants.FontCaption, UIHelper.HeaderTextColor);
             nameLabel.supportRichText = true;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
             nameLE.preferredHeight = 20;
 
             var locLabel = UIHelper.CreateLabel(topRow.transform,
-                $"({army.coordinate.q},{army.coordinate.r})", 11,
-                SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                $"({army.coordinate.q},{army.coordinate.r})", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.preferredWidth = 60;
             locLE.preferredHeight = 20;
@@ -366,7 +366,7 @@ namespace Sporefront.Visual
             var midRow = UIHelper.CreateHorizontalRow(card.transform, 18f, 4f);
 
             var unitsLabel = UIHelper.CreateLabel(midRow.transform,
-                $"{army.GetTotalUnits()} units", 11, SporefrontColors.InkLight);
+                $"{army.GetTotalUnits()} units", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var unitsLE = unitsLabel.gameObject.AddComponent<LayoutElement>();
             unitsLE.preferredWidth = 60;
             unitsLE.preferredHeight = 18;
@@ -379,8 +379,8 @@ namespace Sporefront.Visual
                 if (commander != null)
                     commanderText = $"Cmdr: {commander.name} Lv.{commander.level}";
             }
-            var cmdLabel = UIHelper.CreateLabel(midRow.transform, commanderText, 10,
-                SporefrontColors.InkLight);
+            var cmdLabel = UIHelper.CreateLabel(midRow.transform, commanderText, UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow);
             var cmdLE = cmdLabel.gameObject.AddComponent<LayoutElement>();
             cmdLE.flexibleWidth = 1;
             cmdLE.preferredHeight = 18;
@@ -401,7 +401,7 @@ namespace Sporefront.Visual
             }
 
             var staminaLabel = UIHelper.CreateLabel(staminaRow.transform,
-                staminaText, 10, SporefrontColors.InkLight);
+                staminaText, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var staminaTextLE = staminaLabel.gameObject.AddComponent<LayoutElement>();
             staminaTextLE.preferredWidth = 100;
             staminaTextLE.preferredHeight = 16;
@@ -420,7 +420,7 @@ namespace Sporefront.Visual
             // Make tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.BgCard);
 
             var capturedID = army.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, true));
@@ -433,7 +433,7 @@ namespace Sporefront.Visual
         private Button CreateFilterButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, onClick);
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 70;
             le.preferredHeight = 28;

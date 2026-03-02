@@ -865,7 +865,7 @@ namespace Sporefront.Visual
             genomeSelection.OnClose += () => { mainMenu.Show(); };
 
             // ---- Arena Results ----
-            arenaResults.OnBack += () => { arenaResults.Hide(); gameSetup.Show(); };
+            arenaResults.OnBack += () => { arenaResults.Hide(); gameSetup.Show(returnToDetails: true); };
 
             // ---- Spectator ----
             spectatorOverlay.OnExit += () => { mainMenu.Show(); };

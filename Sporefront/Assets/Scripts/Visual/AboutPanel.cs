@@ -122,7 +122,7 @@ namespace Sporefront.Visual
 
             // Version
             var versionLabel = UIHelper.CreateLabel(panel.transform, "v0.1.0",
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var versionLE = versionLabel.gameObject.AddComponent<LayoutElement>();
             versionLE.preferredHeight = 20;
 

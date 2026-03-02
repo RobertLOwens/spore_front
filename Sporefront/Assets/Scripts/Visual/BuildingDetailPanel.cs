@@ -336,7 +336,7 @@ namespace Sporefront.Visual
                     int pctInt = Mathf.Clamp((int)(progress * 100), 0, 100);
 
                     var (bg, fill, pctLabel) = UIHelper.CreateProgressBarWithLabel(statusCard.transform, 16f,
-                        SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                        SporefrontColors.ParchmentShadow, SporefrontColors.SporeAmber);
                     pctLabel.text = $"{pctInt}%";
                     var fillRT = fill.GetComponent<RectTransform>();
                     fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)progress), 1);
@@ -358,7 +358,7 @@ namespace Sporefront.Visual
                     {
                         var etaLabel = UIHelper.CreateLabel(statusCard.transform,
                             $"~{UIHelper.FormatTime(remaining.Value)} remaining",
-                            UIConstants.FontSmall, SporefrontColors.InkLight);
+                            UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                         var etaLE = etaLabel.gameObject.AddComponent<LayoutElement>();
                         etaLE.preferredHeight = 18;
                     }
@@ -369,7 +369,7 @@ namespace Sporefront.Visual
                     {
                         var capturedID = building.id;
                         var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Upgrade (50% refund)",
-                            SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                            SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                             {
                                 OnCancelUpgradeRequested?.Invoke(capturedID);
                             });
@@ -384,7 +384,7 @@ namespace Sporefront.Visual
                 {
                     var capturedID = building.id;
                     var cancelBtn = UIHelper.CreateButton(statusCard.transform, "Cancel Demolish",
-                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                         {
                             OnCancelDemolishRequested?.Invoke(capturedID);
                         });
@@ -449,7 +449,7 @@ namespace Sporefront.Visual
                     var demolishCard = UIHelper.CreateSectionCard(contentRT, "DemolishCard");
                     var capturedID = building.id;
                     var demolishBtn = UIHelper.CreateButton(demolishCard.transform, "Demolish",
-                        SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, () =>
+                        SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                         {
                             OnDemolishRequested?.Invoke(capturedID);
                         });
@@ -473,12 +473,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(parent, 18f, 4f);
 
             hpLabel = UIHelper.CreateLabel(row.transform,
-                $"HP: {(int)building.health}/{(int)building.maxHealth}", 11);
+                $"HP: {(int)building.health}/{(int)building.maxHealth}", UIConstants.FontCaption);
             var labelLE = hpLabel.gameObject.AddComponent<LayoutElement>();
             labelLE.preferredWidth = 100;
 
             var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
             float pct = (float)(building.health / building.maxHealth);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
@@ -504,7 +504,7 @@ namespace Sporefront.Visual
             int nextLevel = building.level + 1;
 
             var infoLabel = UIHelper.CreateLabel(card.transform,
-                $"Lv.{building.level} -> Lv.{nextLevel}  Cost: {UIHelper.FormatCost(cost)}", 12,
+                $"Lv.{building.level} -> Lv.{nextLevel}  Cost: {UIHelper.FormatCost(cost)}", UIConstants.FontCaption,
                 canAfford ? UIHelper.BodyTextColor : SporefrontColors.SporeRed);
             infoLabel.supportRichText = true;
             var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
@@ -515,8 +515,8 @@ namespace Sporefront.Visual
             var capturedCoord = building.coordinate;
             var capturedLevel = building.level;
             var upgradeBtn = UIHelper.CreateButton(card.transform, "Upgrade",
-                canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
-                canAfford ? UIHelper.ButtonText : SporefrontColors.InkLight, 12, () =>
+                canAfford ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow,
+                canAfford ? UIHelper.ButtonText : SporefrontColors.ParchmentShadow, UIConstants.FontCaption, () =>
                 {
                     OnUpgradeRequested?.Invoke(capturedID, capturedType, capturedCoord, capturedLevel);
                 });
@@ -528,7 +528,7 @@ namespace Sporefront.Visual
             if (building.state == BuildingState.Upgrading)
             {
                 var (bg, fill) = UIHelper.CreateProgressBar(card.transform, 14f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                    SporefrontColors.ParchmentShadow, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -553,15 +553,15 @@ namespace Sporefront.Visual
                 ? $"Army Capacity: {count}/{capacity.Value}"
                 : $"Army Capacity: {count} (Unlimited)";
 
-            var capLabel = UIHelper.CreateLabel(card.transform, capacityText, 12, SporefrontColors.InkMid);
+            var capLabel = UIHelper.CreateLabel(card.transform, capacityText, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var capLE = capLabel.gameObject.AddComponent<LayoutElement>();
             capLE.preferredHeight = 20;
 
             var armies = gameState.GetArmiesForHomeBase(building.id);
             if (armies.Count == 0)
             {
-                var emptyLabel = UIHelper.CreateLabel(card.transform, "No armies based here", 11,
-                    SporefrontColors.InkFaded);
+                var emptyLabel = UIHelper.CreateLabel(card.transform, "No armies based here", UIConstants.FontCaption,
+                    SporefrontColors.ParchmentShadow);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 18;
             }
@@ -572,19 +572,19 @@ namespace Sporefront.Visual
                     var row = UIHelper.CreateHorizontalRow(card.transform, 20f, 4f);
 
                     var nameLabel = UIHelper.CreateLabel(row.transform,
-                        army.name ?? "Army", 12, SporefrontColors.InkDark);
+                        army.name ?? "Army", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                     var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                     nameLE.flexibleWidth = 1;
 
                     int totalUnits = army.GetTotalUnits();
                     var unitsLabel = UIHelper.CreateLabel(row.transform,
-                        $"{totalUnits} units", 11, SporefrontColors.InkLight);
+                        $"{totalUnits} units", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                     var unitsLE = unitsLabel.gameObject.AddComponent<LayoutElement>();
                     unitsLE.preferredWidth = 60;
 
                     var coordLabel = UIHelper.CreateLabel(row.transform,
-                        $"({army.coordinate.q},{army.coordinate.r})", 10,
-                        SporefrontColors.InkFaded);
+                        $"({army.coordinate.q},{army.coordinate.r})", UIConstants.FontCaption,
+                        SporefrontColors.ParchmentShadow);
                     var coordLE = coordLabel.gameObject.AddComponent<LayoutElement>();
                     coordLE.preferredWidth = 50;
                 }

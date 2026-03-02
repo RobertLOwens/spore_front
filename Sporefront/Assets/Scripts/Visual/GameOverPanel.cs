@@ -182,12 +182,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
 
             var nameLabel = UIHelper.CreateLabel(row.transform, label, 13,
-                SporefrontColors.InkMid, TextAnchor.MiddleLeft);
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
             var valueLabel = UIHelper.CreateLabel(row.transform, value, 13,
-                SporefrontColors.InkBlack, TextAnchor.MiddleRight);
+                SporefrontColors.ParchmentLight, TextAnchor.MiddleRight);
             valueLabel.fontStyle = FontStyle.Bold;
             var valueLE = valueLabel.gameObject.AddComponent<LayoutElement>();
             valueLE.preferredWidth = 120;

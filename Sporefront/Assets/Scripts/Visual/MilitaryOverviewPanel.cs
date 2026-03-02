@@ -76,18 +76,18 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 40);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = new Vector2(0, -36);
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -235,7 +235,7 @@ namespace Sporefront.Visual
 
         private void BuildSummaryCard(Dictionary<UnitCategory, int> categoryTotals, int totalUnits)
         {
-            var card = UIHelper.CreatePanel(contentRT, "SummaryCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "SummaryCard", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 80;
             cardLE.flexibleWidth = 1;
@@ -266,8 +266,8 @@ namespace Sporefront.Visual
 
         private void CreateCategoryStat(Transform parent, string label, int count)
         {
-            var text = UIHelper.CreateLabel(parent, $"{label}: {count}", 11,
-                count > 0 ? SporefrontColors.InkDark : SporefrontColors.InkFaded,
+            var text = UIHelper.CreateLabel(parent, $"{label}: {count}", UIConstants.FontCaption,
+                count > 0 ? SporefrontColors.ParchmentShadow : SporefrontColors.ParchmentShadow,
                 TextAnchor.MiddleCenter);
             var le = text.gameObject.AddComponent<LayoutElement>();
             le.flexibleWidth = 1;
@@ -281,9 +281,9 @@ namespace Sporefront.Visual
         private void BuildUnitTypeCard(MilitaryUnitType unitType, int count, PlayerState player)
         {
             var card = UIHelper.CreatePanel(contentRT, "UnitCard",
-                count > 0 ? SporefrontColors.ParchmentMid : new Color(
-                    SporefrontColors.ParchmentMid.r, SporefrontColors.ParchmentMid.g,
-                    SporefrontColors.ParchmentMid.b, 0.5f));
+                count > 0 ? SporefrontColors.BgCard : new Color(
+                    SporefrontColors.BgCard.r, SporefrontColors.BgCard.g,
+                    SporefrontColors.BgCard.b, 0.5f));
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 96;
             cardLE.flexibleWidth = 1;
@@ -306,7 +306,7 @@ namespace Sporefront.Visual
             nameLE.preferredHeight = 20;
 
             var countLabel = UIHelper.CreateLabel(topRow.transform,
-                $"x{count}", 13, count > 0 ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded,
+                $"x{count}", 13, count > 0 ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow,
                 TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 40;
@@ -357,7 +357,7 @@ namespace Sporefront.Visual
             var costRow = UIHelper.CreateHorizontalRow(card.transform, 16f, 4f);
             var cost = unitType.TrainingCost();
             var costLabel = UIHelper.CreateLabel(costRow.transform,
-                $"Cost: {UIHelper.FormatCost(cost)}", 10, SporefrontColors.InkLight);
+                $"Cost: {UIHelper.FormatCost(cost)}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             costLabel.supportRichText = true;
             var costLabelLE = costLabel.gameObject.AddComponent<LayoutElement>();
             costLabelLE.flexibleWidth = 1;
@@ -367,7 +367,7 @@ namespace Sporefront.Visual
             if (popSpace > 1)
             {
                 var popLabel = UIHelper.CreateLabel(costRow.transform,
-                    $"Pop: {popSpace}", 10, SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                    $"Pop: {popSpace}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
                 var popLE = popLabel.gameObject.AddComponent<LayoutElement>();
                 popLE.preferredWidth = 40;
                 popLE.preferredHeight = 16;
@@ -380,7 +380,7 @@ namespace Sporefront.Visual
 
         private void CreateStatLabel(Transform parent, string text)
         {
-            var label = UIHelper.CreateLabel(parent, text, 10, SporefrontColors.InkLight);
+            var label = UIHelper.CreateLabel(parent, text, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.flexibleWidth = 1;
             le.preferredHeight = 18;

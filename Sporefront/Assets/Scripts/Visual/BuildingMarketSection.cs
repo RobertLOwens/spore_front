@@ -39,8 +39,8 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
 
-            var rateLabel = UIHelper.CreateLabel(contentRT, "Exchange Rate: 80%", 11,
-                SporefrontColors.InkLight);
+            var rateLabel = UIHelper.CreateLabel(contentRT, "Exchange Rate: 80%", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow);
             var rateLE = rateLabel.gameObject.AddComponent<LayoutElement>();
             rateLE.preferredHeight = 18;
 
@@ -54,14 +54,14 @@ namespace Sporefront.Visual
                 var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
 
                 var nameLabel = UIHelper.CreateLabel(row.transform,
-                    $"{UIHelper.ResourceIcon(rt)} {rt}", 12);
+                    $"{UIHelper.ResourceIcon(rt)} {rt}", UIConstants.FontCaption);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.preferredWidth = 60;
 
                 var capturedRT = rt;
                 var capturedState = state;
-                var amountLabel = UIHelper.CreateLabel(row.transform, "0", 12,
-                    SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+                var amountLabel = UIHelper.CreateLabel(row.transform, "0", UIConstants.FontCaption,
+                    SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var amountLE = amountLabel.gameObject.AddComponent<LayoutElement>();
                 amountLE.preferredWidth = 30;
 
@@ -79,20 +79,20 @@ namespace Sporefront.Visual
                 }
                 else
                 {
-                    var emptyLabel = UIHelper.CreateLabel(row.transform, "(none)", 11,
-                        SporefrontColors.InkFaded);
+                    var emptyLabel = UIHelper.CreateLabel(row.transform, "(none)", UIConstants.FontCaption,
+                        SporefrontColors.ParchmentShadow);
                     var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                     emptyLE.flexibleWidth = 1;
                 }
 
-                var maxLabel = UIHelper.CreateLabel(row.transform, $"/{available}", 10,
-                    SporefrontColors.InkFaded);
+                var maxLabel = UIHelper.CreateLabel(row.transform, $"/{available}", UIConstants.FontCaption,
+                    SporefrontColors.ParchmentShadow);
                 var maxLE = maxLabel.gameObject.AddComponent<LayoutElement>();
                 maxLE.preferredWidth = 40;
             }
 
             // Output type selection
-            var outputHeader = UIHelper.CreateLabel(contentRT, "Receive:", 12,
+            var outputHeader = UIHelper.CreateLabel(contentRT, "Receive:", UIConstants.FontCaption,
                 UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
             var outputHeaderLE = outputHeader.gameObject.AddComponent<LayoutElement>();
             outputHeaderLE.preferredHeight = 22;
@@ -104,8 +104,8 @@ namespace Sporefront.Visual
                 bool isSelected = (rt == state.tradeOutputType);
                 var btn = UIHelper.CreateButton(outputRow.transform,
                     UIHelper.ResourceIcon(rt),
-                    isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
-                    isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText, 12, () =>
+                    isSelected ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface,
+                    isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText, UIConstants.FontCaption, () =>
                     {
                         state.tradeOutputType = capturedOutputRT;
                         rebuildPanel?.Invoke();
@@ -116,8 +116,8 @@ namespace Sporefront.Visual
             }
 
             // Preview
-            state.tradePreviewLabel = UIHelper.CreateLabel(contentRT, "Select resources to trade", 12,
-                SporefrontColors.InkMid, TextAnchor.MiddleCenter);
+            state.tradePreviewLabel = UIHelper.CreateLabel(contentRT, "Select resources to trade", UIConstants.FontCaption,
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var previewLE = state.tradePreviewLabel.gameObject.AddComponent<LayoutElement>();
             previewLE.preferredHeight = 22;
             UpdatePreview(state);
@@ -127,7 +127,7 @@ namespace Sporefront.Visual
             var capturedLocalPlayerID = localPlayerID;
             var capturedState2 = state;
             var tradeBtn = UIHelper.CreateButton(contentRT, "Execute Trade",
-                SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                 {
                     if (!capturedBuildingID.HasValue) return;
                     var inputs = new Dictionary<ResourceType, int>();

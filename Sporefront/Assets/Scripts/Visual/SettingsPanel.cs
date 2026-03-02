@@ -66,7 +66,7 @@ namespace Sporefront.Visual
 
             // Header bar
             var headerBar = UIHelper.CreatePanel(panel.transform, "HeaderBar",
-                SporefrontColors.ParchmentDark);
+                SporefrontColors.BgSection);
             var headerBarRT = headerBar.GetComponent<RectTransform>();
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
@@ -261,7 +261,7 @@ namespace Sporefront.Visual
                 string email = AuthService.Instance.CurrentEmail ?? "—";
                 var signedInLabel = UIHelper.CreateLabel(contentRT,
                     $"Signed in as {displayName} ({email})",
-                    UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                    UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
                 var siLE = signedInLabel.gameObject.AddComponent<LayoutElement>();
                 siLE.preferredHeight = 22;
 
@@ -347,14 +347,14 @@ namespace Sporefront.Visual
             titleLE.preferredHeight = 20;
 
             var subtitleLabel = UIHelper.CreateLabel(textCol.transform, subtitle, UIConstants.FontCaption,
-                SporefrontColors.InkLight);
+                SporefrontColors.ParchmentShadow);
             var subtitleLE = subtitleLabel.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 16;
 
             // Toggle button
-            Color toggleBg = isOn ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded;
+            Color toggleBg = isOn ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow;
             string toggleText = isOn ? "ON" : "OFF";
-            Color toggleTextColor = isOn ? UIHelper.HudTextColor : SporefrontColors.InkLight;
+            Color toggleTextColor = isOn ? UIHelper.HudTextColor : SporefrontColors.ParchmentShadow;
 
             var toggleBtn = UIHelper.CreateButton(row.transform, toggleText,
                 toggleBg, toggleTextColor, UIConstants.FontSmall, () =>

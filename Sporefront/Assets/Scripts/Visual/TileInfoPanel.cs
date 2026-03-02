@@ -128,7 +128,7 @@ namespace Sporefront.Visual
             headerLabelLE.flexibleWidth = 1;
 
             var closeBtn = UIHelper.CreateButton(headerBar.transform, "X",
-                SporefrontColors.InkMid, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
+                SporefrontColors.BgSurface, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
             var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeBtnLE.preferredWidth = 28;
             closeBtnLE.preferredHeight = 28;
@@ -281,7 +281,7 @@ namespace Sporefront.Visual
             if (building == null && gameState.CanBuildAt(coord, localPlayerID))
             {
                 var buildBtn = UIHelper.CreateButton(contentRT, "Build Here",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnBuildRequested?.Invoke(coord));
                 var btnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 38;
@@ -289,7 +289,7 @@ namespace Sporefront.Visual
 
             // 7. "Move Here" — destination-first move flow
             var moveHereBtn = UIHelper.CreateButton(contentRT, "Move Here",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 () => { showingMoveSelection = true; Rebuild(cachedGameState); });
             var moveHereBtnLE = moveHereBtn.gameObject.AddComponent<LayoutElement>();
             moveHereBtnLE.preferredHeight = 38;
@@ -455,7 +455,7 @@ namespace Sporefront.Visual
             if (building.maxHealth > 0)
             {
                 var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+                    SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
                 float hpPct = (float)(building.health / building.maxHealth);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
@@ -468,7 +468,7 @@ namespace Sporefront.Visual
             if (isOwned && building.IsOperational)
             {
                 var detailBtn = UIHelper.CreateButton(contentRT, "Details",
-                    SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnBuildingDetailRequested?.Invoke(building.id));
                 var btnLE = detailBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 34;
@@ -514,8 +514,8 @@ namespace Sporefront.Visual
                 var capturedBuildingID = building.id;
                 var upgradeBtn = UIHelper.CreateButton(contentRT,
                     $"Upgrade to Lv.{nextLevel} ({UIHelper.FormatCost(cost)})",
-                    canAfford ? SporefrontColors.SporeAmber : SporefrontColors.InkFaded,
-                    canAfford ? UIHelper.ButtonText : SporefrontColors.InkLight,
+                    canAfford ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow,
+                    canAfford ? UIHelper.ButtonText : SporefrontColors.ParchmentShadow,
                     UIConstants.FontBody,
                     () => OnUpgradeBuildingRequested?.Invoke(capturedBuildingID));
                 upgradeBtn.interactable = canAfford;
@@ -558,7 +558,7 @@ namespace Sporefront.Visual
                     double remaining = buildTime - elapsed;
 
                     var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
-                        SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                        SporefrontColors.ParchmentShadow, SporefrontColors.SporeAmber);
                     var fillRT = fill.GetComponent<RectTransform>();
                     fillRT.anchorMax = new Vector2(progress, 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -714,7 +714,7 @@ namespace Sporefront.Visual
                     var capturedGroupID = group.id;
 
                     var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                        SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                        SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                         () => OnMoveRequested?.Invoke(capturedGroupID, coord));
                     var moveBtnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
                     moveBtnLE.preferredWidth = 50;
@@ -724,7 +724,7 @@ namespace Sporefront.Visual
                     if (group.currentTask != null && !group.currentTask.IsIdle)
                     {
                         var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
-                            SporefrontColors.InkMid, UIHelper.HudTextColor, UIConstants.FontBody,
+                            SporefrontColors.BgSurface, UIHelper.HudTextColor, UIConstants.FontBody,
                             () =>
                             {
                                 var cmd = new StopGatheringCommand(localPlayerID, capturedGroupID);
@@ -783,7 +783,7 @@ namespace Sporefront.Visual
                         ? "Lumber Camp"
                         : "Mining Camp";
                     var needsLabel = UIHelper.CreateLabel(contentRT,
-                        $"Needs {campName}", UIConstants.FontBody, SporefrontColors.InkFaded,
+                        $"Needs {campName}", UIConstants.FontBody, SporefrontColors.ParchmentShadow,
                         TextAnchor.MiddleLeft);
                     var needsLE = needsLabel.gameObject.AddComponent<LayoutElement>();
                     needsLE.preferredHeight = 26;
@@ -826,7 +826,7 @@ namespace Sporefront.Visual
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 () => { showingMoveSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
@@ -920,7 +920,7 @@ namespace Sporefront.Visual
                     nameLE.flexibleWidth = 1;
 
                     var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                        $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.InkLight);
+                        $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                     var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                     distLE.preferredWidth = 55;
 
@@ -928,12 +928,12 @@ namespace Sporefront.Visual
                     var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
                     var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                         taskDesc, UIConstants.FontCaption,
-                        isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+                        isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
                     var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                     taskLE.flexibleWidth = 1;
 
                     var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                        walkTimeStr, UIConstants.FontCaption, SporefrontColors.InkLight);
+                        walkTimeStr, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
                     var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
                     walkLE.preferredWidth = 55;
 
@@ -956,7 +956,7 @@ namespace Sporefront.Visual
                     }
 
                     var capturedID = group.id;
-                    Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark;
+                    Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface;
                     Color btnTextColor = isBusy ? UIHelper.HudTextColor : UIHelper.ButtonText;
                     var selectBtn = UIHelper.CreateButton(actionRow.transform,
                         isSelected ? "Selected" : "Select",
@@ -1037,7 +1037,7 @@ namespace Sporefront.Visual
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 () => { showingAttackSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
@@ -1167,7 +1167,7 @@ namespace Sporefront.Visual
             nameLE.flexibleWidth = 1;
 
             var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.InkLight);
+                $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
             distLE.preferredWidth = 55;
 
@@ -1175,12 +1175,12 @@ namespace Sporefront.Visual
             var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
             var statusLabel = UIHelper.CreateLabel(infoRow.transform,
                 status, UIConstants.FontCaption,
-                isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+                isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.flexibleWidth = 1;
 
             var timeLabel = UIHelper.CreateLabel(infoRow.transform,
-                travelTimeStr, UIConstants.FontCaption, SporefrontColors.InkLight);
+                travelTimeStr, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 55;
 
@@ -1204,7 +1204,7 @@ namespace Sporefront.Visual
 
             var capturedID = army.id;
             Color btnColor = isAttack ? SporefrontColors.SporeRed
-                : (isEntrenched ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark);
+                : (isEntrenched ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface);
             Color btnTextColor = isAttack || isEntrenched ? UIHelper.HudTextColor : UIHelper.ButtonText;
             var selectBtn = UIHelper.CreateButton(actionRow.transform,
                 isSelected ? "Selected" : "Select",
@@ -1281,7 +1281,7 @@ namespace Sporefront.Visual
 
             // Cancel button
             var cancelBtn = UIHelper.CreateButton(contentRT, "Cancel",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 () =>
                 {
                     showingEntrenchConfirm = false;
@@ -1298,7 +1298,7 @@ namespace Sporefront.Visual
         private Button CreateActionButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                SporefrontColors.InkMid, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
+                SporefrontColors.BgSurface, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 56;
             le.preferredHeight = 34;

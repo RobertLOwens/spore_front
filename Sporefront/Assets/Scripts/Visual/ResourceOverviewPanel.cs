@@ -77,18 +77,18 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 40);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = new Vector2(0, -36);
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -172,7 +172,7 @@ namespace Sporefront.Visual
         private void BuildResourceCard(ResourceType resType, GameState gameState,
             PlayerState player, GameState.FoodConsumptionInfo foodInfo)
         {
-            var card = UIHelper.CreatePanel(contentRT, $"{resType}Card", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, $"{resType}Card", SporefrontColors.BgCard);
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.flexibleWidth = 1;
 
@@ -209,7 +209,7 @@ namespace Sporefront.Visual
             Color barColor = storagePct > 0.9f ? SporefrontColors.SporeRed :
                 storagePct > 0.7f ? SporefrontColors.SporeAmber : SporefrontColors.SporeGreen;
             var (bg, fill) = UIHelper.CreateProgressBar(card.transform, 10f,
-                SporefrontColors.InkFaded, barColor);
+                SporefrontColors.ParchmentShadow, barColor);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(storagePct, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -223,7 +223,7 @@ namespace Sporefront.Visual
                 rate -= foodInfo.adjustedRate;
             string rateSign = rate >= 0 ? "+" : "";
             Color rateColor = rate > 0.01 ? SporefrontColors.SporeGreen :
-                rate < -0.01 ? SporefrontColors.SporeRed : SporefrontColors.InkLight;
+                rate < -0.01 ? SporefrontColors.SporeRed : SporefrontColors.ParchmentShadow;
 
             var rateLabel = UIHelper.CreateLabel(rateRow.transform,
                 $"Rate: {rateSign}{rate:F2}/s", 12, rateColor);
@@ -250,7 +250,7 @@ namespace Sporefront.Visual
                 {
                     var upkeepLabel = UIHelper.CreateLabel(card.transform,
                         $"Farm wood upkeep: {farmCount} farm(s) active", 10,
-                        SporefrontColors.InkLight);
+                        SporefrontColors.ParchmentShadow);
                     var upkeepLE = upkeepLabel.gameObject.AddComponent<LayoutElement>();
                     upkeepLE.preferredHeight = 16;
                 }
@@ -281,7 +281,7 @@ namespace Sporefront.Visual
             else
             {
                 var noGatherLabel = UIHelper.CreateLabel(card.transform,
-                    "No villagers assigned", 11, SporefrontColors.InkFaded);
+                    "No villagers assigned", 11, SporefrontColors.ParchmentShadow);
                 var noGatherLE = noGatherLabel.gameObject.AddComponent<LayoutElement>();
                 noGatherLE.preferredHeight = 18;
             }

@@ -156,7 +156,7 @@ namespace Sporefront.Visual
             int available = building.villagerGarrison;
             var availLabel = UIHelper.CreateLabel(contentRT,
                 $"Available: {available} villagers", 12,
-                SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var availLE = availLabel.gameObject.AddComponent<LayoutElement>();
             availLE.preferredHeight = 20;
 
@@ -190,7 +190,7 @@ namespace Sporefront.Visual
             var tabRow = UIHelper.CreateHorizontalRow(contentRT, 32f, 4f);
 
             var deployTabBtn = UIHelper.CreateButton(tabRow.transform, "Deploy New",
-                currentTab == TabMode.DeployNew ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
+                currentTab == TabMode.DeployNew ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface,
                 currentTab == TabMode.DeployNew ? UIHelper.HudTextColor : UIHelper.ButtonText, 12, () =>
                 {
                     currentTab = TabMode.DeployNew;
@@ -202,7 +202,7 @@ namespace Sporefront.Visual
             deployTabLE.preferredHeight = 32;
 
             var joinTabBtn = UIHelper.CreateButton(tabRow.transform, "Join Existing",
-                currentTab == TabMode.JoinExisting ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
+                currentTab == TabMode.JoinExisting ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface,
                 currentTab == TabMode.JoinExisting ? UIHelper.HudTextColor : UIHelper.ButtonText, 12, () =>
                 {
                     currentTab = TabMode.JoinExisting;
@@ -224,7 +224,7 @@ namespace Sporefront.Visual
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
                     "No villagers available to deploy", 12,
-                    SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -290,7 +290,7 @@ namespace Sporefront.Visual
             if (groups == null || groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No villager groups available", 12, SporefrontColors.InkFaded);
+                    "  No villager groups available", 12, SporefrontColors.ParchmentShadow);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 20;
                 return;
@@ -327,14 +327,14 @@ namespace Sporefront.Visual
                 nameLE.flexibleWidth = 1;
 
                 var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{distance} tiles", 11, SporefrontColors.InkLight);
+                    $"{distance} tiles", 11, SporefrontColors.ParchmentShadow);
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                 distLE.preferredWidth = 55;
 
                 // Task + actions
                 var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
                 var taskLabel = UIHelper.CreateLabel(actionRow.transform,
-                    taskDesc, 11, SporefrontColors.InkLight);
+                    taskDesc, 11, SporefrontColors.ParchmentShadow);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
@@ -382,7 +382,7 @@ namespace Sporefront.Visual
 
             // Back button
             var backBtn = UIHelper.CreateButton(contentRT, "Back",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, () =>
+                SporefrontColors.BgSurface, UIHelper.ButtonText, 11, () =>
                 {
                     showMergePanel = false;
                     Rebuild(GameEngine.Instance.GetGameState());
@@ -395,7 +395,7 @@ namespace Sporefront.Visual
             if (!mergeGroupA.HasValue)
             {
                 var infoLabel = UIHelper.CreateLabel(contentRT,
-                    "Select a group to merge", 12, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    "Select a group to merge", 12, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                 var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
                 infoLE.preferredHeight = 30;
                 return;

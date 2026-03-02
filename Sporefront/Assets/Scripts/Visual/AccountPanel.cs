@@ -71,7 +71,7 @@ namespace Sporefront.Visual
 
             // Header bar
             var headerBar = UIHelper.CreatePanel(panel.transform, "HeaderBar",
-                SporefrontColors.ParchmentDark);
+                SporefrontColors.BgSection);
             var headerBarRT = headerBar.GetComponent<RectTransform>();
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
@@ -261,7 +261,7 @@ namespace Sporefront.Visual
             nameInput.onValueChanged.AddListener((_) => { nameCheckTimer = 0f; });
 
             nameAvailabilityLabel = UIHelper.CreateLabel(card.transform, "",
-                UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var availLE = nameAvailabilityLabel.gameObject.AddComponent<LayoutElement>();
             availLE.preferredHeight = 18f;
 
@@ -292,7 +292,7 @@ namespace Sporefront.Visual
                     }
 
                     nameAvailabilityLabel.text = "Saving...";
-                    nameAvailabilityLabel.color = SporefrontColors.InkMid;
+                    nameAvailabilityLabel.color = SporefrontColors.ParchmentShadow;
 
                     AuthService.Instance.ChangeUsername(newName, (success, error) =>
                     {
@@ -330,7 +330,7 @@ namespace Sporefront.Visual
             if (nameAvailabilityLabel != null)
             {
                 nameAvailabilityLabel.text = "Checking...";
-                nameAvailabilityLabel.color = SporefrontColors.InkLight;
+                nameAvailabilityLabel.color = SporefrontColors.ParchmentShadow;
             }
 
             AuthService.Instance.CheckUsernameAvailability(name, (available) =>
@@ -398,7 +398,7 @@ namespace Sporefront.Visual
                     }
 
                     statusLabel.text = "Updating...";
-                    statusLabel.color = SporefrontColors.InkMid;
+                    statusLabel.color = SporefrontColors.ParchmentShadow;
 
                     AuthService.Instance.ChangePassword(currentPw, newPw, (success, error) =>
                     {
@@ -459,7 +459,7 @@ namespace Sporefront.Visual
                     }
 
                     statusLabel.text = "Deleting account...";
-                    statusLabel.color = SporefrontColors.InkMid;
+                    statusLabel.color = SporefrontColors.ParchmentShadow;
 
                     AuthService.Instance.DeleteAccount(password, (success, error) =>
                     {
@@ -484,7 +484,7 @@ namespace Sporefront.Visual
         private void BuildStatsSection()
         {
             var loadingLabel = UIHelper.CreateLabel(contentRT, "Loading stats...",
-                UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var loadingLE = loadingLabel.gameObject.AddComponent<LayoutElement>();
             loadingLE.preferredHeight = 24f;
 
@@ -514,7 +514,7 @@ namespace Sporefront.Visual
         private void BuildRecentGamesSection()
         {
             var loadingLabel = UIHelper.CreateLabel(contentRT, "Loading history...",
-                UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
             var loadingLE = loadingLabel.gameObject.AddComponent<LayoutElement>();
             loadingLE.preferredHeight = 24f;
 
@@ -529,7 +529,7 @@ namespace Sporefront.Visual
                 if (entries.Count == 0)
                 {
                     var noGames = UIHelper.CreateLabel(contentRT, "No games yet.",
-                        UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                        UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
                     var noLE = noGames.gameObject.AddComponent<LayoutElement>();
                     noLE.preferredHeight = 24f;
                     return;
@@ -576,7 +576,7 @@ namespace Sporefront.Visual
             labelLE.flexibleWidth = 1;
 
             var valueText = UIHelper.CreateLabel(row.transform, value,
-                UIConstants.FontSmall, SporefrontColors.InkDark, TextAnchor.MiddleRight);
+                UIConstants.FontSmall, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var valueLE = valueText.gameObject.AddComponent<LayoutElement>();
             valueLE.preferredWidth = 200;
         }
@@ -591,7 +591,7 @@ namespace Sporefront.Visual
             labelLE.flexibleWidth = 1;
 
             var valueText = UIHelper.CreateLabel(row.transform, value,
-                UIConstants.FontCaption, SporefrontColors.InkDark, TextAnchor.MiddleRight);
+                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
             var valueLE = valueText.gameObject.AddComponent<LayoutElement>();
             valueLE.preferredWidth = 120;
         }
@@ -605,7 +605,7 @@ namespace Sporefront.Visual
             var input = inputBG.AddComponent<InputField>();
 
             var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
-                13, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
             var placeholderRT = placeholderText.GetComponent<RectTransform>();
             UIHelper.StretchFull(placeholderRT);
             placeholderRT.offsetMin = new Vector2(8, 0);

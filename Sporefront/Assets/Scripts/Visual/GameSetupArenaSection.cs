@@ -107,7 +107,7 @@ namespace Sporefront.Visual
                     bool isSelected = preset == selectedPreset;
 
                     var btn = UIHelper.CreateButton(row.transform, preset.DisplayName(),
-                        isSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
+                        isSelected ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface,
                         isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
                         UIConstants.FontCaption, null);
                     var btnLE = btn.gameObject.AddComponent<LayoutElement>();
@@ -154,7 +154,7 @@ namespace Sporefront.Visual
                 var btn = UIHelper.CreateButton(row.transform, terrain.DisplayName(),
                     isSelected ? SporefrontColors.SporeAmber : UIHelper.ButtonBg,
                     isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
-                    12, () =>
+                    UIConstants.FontCaption, () =>
                     {
                         arenaScenario.enemyTerrain = terrains[idx];
                         selectedPreset = ArenaPreset.Custom;
@@ -191,7 +191,7 @@ namespace Sporefront.Visual
                 var btn = UIHelper.CreateButton(row.transform, names[i],
                     isSelected ? SporefrontColors.SporeAmber : UIHelper.ButtonBg,
                     isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
-                    12, () =>
+                    UIConstants.FontCaption, () =>
                     {
                         arenaScenario.enemyBuilding = options[idx];
                         selectedPreset = ArenaPreset.Custom;
@@ -227,7 +227,7 @@ namespace Sporefront.Visual
                 var btn = UIHelper.CreateButton(row.transform, names[i],
                     isSelected ? SporefrontColors.SporeAmber : UIHelper.ButtonBg,
                     isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
-                    12, () =>
+                    UIConstants.FontCaption, () =>
                     {
                         arenaScenario.enemyEntrenched = idx == 1;
                         selectedPreset = ArenaPreset.Custom;
@@ -266,7 +266,7 @@ namespace Sporefront.Visual
                 var btn = UIHelper.CreateButton(row.transform, names[i],
                     isSelected ? SporefrontColors.SporeAmber : UIHelper.ButtonBg,
                     isSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
-                    12, () =>
+                    UIConstants.FontCaption, () =>
                     {
                         if (idx == 0) { arenaScenario.enemyArmyCount = 1; arenaScenario.playerArmyCount = 1; }
                         else if (idx == 1) { arenaScenario.enemyArmyCount = 2; arenaScenario.playerArmyCount = 2; }
@@ -283,7 +283,7 @@ namespace Sporefront.Visual
             {
                 var countRow = UIHelper.CreateHorizontalRow(parent, 28f, 4f);
                 var countLabel = UIHelper.CreateLabel(countRow.transform,
-                    $"Army Count: {Mathf.Abs(arenaScenario.enemyArmyCount)}", 12);
+                    $"Army Count: {Mathf.Abs(arenaScenario.enemyArmyCount)}", UIConstants.FontCaption);
                 var countLabelLE = countLabel.gameObject.AddComponent<LayoutElement>();
                 countLabelLE.preferredWidth = 120;
 
@@ -323,12 +323,12 @@ namespace Sporefront.Visual
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
             labelLE.preferredHeight = 24;
 
-            var playerLabel = UIHelper.CreateLabel(parent, "Player Commander", 12, SporefrontColors.InkMid);
+            var playerLabel = UIHelper.CreateLabel(parent, "Player Commander", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var playerLabelLE = playerLabel.gameObject.AddComponent<LayoutElement>();
             playerLabelLE.preferredHeight = 20;
             BuildCommanderPicker(parent, true);
 
-            var enemyLabel = UIHelper.CreateLabel(parent, "Enemy Commander", 12, SporefrontColors.InkMid);
+            var enemyLabel = UIHelper.CreateLabel(parent, "Enemy Commander", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
             var enemyLabelLE = enemyLabel.gameObject.AddComponent<LayoutElement>();
             enemyLabelLE.preferredHeight = 20;
             BuildCommanderPicker(parent, false);
@@ -378,7 +378,7 @@ namespace Sporefront.Visual
         private void BuildCommanderLevelSection(Transform parent)
         {
             var row = UIHelper.CreateHorizontalRow(parent, 28f, 4f);
-            var label = UIHelper.CreateLabel(row.transform, "Commander Level", 12);
+            var label = UIHelper.CreateLabel(row.transform, "Commander Level", UIConstants.FontCaption);
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
             labelLE.preferredWidth = 120;
 
@@ -422,7 +422,7 @@ namespace Sporefront.Visual
             {
                 var row = UIHelper.CreateHorizontalRow(parent, 28f, 4f);
 
-                var nameLabel = UIHelper.CreateLabel(row.transform, unitType.DisplayName(), 12);
+                var nameLabel = UIHelper.CreateLabel(row.transform, unitType.DisplayName(), UIConstants.FontCaption);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.preferredWidth = 100;
 
@@ -436,7 +436,7 @@ namespace Sporefront.Visual
                 sliderLE.flexibleWidth = 1;
                 sliderLE.preferredHeight = 20;
 
-                var countLabel = UIHelper.CreateLabel(row.transform, currentCount.ToString(), 12,
+                var countLabel = UIHelper.CreateLabel(row.transform, currentCount.ToString(), UIConstants.FontCaption,
                     UIHelper.BodyTextColor, TextAnchor.MiddleRight);
                 var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
                 countLE.preferredWidth = 30;
@@ -463,7 +463,7 @@ namespace Sporefront.Visual
                     bool isTierSelected = currentTier == tier;
 
                     var tierBtn = UIHelper.CreateButton(row.transform, tier.ToString(),
-                        isTierSelected ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark,
+                        isTierSelected ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface,
                         isTierSelected ? UIHelper.HudTextColor : UIHelper.ButtonText,
                         UIConstants.FontCaption, () =>
                         {
@@ -500,7 +500,7 @@ namespace Sporefront.Visual
             sliderLE.preferredHeight = 20;
 
             var countLabel = UIHelper.CreateLabel(row.transform,
-                arenaScenario.garrisonArchers.ToString(), 12,
+                arenaScenario.garrisonArchers.ToString(), UIConstants.FontCaption,
                 UIHelper.BodyTextColor, TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 30;
@@ -532,7 +532,7 @@ namespace Sporefront.Visual
             sliderLE.flexibleWidth = 1;
             sliderLE.preferredHeight = 20;
 
-            simRunLabel = UIHelper.CreateLabel(row.transform, simRunCount.ToString(), 12,
+            simRunLabel = UIHelper.CreateLabel(row.transform, simRunCount.ToString(), UIConstants.FontCaption,
                 UIHelper.BodyTextColor, TextAnchor.MiddleRight);
             var countLE = simRunLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 30;
@@ -588,9 +588,8 @@ namespace Sporefront.Visual
 
         private void UpdateArenaSectionVisibility()
         {
-            bool isArena = selectedMapType == MapType.Arena;
-            if (mapSelectionSection != null) mapSelectionSection.SetActive(!isArena);
-            if (standardSettingsSection != null) standardSettingsSection.SetActive(!isArena);
+            bool isArena = isArenaMode;
+            if (oneVsOneSection != null) oneVsOneSection.SetActive(!isArena);
             if (arenaSection != null) arenaSection.SetActive(isArena);
         }
     }

@@ -44,13 +44,13 @@ namespace Sporefront.Visual
             rt.anchorMax = new Vector2(1, 0);
             rt.pivot = new Vector2(0.5f, 0f);
             rt.offsetMin = new Vector2(0, 0);
-            rt.offsetMax = new Vector2(0, 48);
+            rt.offsetMax = new Vector2(0, 56);
 
             // Horizontal layout
-            var row = UIHelper.CreateHorizontalRow(panel.transform, 48f, 4f);
+            var row = UIHelper.CreateHorizontalRow(panel.transform, 56f, 8f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
-            row.padding = new RectOffset(8, 8, 4, 4);
+            row.padding = new RectOffset(12, 12, 6, 6);
             row.childAlignment = TextAnchor.MiddleCenter;
 
             // Navigation buttons (equal width via flexibleWidth)
@@ -89,11 +89,11 @@ namespace Sporefront.Visual
         private Button CreateNavButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
-                12, onClick);
+                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid,
+                UIConstants.FontCaption, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.flexibleWidth = 1;
-            le.preferredHeight = 40;
+            le.preferredHeight = 44;
             return btn;
         }
     }

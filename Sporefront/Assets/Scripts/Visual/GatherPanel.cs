@@ -87,7 +87,7 @@ namespace Sporefront.Visual
 
             // Close button at bottom
             var closeBtn = UIHelper.CreateButton(modalPanel.transform, "Close",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
                 Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
@@ -198,7 +198,7 @@ namespace Sporefront.Visual
                 ? (float)rp.remainingAmount / rp.resourceType.InitialAmount()
                 : 0f;
             var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+                SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -207,7 +207,7 @@ namespace Sporefront.Visual
             // Current gatherers
             var gatherersLabel = UIHelper.CreateLabel(contentRT,
                 $"  Gatherers: {rp.totalVillagersGathering}/{ResourcePointData.MaxVillagersPerTile}", UIConstants.FontSmall,
-                SporefrontColors.InkLight);
+                SporefrontColors.ParchmentShadow);
             var gatherersLE = gatherersLabel.gameObject.AddComponent<LayoutElement>();
             gatherersLE.preferredHeight = 24;
 
@@ -223,7 +223,7 @@ namespace Sporefront.Visual
                     ? (float)(rp.currentHealth / rp.resourceType.MaxHealth())
                     : 0f;
                 var (hpBg, hpFill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeRed);
+                    SporefrontColors.ParchmentShadow, SporefrontColors.SporeRed);
                 var hpFillRT = hpFill.GetComponent<RectTransform>();
                 hpFillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
                 var hpBarLE = hpBg.gameObject.AddComponent<LayoutElement>();
@@ -258,7 +258,7 @@ namespace Sporefront.Visual
             if (groups == null || groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.InkFaded);
+                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 24;
                 return;
@@ -305,7 +305,7 @@ namespace Sporefront.Visual
                 nameLE.flexibleWidth = 1;
 
                 var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.InkLight);
+                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                 distLE.preferredWidth = 70;
 
@@ -313,12 +313,12 @@ namespace Sporefront.Visual
                 var infoRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
                 var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                     taskDesc, UIConstants.FontSmall,
-                    isBusy ? SporefrontColors.SporeAmber : SporefrontColors.InkLight);
+                    isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
                 var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.InkLight);
+                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
                 var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
                 walkLE.preferredWidth = 70;
 
