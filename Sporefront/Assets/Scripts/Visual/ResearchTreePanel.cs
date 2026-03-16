@@ -193,7 +193,7 @@ namespace Sporefront.Visual
             detailVLG.childForceExpandWidth = true;
             detailVLG.childForceExpandHeight = false;
             detailVLG.childControlWidth = true;
-            detailVLG.childControlHeight = false;
+            detailVLG.childControlHeight = true;
 
             // Ink-styled close annotation
             var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
@@ -510,15 +510,16 @@ namespace Sporefront.Visual
             var headerRow = UIHelper.CreateHorizontalRow(cardVLG.transform, BranchHeaderH, 8f);
             headerRow.childForceExpandWidth = false;
             headerRow.childForceExpandHeight = true;
-            headerRow.childControlWidth = false;
+            headerRow.childControlWidth = true;
             headerRow.childControlHeight = true;
 
             // Branch name — large category title
             var branchName = UIHelper.CreateLabel(headerRow.transform, branch.DisplayName(),
                 UIConstants.FontTitle + 10, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             branchName.fontStyle = FontStyle.BoldAndItalic;
+            branchName.horizontalOverflow = HorizontalWrapMode.Overflow;
             var bnLE = branchName.gameObject.AddComponent<LayoutElement>();
-            bnLE.preferredWidth = 200;
+            bnLE.flexibleWidth = 1f;
             bnLE.preferredHeight = BranchHeaderH;
 
             // Progress count
