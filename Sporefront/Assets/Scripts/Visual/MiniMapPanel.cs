@@ -75,16 +75,16 @@ namespace Sporefront.Visual
 
             // --- Root panel (border/background) ---
             root = UIHelper.CreatePanel(canvasTransform, "MiniMap",
-                UIHelper.PanelBg, UIHelper.SmallCornerRadius);
+                UIHelper.PanelParchmentBg, UIHelper.SmallCornerRadius);
             var rootRT = root.GetComponent<RectTransform>();
-            rootRT.anchorMin = new Vector2(1, 0);
-            rootRT.anchorMax = new Vector2(1, 0);
-            rootRT.pivot = new Vector2(1, 0);
+            rootRT.anchorMin = new Vector2(1, 1);
+            rootRT.anchorMax = new Vector2(1, 1);
+            rootRT.pivot = new Vector2(1, 1);
             float totalSize = PanelSize + BorderWidth * 2;
             rootRT.sizeDelta = new Vector2(totalSize, totalSize);
             rootRT.anchoredPosition = new Vector2(
                 -PanelMargin,
-                BottomBarOffset + PanelMargin);
+                -(80f + PanelMargin));  // below the resource bar (80px)
 
             // --- RawImage for the map texture ---
             var imgGO = new GameObject("MiniMapImage", typeof(RectTransform), typeof(RawImage));

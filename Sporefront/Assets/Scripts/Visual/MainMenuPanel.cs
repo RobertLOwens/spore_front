@@ -5,6 +5,7 @@
 // ============================================================================
 
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -40,8 +41,19 @@ namespace Sporefront.Visual
         private GameObject mainPage;
         private GameObject morePage;
 
-        private const float ButtonWidth = 320f;
-        private const float ButtonSpacing = 10f;
+        // Intro animation
+        private RectTransform titleRT;
+        private CanvasGroup titleGroup;
+        private CanvasGroup columnGroup;
+
+        private const float ButtonWidth          = 320f;
+        private const float ButtonSpacing        = 10f;
+        private const float TitleTopY            = -40f;
+        private const float TitleFadeDuration    = 2.5f;
+        private const float MaxTendrilWait       = 4.0f;
+        private const float TitleRiseDuration    = 0.75f;
+        private const float ButtonsSlideDuration = 0.55f;
+        private const float ButtonsSlideOffset   = 110f;
 
         // ================================================================
         // Initialization
@@ -50,7 +62,7 @@ namespace Sporefront.Visual
         public void Initialize(Transform canvasTransform)
         {
             // Full-screen dark background
-            panel = UIHelper.CreatePanel(canvasTransform, "MainMenuPanel", SporefrontColors.BgDeep);
+            panel = UIHelper.CreatePanel(canvasTransform, "MainMenuPanel", SporefrontColors.ParchmentMid);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
 
@@ -66,9 +78,28 @@ namespace Sporefront.Visual
         {
             RefreshUsername();
             ShowMainPage();
-            panel.SetActive(true);
-            if (tendrilAnimator != null)
+
+            if (tendrilAnimator != null && !tendrilAnimator.IsGrown)
+            {
+                // First show: run cinematic intro sequence
+                if (titleGroup  != null) titleGroup.alpha  = 0f;
+                if (columnGroup != null)
+                {
+                    columnGroup.alpha           = 0f;
+                    columnGroup.interactable    = false;
+                    columnGroup.blocksRaycasts  = false;
+                }
+                panel.SetActive(true);
                 tendrilAnimator.StartAnimation();
+                StartCoroutine(RunIntroSequence());
+            }
+            else
+            {
+                // Returning from game / already grown: snap to final state
+                if (tendrilAnimator != null) tendrilAnimator.SnapToGrown();
+                panel.SetActive(true);
+                SnapToFinalState();
+            }
         }
 
         public void Hide()
@@ -77,6 +108,8 @@ namespace Sporefront.Visual
         }
 
         public bool IsVisible => panel != null && panel.activeSelf;
+
+        public RectTransform PanelRT => panel?.GetComponent<RectTransform>();
 
         // ================================================================
         // Build Content
@@ -96,6 +129,9 @@ namespace Sporefront.Visual
 
             tendrilAnimator = tendrilGO.AddComponent<MenuTendrilAnimator>();
 
+            // Parchment overlay — simulates paper fiber partially covering ink
+            UIHelper.AddParchmentOverlay(panel.transform, 0.25f);
+
             // Center column container
             var centerColumn = UIHelper.CreatePanel(panel.transform, "CenterColumn", Color.clear);
             var columnRT = centerColumn.GetComponent<RectTransform>();
@@ -106,6 +142,7 @@ namespace Sporefront.Visual
             columnRT.offsetMin = new Vector2(-(ButtonWidth + 60f) / 2f, 0f);
             columnRT.offsetMax = new Vector2((ButtonWidth + 60f) / 2f, 0f);
             centerColumnRT = columnRT;
+            columnGroup = centerColumn.AddComponent<CanvasGroup>();
 
             // Disable Image on center column so it's truly transparent
             var centerImg = centerColumn.GetComponent<Image>();
@@ -122,22 +159,27 @@ namespace Sporefront.Visual
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
-            vlg.padding = new RectOffset(30, 30, 0, 0);
+            vlg.padding = new RectOffset(0, 0, 0, 0);
 
             // Title — positioned near top of screen, outside the VLG
+            // Pre-request glyphs at target size to force Unity to allocate
+            // a large enough dynamic font atlas before the Text mesh is built.
+            var headerFont = UIHelper.HeaderFont;
+            headerFont.RequestCharactersInTexture("SPOREFRONT", 96);
             var title = UIHelper.CreateLabel(panel.transform, "SPOREFRONT",
-                116, SporefrontColors.ParchmentLight, TextAnchor.MiddleCenter, true);
+                96, SporefrontColors.SporeRed, TextAnchor.MiddleCenter, true);
             title.horizontalOverflow = HorizontalWrapMode.Overflow;
-            var titleRT = title.GetComponent<RectTransform>();
+            titleRT = title.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0.5f, 1f);
             titleRT.anchorMax = new Vector2(0.5f, 1f);
             titleRT.pivot = new Vector2(0.5f, 1f);
-            titleRT.anchoredPosition = new Vector2(0f, -40f);
-            titleRT.sizeDelta = new Vector2(600f, 130f);
+            titleRT.anchoredPosition = new Vector2(0f, TitleTopY);
+            titleRT.sizeDelta = new Vector2(700f, 115f);
+            titleGroup = title.gameObject.AddComponent<CanvasGroup>();
 
             // Username welcome label — just below title
             usernameLabel = UIHelper.CreateLabel(panel.transform, "",
-                14, SporefrontColors.SporeTeal, TextAnchor.MiddleCenter);
+                14, SporefrontColors.InkMid, TextAnchor.MiddleCenter);
             var usernameRT = usernameLabel.GetComponent<RectTransform>();
             usernameRT.anchorMin = new Vector2(0.5f, 1f);
             usernameRT.anchorMax = new Vector2(0.5f, 1f);
@@ -151,13 +193,31 @@ namespace Sporefront.Visual
             var topSpacerLE = topSpacer.GetComponent<LayoutElement>();
             topSpacerLE.flexibleHeight = 1f;
 
-            // Semi-transparent backdrop behind menu items, half the column width
-            float backdropWidth = (ButtonWidth + 60f) * 0.5f;
+            // Parchment card behind menu items — looks like a piece of paper over the tendrils
+            float backdropWidth = ButtonWidth + 60f;
             var backdropGO = UIHelper.CreatePanel(centerColumn.transform, "ButtonBackdrop",
-                new Color(0f, 0f, 0f, 0.80f), cornerRadius: 0);
-            // Remove outline added by CreatePanel
+                new Color(SporefrontColors.ParchmentCream.r, SporefrontColors.ParchmentCream.g, SporefrontColors.ParchmentCream.b, 0.92f), cornerRadius: 6);
+            // Style the outline as a subtle parchment edge
             var backdropOutline = backdropGO.GetComponent<Outline>();
-            if (backdropOutline != null) UnityEngine.Object.Destroy(backdropOutline);
+            if (backdropOutline != null)
+            {
+                backdropOutline.effectColor = new Color(UIHelper.InkMutedText.r, UIHelper.InkMutedText.g, UIHelper.InkMutedText.b, 0.6f);
+                backdropOutline.effectDistance = new Vector2(1f, -1f);
+            }
+            // Drop shadow behind the parchment card
+            var shadowGO = new GameObject("ParchmentShadow", typeof(RectTransform), typeof(Image));
+            shadowGO.transform.SetParent(backdropGO.transform, false);
+            shadowGO.transform.SetAsFirstSibling();
+            var shadowRT = shadowGO.GetComponent<RectTransform>();
+            shadowRT.anchorMin = Vector2.zero;
+            shadowRT.anchorMax = Vector2.one;
+            shadowRT.offsetMin = new Vector2(-4f, -6f);
+            shadowRT.offsetMax = new Vector2(4f, 2f);
+            var shadowImg = shadowGO.GetComponent<Image>();
+            shadowImg.color = new Color(0f, 0f, 0f, 0.12f);
+            shadowImg.raycastTarget = false;
+            var shadowIgnore = shadowGO.AddComponent<LayoutElement>();
+            shadowIgnore.ignoreLayout = true;
             var backdropLE = backdropGO.AddComponent<LayoutElement>();
             backdropLE.preferredWidth = backdropWidth;
             var backdropVLG = backdropGO.AddComponent<VerticalLayoutGroup>();
@@ -166,8 +226,11 @@ namespace Sporefront.Visual
             backdropVLG.childForceExpandWidth = true;
             backdropVLG.childForceExpandHeight = false;
             backdropVLG.childControlWidth = true;
-            backdropVLG.childControlHeight = false;
-            backdropVLG.padding = new RectOffset(15, 15, 10, 10);
+            backdropVLG.childControlHeight = true;
+            backdropVLG.padding = new RectOffset(20, 20, 16, 16);
+
+            var backdropCSF = backdropGO.AddComponent<ContentSizeFitter>();
+            backdropCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Build shared hover gradient texture (1x64)
             hoverGradientTexture = new Texture2D(1, 64, TextureFormat.RGBA32, false);
@@ -176,13 +239,13 @@ namespace Sporefront.Visual
             for (int y = 0; y < 64; y++)
             {
                 float alpha;
-                if (y < 4) // bottom ~6%: ramp 0 → 0.2
-                    alpha = Mathf.Lerp(0f, 0.2f, y / 3f);
-                else if (y < 60) // middle ~88%: constant 0.2
-                    alpha = 0.2f;
-                else // top ~6%: ramp 0.2 → 0
-                    alpha = Mathf.Lerp(0.2f, 0f, (y - 60) / 3f);
-                pixels[y] = new Color(1f, 1f, 1f, alpha);
+                if (y < 4) // bottom ~6%: ramp 0 → 0.12
+                    alpha = Mathf.Lerp(0f, 0.12f, y / 3f);
+                else if (y < 60) // middle ~88%: constant 0.12
+                    alpha = 0.12f;
+                else // top ~6%: ramp 0.12 → 0
+                    alpha = Mathf.Lerp(0.12f, 0f, (y - 60) / 3f);
+                pixels[y] = new Color(SporefrontColors.InkDark.r, SporefrontColors.InkDark.g, SporefrontColors.InkDark.b, alpha);
             }
             hoverGradientTexture.SetPixels(pixels);
             hoverGradientTexture.Apply();
@@ -199,19 +262,19 @@ namespace Sporefront.Visual
             mainPageVLG.childControlHeight = false;
 
             CreateTextMenuItem(mainPage.transform, "New Game",
-                SporefrontColors.ParchmentLight, () => OnNewGame?.Invoke());
+                SporefrontColors.InkDark, () => OnNewGame?.Invoke());
 
             CreateTextMenuItem(mainPage.transform, "Resume Game",
-                SporefrontColors.ParchmentLight, () => OnResumeGame?.Invoke());
+                SporefrontColors.InkDark, () => OnResumeGame?.Invoke());
 
             CreateTextMenuItem(mainPage.transform, "Load Game",
-                SporefrontColors.ParchmentLight, () => OnLoadGame?.Invoke());
+                SporefrontColors.InkDark, () => OnLoadGame?.Invoke());
 
             CreateTextMenuItem(mainPage.transform, "Settings",
-                SporefrontColors.ParchmentLight, () => OnSettings?.Invoke());
+                SporefrontColors.InkDark, () => OnSettings?.Invoke());
 
             CreateTextMenuItem(mainPage.transform, "More",
-                SporefrontColors.ParchmentShadow, () => ShowMorePage());
+                SporefrontColors.InkLight, () => ShowMorePage());
 
             // === More page ===
             morePage = new GameObject("MorePage", typeof(RectTransform));
@@ -225,19 +288,19 @@ namespace Sporefront.Visual
             morePageVLG.childControlHeight = false;
 
             CreateTextMenuItem(morePage.transform, "Evolve AI",
-                SporefrontColors.SporeTeal, () => OnEvolveAI?.Invoke());
+                SporefrontColors.InkMid, () => OnEvolveAI?.Invoke());
 
             CreateTextMenuItem(morePage.transform, "Spectate AI",
-                SporefrontColors.SporeTeal, () => OnSpectateAI?.Invoke());
+                SporefrontColors.InkMid, () => OnSpectateAI?.Invoke());
 
             CreateTextMenuItem(morePage.transform, "About",
-                SporefrontColors.ParchmentShadow, () => OnAbout?.Invoke());
+                SporefrontColors.InkLight, () => OnAbout?.Invoke());
 
             CreateTextMenuItem(morePage.transform, "Account",
-                SporefrontColors.ParchmentShadow, () => OnAccount?.Invoke());
+                SporefrontColors.InkLight, () => OnAccount?.Invoke());
 
             CreateTextMenuItem(morePage.transform, "Back",
-                SporefrontColors.ParchmentLight, () => ShowMainPage());
+                SporefrontColors.InkDark, () => ShowMainPage());
 
             morePage.SetActive(false);
 
@@ -304,7 +367,7 @@ namespace Sporefront.Visual
             labelLE.preferredHeight = 41f;
 
             // Thin underline divider
-            UIHelper.CreateDivider(container.transform, SporefrontColors.BorderAccent, 1f);
+            UIHelper.CreateDivider(container.transform, SporefrontColors.InkFaded, 1f);
 
             // Button component on container — uses container Image as raycast target
             var btn = container.AddComponent<Button>();
@@ -349,6 +412,85 @@ namespace Sporefront.Visual
         {
             if (versionLabel != null)
                 versionLabel.text = version;
+        }
+
+        private void SnapToFinalState()
+        {
+            StopAllCoroutines();
+            if (titleGroup  != null) titleGroup.alpha = 1f;
+            if (titleRT     != null) titleRT.anchoredPosition = new Vector2(0f, TitleTopY);
+            if (columnGroup != null) { columnGroup.alpha = 1f; columnGroup.interactable = true; columnGroup.blocksRaycasts = true; }
+            if (centerColumnRT != null) centerColumnRT.anchoredPosition = Vector2.zero;
+            RefreshUsername();
+        }
+
+        private IEnumerator RunIntroSequence()
+        {
+            // Wait one frame for layout to resolve
+            yield return new WaitForEndOfFrame();
+            Canvas.ForceUpdateCanvases();
+
+            // Compute title center-screen Y (anchor/pivot at top of panel)
+            float panelH = panel.GetComponent<RectTransform>().rect.height;
+            if (panelH <= 0f) panelH = 1080f;
+            float titleH  = titleRT.sizeDelta.y;
+            float centerY = (titleH * 0.5f) - (panelH * 0.5f);
+
+            titleRT.anchoredPosition = new Vector2(0f, centerY);
+            if (usernameLabel != null) usernameLabel.gameObject.SetActive(false);
+
+            // ── Phase 1: title fades in at center while tendrils grow ──────
+            float timer = 0f;
+            while (timer < MaxTendrilWait)
+            {
+                timer += Time.deltaTime;
+                if (titleGroup != null)
+                    titleGroup.alpha = Mathf.Clamp01(timer / TitleFadeDuration);
+                if (tendrilAnimator != null && tendrilAnimator.IsGrown) break;
+                yield return null;
+            }
+            if (titleGroup != null) titleGroup.alpha = 1f;
+
+            yield return new WaitForSeconds(0.2f);
+
+            // ── Phase 2: title rises to top ──────────────────────────────────
+            float riseTimer = 0f;
+            float startY    = titleRT.anchoredPosition.y;
+            while (riseTimer < TitleRiseDuration)
+            {
+                riseTimer += Time.deltaTime;
+                float t     = Mathf.Clamp01(riseTimer / TitleRiseDuration);
+                float eased = t * t * (3f - 2f * t); // smoothstep
+                titleRT.anchoredPosition = new Vector2(0f, Mathf.Lerp(startY, TitleTopY, eased));
+                yield return null;
+            }
+            titleRT.anchoredPosition = new Vector2(0f, TitleTopY);
+
+            // ── Phase 3: buttons slide up ─────────────────────────────────────
+            RefreshUsername();
+            if (usernameLabel != null) usernameLabel.gameObject.SetActive(true);
+            if (columnGroup != null)
+            {
+                columnGroup.alpha          = 0f;
+                columnGroup.interactable   = false;
+                columnGroup.blocksRaycasts = false;
+            }
+            if (centerColumnRT != null)
+                centerColumnRT.anchoredPosition = new Vector2(0f, -ButtonsSlideOffset);
+
+            float slideTimer = 0f;
+            while (slideTimer < ButtonsSlideDuration)
+            {
+                slideTimer += Time.deltaTime;
+                float t     = Mathf.Clamp01(slideTimer / ButtonsSlideDuration);
+                float eased = 1f - (1f - t) * (1f - t); // ease-out quad
+                if (columnGroup    != null) columnGroup.alpha = eased;
+                if (centerColumnRT != null) centerColumnRT.anchoredPosition = new Vector2(0f, Mathf.Lerp(-ButtonsSlideOffset, 0f, eased));
+                yield return null;
+            }
+
+            if (columnGroup    != null) { columnGroup.alpha = 1f; columnGroup.interactable = true; columnGroup.blocksRaycasts = true; }
+            if (centerColumnRT != null) centerColumnRT.anchoredPosition = Vector2.zero;
         }
 
         /// <summary>

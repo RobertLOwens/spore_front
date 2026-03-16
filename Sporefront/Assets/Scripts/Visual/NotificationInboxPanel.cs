@@ -71,13 +71,14 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Hide);
 
             // Main panel — centered, medium modal
-            panel = UIHelper.CreatePanel(backdrop.transform, "InboxPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "InboxPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // Header bar
             var headerBar = UIHelper.CreatePanel(panel.transform, "HeaderBar",
-                SporefrontColors.BgSection);
+                SporefrontColors.ParchmentDeep);
             var headerBarRT = headerBar.GetComponent<RectTransform>();
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
@@ -94,7 +95,7 @@ namespace Sporefront.Visual
             headerHLG.childControlHeight = true;
 
             var titleLabel = UIHelper.CreateLabel(headerBar.transform, "Notifications",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.flexibleWidth = 1;
@@ -119,8 +120,7 @@ namespace Sporefront.Visual
             var clearLE = clearBtn.gameObject.AddComponent<LayoutElement>();
             clearLE.preferredWidth = 56;
 
-            var closeBtn = UIHelper.CreateButton(headerBar.transform, "X",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
+            var closeBtn = UIHelper.CreateInkCloseButton(headerBar.transform, Hide);
             var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeBtnLE.preferredWidth = 28;
 
@@ -265,7 +265,7 @@ namespace Sporefront.Visual
 
             var emptyLabel = UIHelper.CreateLabel(contentRT,
                 "No notifications yet", UIHelper.DefaultHeaderFontSize,
-                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
             emptyLE.preferredHeight = 40;
         }
@@ -278,9 +278,9 @@ namespace Sporefront.Visual
         {
             Color rowBg = entry.isRead
                 ? Color.clear
-                : new Color(SporefrontColors.BgCard.r,
-                    SporefrontColors.BgCard.g,
-                    SporefrontColors.BgCard.b, 0.5f);
+                : new Color(SporefrontColors.ParchmentDark.r,
+                    SporefrontColors.ParchmentDark.g,
+                    SporefrontColors.ParchmentDark.b, 0.5f);
 
             var row = UIHelper.CreatePanel(contentRT, "NotifRow", rowBg);
             var rowLE = row.AddComponent<LayoutElement>();
@@ -332,14 +332,14 @@ namespace Sporefront.Visual
 
             // Title
             var titleLabel = UIHelper.CreateLabel(textCol.transform, entry.title, UIConstants.FontSmall,
-                entry.isRead ? SporefrontColors.ParchmentShadow : UIHelper.BodyTextColor);
+                entry.isRead ? UIHelper.InkMutedText : UIHelper.InkBodyText);
             titleLabel.fontStyle = entry.isRead ? FontStyle.Normal : FontStyle.Bold;
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 14;
 
             // Message
             var msgLabel = UIHelper.CreateLabel(textCol.transform, entry.message, UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow);
+                UIHelper.InkMutedText);
             var msgLE = msgLabel.gameObject.AddComponent<LayoutElement>();
             msgLE.preferredHeight = 12;
 
@@ -359,7 +359,7 @@ namespace Sporefront.Visual
             // Relative time
             string timeStr = FormatRelativeTime(entry.timestamp);
             var timeLabel = UIHelper.CreateLabel(rightCol.transform, timeStr, UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
+                UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredHeight = 12;
 

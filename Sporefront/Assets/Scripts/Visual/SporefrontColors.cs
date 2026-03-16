@@ -14,6 +14,7 @@ namespace Sporefront.Visual
         // Parchment Palette
         // ================================================================
 
+        public static readonly Color ParchmentCream  = HexColor("F5EDD6");
         public static readonly Color ParchmentLight  = HexColor("F2E8D5");
         public static readonly Color ParchmentMid    = HexColor("E4D5B7");
         public static readonly Color ParchmentDark   = HexColor("D4C4A0");
@@ -29,6 +30,8 @@ namespace Sporefront.Visual
         public static readonly Color InkMid   = HexColor("4A3D2E");
         public static readonly Color InkLight = HexColor("6B5D4A");
         public static readonly Color InkFaded = HexColor("8A7D6A");
+        public static readonly Color InkBorder = HexColor("6B5A3E");
+        public static readonly Color InkWarmText = HexColor("C8B89A");
 
         // ================================================================
         // Spore Accent Colors
@@ -39,6 +42,10 @@ namespace Sporefront.Visual
         public static readonly Color SporeGreen  = HexColor("3A5E3A");
         public static readonly Color SporeAmber  = HexColor("8B6B3A");
         public static readonly Color SporeTeal   = HexColor("3A6B6B");
+
+        // Ink-soaked accent variants (desaturated, warm-shifted for parchment integration)
+        public static readonly Color InkRed   = HexColor("5E3530");
+        public static readonly Color InkGreen = HexColor("3A4D3A");
 
         // ================================================================
         // Resource Node Colors
@@ -92,6 +99,7 @@ namespace Sporefront.Visual
         public static readonly Color SporePurpleLight = HexColor("7A5478");
         public static readonly Color SporeGreenLight  = HexColor("4A7A4A");
         public static readonly Color SporeAmberLight  = HexColor("A8854A");
+        public static readonly Color SporeTealLight   = HexColor("4A9090");
 
         // ================================================================
         // Hex Border

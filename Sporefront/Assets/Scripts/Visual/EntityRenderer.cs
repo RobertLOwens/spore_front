@@ -864,6 +864,15 @@ namespace Sporefront.Visual
             return null;
         }
 
+        public bool IsEntityMoving(Guid id) => activelyMovingEntities.Contains(id);
+
+        public Color GetEntityColor(Guid id)
+        {
+            if (currentStates.TryGetValue(id, out var state))
+                return state.color;
+            return Color.white;
+        }
+
         /// <summary>
         /// Returns the world position at the bottom of the entity's visual shape.
         /// Used by PathRenderer to anchor path start points to entity bottoms.

@@ -34,7 +34,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         private ResourceBarPanel resourceBar;
-        private MenuBarPanel menuBar;
+        private TendrilWheelHUD tendrilWheelHUD;
         private TileInfoPopup tileInfoPopup;
         private TileInfoPanel tileInfo;
         private BuildingDetailPanel buildingDetail;
@@ -45,6 +45,7 @@ namespace Sporefront.Visual
         private PathRenderer pathRenderer;
         private EntityRenderer entityRenderer;
         private EntrenchmentRenderer entrenchmentRenderer;
+        private EntityTendrilRenderer entityTendrilRenderer;
         private SelectionBoxRenderer selectionBoxRenderer;
         private SelectedEntitiesPanel selectedEntitiesPanel;
         private MiniMapPanel miniMap;
@@ -57,6 +58,7 @@ namespace Sporefront.Visual
         private GameSetupPanel gameSetup;
         private GameOverPanel gameOver;
         private AboutPanel about;
+        private MenuTransitionController menuTransition;
 
         // ================================================================
         // Overview Panels
@@ -174,6 +176,11 @@ namespace Sporefront.Visual
             entrenchGO.transform.SetParent(gridRenderer.transform, false);
             entrenchmentRenderer = entrenchGO.AddComponent<EntrenchmentRenderer>();
 
+            var entityTendrilGO = new GameObject("EntityTendrilRenderer");
+            entityTendrilGO.transform.SetParent(gridRenderer.transform, false);
+            entityTendrilRenderer = entityTendrilGO.AddComponent<EntityTendrilRenderer>();
+            entityTendrilRenderer.SetEntityRenderer(entityRenderer);
+
             // Selection box (screen-space overlay on canvas)
             var selBoxGO = new GameObject("SelectionBoxRenderer");
             selBoxGO.transform.SetParent(transform, false);
@@ -220,8 +227,8 @@ namespace Sporefront.Visual
             resourceBar = CreatePanelComponent<ResourceBarPanel>("ResourceBar");
             InitPanel("ResourceBar", () => resourceBar.Initialize(ct));
 
-            menuBar = CreatePanelComponent<MenuBarPanel>("MenuBar");
-            InitPanel("MenuBar", () => menuBar.Initialize(ct));
+            tendrilWheelHUD = CreatePanelComponent<TendrilWheelHUD>("TendrilWheelHUD");
+            InitPanel("TendrilWheelHUD", () => tendrilWheelHUD.Initialize(ct));
 
             notifications = CreatePanelComponent<NotificationPanel>("Notifications");
             InitPanel("Notifications", () => notifications.Initialize(ct));
@@ -334,6 +341,12 @@ namespace Sporefront.Visual
 
             gameSetup = CreatePanelComponent<GameSetupPanel>("GameSetup");
             InitPanel("GameSetup", () => gameSetup.Initialize(ct));
+
+            // Menu transition controller (sliding container + bridge tendril)
+            var transGO = new GameObject("MenuTransitionController");
+            transGO.transform.SetParent(transform, false);
+            menuTransition = transGO.AddComponent<MenuTransitionController>();
+            menuTransition.Initialize(ct, mainMenu, gameSetup);
 
             gameOver = CreatePanelComponent<GameOverPanel>("GameOver");
             InitPanel("GameOver", () => gameOver.Initialize(ct));
@@ -624,7 +637,11 @@ namespace Sporefront.Visual
             };
 
             // ---- MainMenuPanel ----
-            mainMenu.OnNewGame += () => { mainMenu.Hide(); gameSetup.Show(); };
+            mainMenu.OnNewGame += () =>
+            {
+                if (menuTransition != null && !menuTransition.IsTransitioning)
+                    menuTransition.TransitionToGameSetup();
+            };
             mainMenu.OnResumeGame += () => { mainMenu.Hide(); saveLoad.ShowLoad(); };
             mainMenu.OnLoadGame += () => { mainMenu.Hide(); saveLoad.ShowLoad(); };
             mainMenu.OnSettings += () => { settings.Show(); };
@@ -639,31 +656,42 @@ namespace Sporefront.Visual
             resourceBar.OnMainMenuClicked += () =>
             {
                 resourceBar.Hide();
-                menuBar.Hide();
+                tendrilWheelHUD.Hide();
                 mainMenu.Show();
             };
 
-            // ---- MenuBarPanel (bottom nav) ----
-            menuBar.OnResearchClicked += () => researchTree.Show(gameState);
-            menuBar.OnMilitaryClicked += () => militaryOverview.Show(gameState);
-            menuBar.OnBuildingsClicked += () => buildingsOverview.Show(gameState);
-            menuBar.OnEntitiesClicked += () => entitiesOverview.Show(gameState);
-            menuBar.OnCommandersClicked += () => commander.Show(gameState);
-            menuBar.OnResourcesClicked += () => resourceOverview.Show(gameState);
-            menuBar.OnTrainingClicked += () => trainingOverview.Show(gameState);
-            menuBar.OnCombatClicked += () => ShowCombatHistory();
+            // ---- TendrilWheelHUD (bottom corner wheels) ----
+            tendrilWheelHUD.OnResearchClicked += () => researchTree.Show(gameState);
+            tendrilWheelHUD.OnMilitaryClicked += () => militaryOverview.Show(gameState);
+            tendrilWheelHUD.OnBuildingsClicked += () => buildingsOverview.Show(gameState);
+            tendrilWheelHUD.OnEntitiesClicked += () => entitiesOverview.Show(gameState);
+            tendrilWheelHUD.OnCommandersClicked += () => commander.Show(gameState);
+            tendrilWheelHUD.OnResourcesClicked += () => resourceOverview.Show(gameState);
+            tendrilWheelHUD.OnTrainingClicked += () => trainingOverview.Show(gameState);
+            tendrilWheelHUD.OnCombatClicked += () => ShowCombatHistory();
 
             // ---- GameSetupPanel ----
-            gameSetup.OnBack += () => { gameSetup.Hide(); mainMenu.Show(); };
-            gameSetup.OnStartGame += (config) => { gameSetup.Hide(); OnStartNewGame?.Invoke(config); };
+            gameSetup.OnBack += () =>
+            {
+                if (menuTransition != null && !menuTransition.IsTransitioning)
+                    menuTransition.TransitionToMainMenu();
+            };
+            gameSetup.OnStartGame += (config) =>
+            {
+                gameSetup.Hide();
+                if (menuTransition != null) menuTransition.ResetToMainMenu();
+                OnStartNewGame?.Invoke(config);
+            };
             gameSetup.OnPlayArena += (arenaConfig) =>
             {
                 gameSetup.Hide();
+                if (menuTransition != null) menuTransition.ResetToMainMenu();
                 OnPlayArenaGame?.Invoke(arenaConfig);
             };
             gameSetup.OnAutoSim += (arenaConfig, runs) =>
             {
                 gameSetup.Hide();
+                if (menuTransition != null) menuTransition.ResetToMainMenu();
                 ArenaSimulator.RunBatch(arenaConfig.armyConfig, arenaConfig.scenarioConfig, runs, (results) =>
                 {
                     // RunBatch callback comes from a background thread — dispatch to main thread
@@ -1048,7 +1076,7 @@ namespace Sporefront.Visual
             displayNamePanel.Hide();
             accountPanel.Hide();
             resourceBar.Hide();
-            menuBar.Hide();
+            tendrilWheelHUD.Hide();
         }
 
         /// <summary>
@@ -1079,7 +1107,7 @@ namespace Sporefront.Visual
             // 2. Show essential HUD immediately
             resourceBar.Show();
             resourceBar.Refresh(state, localPlayerID);
-            menuBar.Show();
+            tendrilWheelHUD.Show();
 
             // 3. Propagate localPlayerID to all panels that cached it during Initialize
             tileInfoPopup.UpdateLocalPlayerID(localPlayerID);
@@ -1126,6 +1154,7 @@ namespace Sporefront.Visual
             // Initial entity render (respects fog context set above)
             entityRenderer.UpdateEntities(state);
             entrenchmentRenderer?.UpdateEntrenchment(state, localPlayerID);
+            entityTendrilRenderer?.UpdateTendrils(state, localPlayerID);
         }
 
         public void ShowMainMenu() => mainMenu.Show();
@@ -1301,7 +1330,10 @@ namespace Sporefront.Visual
 
             // Map renderers — conditional
             if ((flags & StateChangeFlags.Movement) != 0)
+            {
                 pathRenderer.UpdatePaths(gameState, localPlayerID);
+                entityTendrilRenderer?.UpdateTendrils(gameState, localPlayerID);
+            }
 
             if ((flags & (StateChangeFlags.Armies | StateChangeFlags.Buildings
                 | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar)) != 0)
@@ -1525,6 +1557,7 @@ namespace Sporefront.Visual
                 entityRenderer.UpdateBuildingBars(gameState);
                 pathRenderer?.UpdatePathStartPoints(entityRenderer);
                 entrenchmentRenderer?.AnimateGrowth(gameState);
+                entityTendrilRenderer?.AnimateTendrils();
             }
         }
 

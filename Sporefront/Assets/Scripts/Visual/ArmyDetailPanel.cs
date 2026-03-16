@@ -72,9 +72,10 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Close);
 
             // Main panel — centered 380x450
-            panel = UIHelper.CreatePanel(backdrop.transform, "ArmyDetailPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "ArmyDetailPanel", UIHelper.PanelParchmentBg);
             var rt = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(rt, UIConstants.ModalSmallW, UIConstants.ModalMediumH);
+            PopupTendrilDecorator.Attach(rt);
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "ArmyScroll", out contentRT);
@@ -84,8 +85,7 @@ namespace Sporefront.Visual
             scrollRT.offsetMax = Vector2.zero;
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Close);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Close);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
@@ -229,13 +229,13 @@ namespace Sporefront.Visual
                             "Idle";
 
             var header = UIHelper.CreateLabel(contentRT, army.name,
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 28;
 
             var statusLabel = UIHelper.CreateLabel(contentRT, status, UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.preferredHeight = 20;
 
@@ -248,7 +248,7 @@ namespace Sporefront.Visual
                 float progress = Mathf.Clamp01((float)(elapsed / buildTime));
                 double remaining = buildTime - elapsed;
 
-                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
+                var (bg, fill) = UIHelper.CreateInkProgressBar(contentRT, 14f,
                     SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(progress, 1);
@@ -317,7 +317,7 @@ namespace Sporefront.Visual
         private void BuildCompositionSection(ArmyData army)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Composition",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -336,7 +336,7 @@ namespace Sporefront.Visual
 
             var totalLabel = UIHelper.CreateLabel(contentRT,
                 $"  Total: {army.GetTotalUnits()} units", UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow);
+                UIHelper.InkMutedText);
             var totalLE = totalLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.preferredHeight = 20;
         }
@@ -348,7 +348,7 @@ namespace Sporefront.Visual
         private void BuildCommanderSection(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Commander",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -359,7 +359,7 @@ namespace Sporefront.Visual
             nameLE.preferredHeight = 20;
 
             var specialtyLabel = UIHelper.CreateLabel(contentRT,
-                $"  Specialty: {commander.specialty}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                $"  Specialty: {commander.specialty}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var specLE = specialtyLabel.gameObject.AddComponent<LayoutElement>();
             specLE.preferredHeight = 20;
 
@@ -376,7 +376,7 @@ namespace Sporefront.Visual
         private void CreateStatLabel(Transform parent, string abbrev, int value)
         {
             var label = UIHelper.CreateLabel(parent, $"{abbrev}:{value}", UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 50;
         }
@@ -401,7 +401,7 @@ namespace Sporefront.Visual
                 labelLE.preferredWidth = 130;
                 staminaLabel = label;
 
-                var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
+                var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 14f,
                     SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
                 float pct = (float)(commander.stamina / CommanderData.MaxStamina);
                 var fillRT = fill.GetComponent<RectTransform>();
@@ -414,7 +414,7 @@ namespace Sporefront.Visual
             else
             {
                 var label = UIHelper.CreateLabel(row.transform,
-                    "No Commander", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                    "No Commander", UIConstants.FontCaption, UIHelper.InkMutedText);
                 var labelLE = label.gameObject.AddComponent<LayoutElement>();
                 labelLE.flexibleWidth = 1;
             }
@@ -427,7 +427,7 @@ namespace Sporefront.Visual
         private void BuildReinforcementsSection(ArmyData army)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Pending Reinforcements",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
@@ -466,7 +466,7 @@ namespace Sporefront.Visual
             if (!army.isInCombat)
             {
                 var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, () =>
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, () =>
                     {
                         Close();
                         OnMoveRequested?.Invoke(army.id);
@@ -480,7 +480,7 @@ namespace Sporefront.Visual
             if (!army.isEntrenched && !army.isEntrenching && !army.isInCombat)
             {
                 var entrenchBtn = UIHelper.CreateButton(row.transform, "Entrench",
-                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, () =>
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, () =>
                     {
                         var cmd = new EntrenchCommand(localPlayerID, army.id);
                         GameEngine.Instance.ExecuteCommand(cmd);

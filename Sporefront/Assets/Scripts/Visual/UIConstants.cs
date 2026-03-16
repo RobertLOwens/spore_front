@@ -88,5 +88,66 @@ namespace Sporefront.Visual
 
         public const float PanelFadeDuration = 0.15f;
         public const float TooltipDelay = 0.5f;
+
+        // ================================================================
+        // Tendril Wheel HUD
+        // ================================================================
+
+        // Container sizing — large enough for both rings + padding
+        public const float WheelContainerSize = 700f;
+        public const float WheelCornerPaddingH = 3f;   // horizontal inset — nearly flush
+        public const float WheelCornerPaddingV = 1f;   // vertical inset — nearly flush
+
+        // Right wheel (Actions) — dual-ring, bottom-right corner
+        // Angles stay within 105°–155° to keep buttons away from edges.
+        //
+        // Outer ring: Commanders, Military, Combat (3 buttons)
+        public const float WheelRightOuterRadius = 280f;
+        public const float WheelRightOuterStartAngle = 155f;
+        public const float WheelRightOuterEndAngle = 105f;
+        public const int   WheelRightOuterCount = 3;
+        // Inner ring: Entities, Research, Training (3 buttons)
+        public const float WheelRightInnerRadius = 190f;
+        public const float WheelRightInnerStartAngle = 148f;
+        public const float WheelRightInnerEndAngle = 100f;
+        public const int   WheelRightInnerCount = 3;
+
+        // Left wheel (Info) — bottom-left corner
+        // Angles 25°–75° mirror the right wheel's safe zone.
+        public const float WheelLeftRadius = 200f;
+        public const float WheelLeftStartAngle = 25f;
+        public const float WheelLeftEndAngle = 75f;
+        public const int   WheelLeftButtonCount = 3;
+
+        // Button dimensions (85px — 33% larger than 64px)
+        public const float WheelButtonSize = 85f;
+        public const float WheelButtonBorder = 2.5f;
+        public const float WheelButtonIconSize = 40f;
+        public const float WheelButtonHoverScale = 1.1f;
+
+        // Labels — parchment card tooltips
+        public const int   WheelLabelFontSize = 18;
+
+        // Key badge
+        public const float WheelKeyBadgeSize = 18f;
+
+        // Tendril connections — fully opaque, no alpha
+        public const float WheelTendrilWidth = 3.5f;
+        public const float WheelTendrilOpacity = 1.0f;
+        public const float WheelInnerTendrilWidth = 2.8f;
+        public const float WheelInnerTendrilOpacity = 1.0f;
+        public const float WheelBranchHairWidth = 1.4f;
+        public const float WheelBranchHairOpacity = 1.0f;
+
+        // Animation timing
+        public const float WheelPopDuration = 0.45f;
+        public const float WheelPopStagger = 0.03f;
+        public const float WheelHoverDuration = 0.2f;
+        public const float WheelPulseDuration = 2.5f;
+        public const float WheelSwayDuration = 14f;
+        public const float WheelSwayAngle = 0.15f;
+
+        // Bottom tendril border
+        public const float WheelBorderHeight = 28f;
     }
 }

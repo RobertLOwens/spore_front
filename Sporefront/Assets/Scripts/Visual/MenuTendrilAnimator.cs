@@ -44,13 +44,21 @@ namespace Sporefront.Visual
         // Constants
         // ================================================================
 
-        private const float TrunkDuration = 1.8f;
-        private const float LimbDuration = 1.2f;
-        private const float SubBranchDuration = 1.0f;
-        private const float TendrilDuration = 0.8f;
+        private const float TrunkDuration     = 3.15f;  // was 1.8
+        private const float LimbDuration      = 2.10f;  // was 1.2
+        private const float SubBranchDuration = 1.75f;  // was 1.0
+        private const float TendrilDuration   = 1.40f;  // was 0.8
         private const float GlowSize = 48f;
         private const int MaxDepth = 4;
         private const int Seed = -1; // negative = random each time
+
+        // Bridge trunk tracking — the point on the trunk where the bridge tendril originates
+        private Vector2 bridgeTrunkPoint;
+        private Vector2 bridgeTrunkDir;
+        private Vector2 bridgeTrunkPenultimatePt;
+        private List<UITendrilRenderer.StrandParams> bridgeTrunkStrands;
+        private Color bridgeTrunkColor;
+        private bool hasBridgeTrunk;
 
         // Canvas dimensions cached for helpers
         private float canvasW;
@@ -71,6 +79,23 @@ namespace Sporefront.Visual
         // ================================================================
         // Public API
         // ================================================================
+
+        public bool IsGrown => grown;
+
+        public void SnapToGrown()
+        {
+            if (!treeBuilt)
+            {
+                // Tree hasn't been built yet — do a full animation start
+                StartAnimation();
+                return;
+            }
+            animating = false;
+            grown = true;
+            for (int i = 0; i < branchTimings.Count; i++)
+                branchTimings[i].branch.growthProgress = 1f;
+            tendrilRenderer.MarkDirty();
+        }
 
         public void StartAnimation()
         {
@@ -141,7 +166,8 @@ namespace Sporefront.Visual
 
             // Split trunk into two intertwined branches — red and blue
             var redTrunk = tendrilRenderer.AddBranch(trunkPts, MakeTrunkStrandsHalf(0), 8f, 0.10f);
-            redTrunk.branchColor = SporefrontColors.SporeRed;
+            redTrunk.branchColor = new Color(SporefrontColors.InkRed.r, SporefrontColors.InkRed.g, SporefrontColors.InkRed.b, 0.85f);
+
             branchTimings.Add(new BranchTiming
             {
                 branch = redTrunk,
@@ -150,13 +176,31 @@ namespace Sporefront.Visual
             });
 
             var blueTrunk = tendrilRenderer.AddBranch(trunkPts, MakeTrunkStrandsHalf(1), 8f, 0.10f);
-            blueTrunk.branchColor = SporefrontColors.SporeTeal;
+            blueTrunk.branchColor = new Color(SporefrontColors.InkGreen.r, SporefrontColors.InkGreen.g, SporefrontColors.InkGreen.b, 0.85f);
+
             branchTimings.Add(new BranchTiming
             {
                 branch = blueTrunk,
                 startDelay = 0f,
                 duration = TrunkDuration
             });
+
+            // ============================================================
+            // Capture bridge point from trunk at ~45% height
+            // ============================================================
+            {
+                float bridgeFrac = 0.45f;
+                int bridgeSeg = Mathf.Min((int)(bridgeFrac * (trunkPts.Count - 1)), trunkPts.Count - 2);
+                float bridgeSegFrac = bridgeFrac * (trunkPts.Count - 1) - bridgeSeg;
+                bridgeTrunkPoint = Vector2.Lerp(trunkPts[bridgeSeg], trunkPts[bridgeSeg + 1], bridgeSegFrac);
+                // Direction: rightward from trunk (bridge goes right toward game setup)
+                bridgeTrunkDir = Vector2.right;
+                // Penultimate: the trunk point just before
+                bridgeTrunkPenultimatePt = trunkPts[bridgeSeg];
+                bridgeTrunkStrands = MakeTrunkStrandsHalf(0);
+                bridgeTrunkColor = new Color(SporefrontColors.InkRed.r, SporefrontColors.InkRed.g, SporefrontColors.InkRed.b, 0.85f);
+                hasBridgeTrunk = true;
+            }
 
             // ============================================================
             // BRANCHES: spawn from points along the trunk, angling outward
@@ -196,7 +240,9 @@ namespace Sporefront.Visual
                 float angle = baseAngle + verticalBias;
 
                 // Alternate red/blue: even index = SporeRed, odd = SporeTeal
-                Color limbColor = (i % 2 == 0) ? SporefrontColors.SporeRed : SporefrontColors.SporeTeal;
+                Color limbColor = (i % 2 == 0)
+                    ? new Color(SporefrontColors.InkRed.r, SporefrontColors.InkRed.g, SporefrontColors.InkRed.b, 0.85f)
+                    : new Color(SporefrontColors.InkGreen.r, SporefrontColors.InkGreen.g, SporefrontColors.InkGreen.b, 0.85f);
 
                 float delay = TrunkDuration * t;
                 GenerateBranch(spawnPt, angle, 1, delay, rng, limbColor);
@@ -283,6 +329,7 @@ namespace Sporefront.Visual
 
             var branch = tendrilRenderer.AddBranch(pts, strands, tipWidth, looseWidth);
             if (branchColor != default) branch.branchColor = branchColor;
+
             branchTimings.Add(new BranchTiming
             {
                 branch = branch,
@@ -348,17 +395,16 @@ namespace Sporefront.Visual
         // ================================================================
 
         /// <summary>
-        /// Returns half the trunk strands: half=0 gets strands 0,2,4; half=1 gets strands 1,3.
+        /// Returns half the trunk strands: half=0 gets strands 0,2; half=1 gets strand 1.
+        /// Reduced from 5 to 3 strands to prevent overlap accumulation.
         /// </summary>
         private static List<UITendrilRenderer.StrandParams> MakeTrunkStrandsHalf(int half)
         {
             var all = new[]
             {
-                new UITendrilRenderer.StrandParams { width = 4.5f, alpha = 1.0f, waveFrequency = 3.5f, wavePhase = 0.0f },
-                new UITendrilRenderer.StrandParams { width = 3.8f, alpha = 0.75f, waveFrequency = 4.0f, wavePhase = 1.2f },
-                new UITendrilRenderer.StrandParams { width = 4.0f, alpha = 0.85f, waveFrequency = 3.0f, wavePhase = 2.5f },
-                new UITendrilRenderer.StrandParams { width = 3.0f, alpha = 0.65f, waveFrequency = 4.5f, wavePhase = 3.8f },
-                new UITendrilRenderer.StrandParams { width = 4.2f, alpha = 0.95f, waveFrequency = 3.8f, wavePhase = 5.0f }
+                new UITendrilRenderer.StrandParams { width = 3.0f, alpha = 1.0f, waveFrequency = 3.5f, wavePhase = 0.0f },
+                new UITendrilRenderer.StrandParams { width = 2.5f, alpha = 1.0f, waveFrequency = 4.0f, wavePhase = 1.2f },
+                new UITendrilRenderer.StrandParams { width = 2.8f, alpha = 1.0f, waveFrequency = 3.0f, wavePhase = 2.5f }
             };
             var result = new List<UITendrilRenderer.StrandParams>();
             for (int i = 0; i < all.Length; i++)
@@ -372,8 +418,8 @@ namespace Sporefront.Visual
         {
             return new List<UITendrilRenderer.StrandParams>
             {
-                new UITendrilRenderer.StrandParams { width = 5.0f, alpha = 0.85f, waveFrequency = 1.2f, wavePhase = 0.5f },
-                new UITendrilRenderer.StrandParams { width = 3.5f, alpha = 0.55f, waveFrequency = 1.5f, wavePhase = 2.0f }
+                new UITendrilRenderer.StrandParams { width = 3.0f, alpha = 1.0f, waveFrequency = 1.2f, wavePhase = 0.5f },
+                new UITendrilRenderer.StrandParams { width = 1.8f, alpha = 1.0f, waveFrequency = 1.5f, wavePhase = 2.0f }
             };
         }
 
@@ -381,7 +427,7 @@ namespace Sporefront.Visual
         {
             return new List<UITendrilRenderer.StrandParams>
             {
-                new UITendrilRenderer.StrandParams { width = 2.4f, alpha = 0.65f, waveFrequency = 1.0f, wavePhase = 0.8f }
+                new UITendrilRenderer.StrandParams { width = 1.8f, alpha = 1.0f, waveFrequency = 1.0f, wavePhase = 0.8f }
             };
         }
 
@@ -389,7 +435,7 @@ namespace Sporefront.Visual
         {
             return new List<UITendrilRenderer.StrandParams>
             {
-                new UITendrilRenderer.StrandParams { width = 1.8f, alpha = 0.55f, waveFrequency = 0.8f, wavePhase = 1.0f }
+                new UITendrilRenderer.StrandParams { width = 1.5f, alpha = 1.0f, waveFrequency = 0.8f, wavePhase = 1.0f }
             };
         }
 
@@ -507,6 +553,36 @@ namespace Sporefront.Visual
                     }
                 }
             }
+        }
+
+        // ================================================================
+        // Public: Bridge Trunk Point for Page Transition
+        // ================================================================
+
+        /// <summary>
+        /// Returns the point on the trunk where the bridge tendril originates,
+        /// plus direction, penultimate point, strand params, and color.
+        /// </summary>
+        public bool GetBridgeTrunkPoint(out Vector2 point, out Vector2 direction,
+                                        out Vector2 penultimatePt,
+                                        out List<UITendrilRenderer.StrandParams> strandParams,
+                                        out Color trunkColor)
+        {
+            if (hasBridgeTrunk)
+            {
+                point = bridgeTrunkPoint;
+                direction = bridgeTrunkDir;
+                penultimatePt = bridgeTrunkPenultimatePt;
+                strandParams = bridgeTrunkStrands;
+                trunkColor = bridgeTrunkColor;
+                return true;
+            }
+            point = new Vector2(0f, 0f);
+            direction = Vector2.right;
+            penultimatePt = point - Vector2.right * 50f;
+            strandParams = MakeTrunkStrandsHalf(0);
+            trunkColor = new Color(SporefrontColors.InkRed.r, SporefrontColors.InkRed.g, SporefrontColors.InkRed.b, 0.85f);
+            return false;
         }
 
         // ================================================================

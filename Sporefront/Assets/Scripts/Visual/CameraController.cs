@@ -21,7 +21,7 @@ namespace Sporefront.Visual
         [Header("Zoom")]
         public float zoomLevel = 8f;
         public float minZoom = 3f;
-        public float maxZoom = 20f;
+        public float maxZoom = 12f;
         public float zoomSpeed = 2f;
 
         [Header("Pan")]

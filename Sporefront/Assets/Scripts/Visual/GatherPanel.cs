@@ -62,13 +62,14 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Hide);
 
             // Centered modal panel
-            modalPanel = UIHelper.CreatePanel(backdrop.transform, "GatherModal", UIHelper.PanelBg);
+            modalPanel = UIHelper.CreatePanel(backdrop.transform, "GatherModal", UIHelper.PanelParchmentBg);
             var rt = modalPanel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(rt, UIConstants.ModalSmallW, UIConstants.ModalSmallH);
+            PopupTendrilDecorator.Attach(rt);
 
             // Header — fixed at top (text changes between "Hunt"/"Gather")
             headerLabel = UIHelper.CreateLabel(modalPanel.transform, "Gather",
-                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                UIConstants.FontTitle, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerRT = headerLabel.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
@@ -87,7 +88,7 @@ namespace Sporefront.Visual
 
             // Close button at bottom
             var closeBtn = UIHelper.CreateButton(modalPanel.transform, "Close",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                 Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
@@ -170,7 +171,7 @@ namespace Sporefront.Visual
         private void BuildResourceInfo(ResourcePointData rp)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Resource Point",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
@@ -197,8 +198,8 @@ namespace Sporefront.Visual
             float pct = rp.resourceType.InitialAmount() > 0
                 ? (float)rp.remainingAmount / rp.resourceType.InitialAmount()
                 : 0f;
-            var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(contentRT, 12f,
+                UIHelper.InkMutedText, SporefrontColors.SporeGreen);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(Mathf.Clamp01(pct), 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -207,7 +208,7 @@ namespace Sporefront.Visual
             // Current gatherers
             var gatherersLabel = UIHelper.CreateLabel(contentRT,
                 $"  Gatherers: {rp.totalVillagersGathering}/{ResourcePointData.MaxVillagersPerTile}", UIConstants.FontSmall,
-                SporefrontColors.ParchmentShadow);
+                UIHelper.InkMutedText);
             var gatherersLE = gatherersLabel.gameObject.AddComponent<LayoutElement>();
             gatherersLE.preferredHeight = 24;
 
@@ -222,8 +223,8 @@ namespace Sporefront.Visual
                 float hpPct = rp.resourceType.MaxHealth() > 0
                     ? (float)(rp.currentHealth / rp.resourceType.MaxHealth())
                     : 0f;
-                var (hpBg, hpFill) = UIHelper.CreateProgressBar(contentRT, 12f,
-                    SporefrontColors.ParchmentShadow, SporefrontColors.SporeRed);
+                var (hpBg, hpFill) = UIHelper.CreateInkProgressBar(contentRT, 12f,
+                    UIHelper.InkMutedText, SporefrontColors.SporeRed);
                 var hpFillRT = hpFill.GetComponent<RectTransform>();
                 hpFillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
                 var hpBarLE = hpBg.gameObject.AddComponent<LayoutElement>();
@@ -249,7 +250,7 @@ namespace Sporefront.Visual
             }
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Villager Groups",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
@@ -258,7 +259,7 @@ namespace Sporefront.Visual
             if (groups == null || groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
-                    "  No villager groups available", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
+                    "  No villager groups available", UIConstants.FontSmall, UIHelper.InkMutedText);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 24;
                 return;
@@ -300,12 +301,12 @@ namespace Sporefront.Visual
                 var nameRow = UIHelper.CreateHorizontalRow(row.transform, 26f, 4f);
                 var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                     $"{group.name} ({group.villagerCount})", UIConstants.FontBody,
-                    isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
+                    isBusy ? SporefrontColors.SporeAmber : UIHelper.InkBodyText);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.flexibleWidth = 1;
 
                 var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                    $"{distance} tiles", UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
+                    $"{distance} tiles", UIConstants.FontSmall, UIHelper.InkMutedText);
                 var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                 distLE.preferredWidth = 70;
 
@@ -313,12 +314,12 @@ namespace Sporefront.Visual
                 var infoRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
                 var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                     taskDesc, UIConstants.FontSmall,
-                    isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
+                    isBusy ? SporefrontColors.SporeAmber : UIHelper.InkMutedText);
                 var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                 taskLE.flexibleWidth = 1;
 
                 var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                    walkTimeStr, UIConstants.FontSmall, SporefrontColors.ParchmentShadow);
+                    walkTimeStr, UIConstants.FontSmall, UIHelper.InkMutedText);
                 var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
                 walkLE.preferredWidth = 70;
 

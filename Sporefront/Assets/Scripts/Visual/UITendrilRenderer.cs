@@ -33,6 +33,8 @@ namespace Sporefront.Visual
             public float growthProgress; // 0..1
             public float idlePulsePhase;
             public Color branchColor = Color.white;
+            public float glowAlpha = 0f;           // 0 = no glow; e.g. 0.06f for very faint
+            public float glowWidthMultiplier = 3f; // how much wider the glow pass is
         }
 
         // ================================================================
@@ -101,6 +103,14 @@ namespace Sporefront.Visual
             );
         }
 
+        /// Deterministic spatial hash — returns 0..1 for any input position + seed.
+        private static float InkNoise(float position, float seed)
+        {
+            float x = position * 7.3f + seed * 131.7f;
+            x = Mathf.Sin(x * 127.1f) * 43758.5453f;
+            return x - Mathf.Floor(x);
+        }
+
         // ================================================================
         // Mesh Generation
         // ================================================================
@@ -114,6 +124,20 @@ namespace Sporefront.Visual
                 if (branch.controlPoints.Count < 2 || branch.growthProgress <= 0f)
                     continue;
 
+                // Glow pass — white, wider strands, very low alpha, drawn behind main strands
+                if (branch.glowAlpha > 0f)
+                {
+                    foreach (var strand in branch.strands)
+                    {
+                        if (vh.currentVertCount >= MaxVertices) return;
+                        var glowStrand = strand;
+                        glowStrand.alpha = branch.glowAlpha;
+                        glowStrand.width *= branch.glowWidthMultiplier;
+                        DrawStrand(vh, branch, glowStrand, Color.white);
+                    }
+                }
+
+                // Main strands
                 foreach (var strand in branch.strands)
                 {
                     if (vh.currentVertCount >= MaxVertices) return;
@@ -123,7 +147,8 @@ namespace Sporefront.Visual
 
         }
 
-        private void DrawStrand(VertexHelper vh, TendrilBranch branch, StrandParams strand)
+        private void DrawStrand(VertexHelper vh, TendrilBranch branch, StrandParams strand,
+            Color? colorOverride = null)
         {
             var pts = branch.controlPoints;
             if (pts.Count < 2) return;
@@ -182,7 +207,8 @@ namespace Sporefront.Visual
                     if (dir.sqrMagnitude < 0.0001f) dir = (p2 - p1).normalized;
                     Vector2 perp = new Vector2(-dir.y, dir.x);
 
-                    Vector2 finalPos = basePos + perp * offset;
+                    float edgeJitter = (InkNoise(t * 3f, strand.wavePhase + 17f) - 0.5f) * strand.width * 0.45f;
+                    Vector2 finalPos = basePos + perp * (offset + edgeJitter);
                     splinePoints.Add(finalPos);
                     cumulativeDistances.Add(t);
                 }
@@ -196,7 +222,7 @@ namespace Sporefront.Visual
             float growthProgress = branch.growthProgress;
             float pulsePhase = branch.idlePulsePhase;
 
-            Color baseColor = branch.branchColor;
+            Color baseColor = colorOverride.HasValue ? colorOverride.Value : branch.branchColor;
 
             // Draw quads between consecutive spline points
             for (int i = 0; i < splinePoints.Count - 1; i++)
@@ -222,16 +248,28 @@ namespace Sporefront.Visual
                 if (tEnd > 1f - branch.taperFraction)
                     taperEnd = Mathf.Max(0f, (1f - tEnd) / branch.taperFraction);
 
-                // Idle pulse on fully-grown strands
-                float pulseStart = growthProgress >= 0.99f
-                    ? 0.85f + 0.15f * Mathf.Sin(pulsePhase + strand.wavePhase)
-                    : 1f;
+                // Ink doesn't breathe — no idle pulse
+                float pulseStart = 1f;
 
                 float finalAlphaStart = strand.alpha * alphaStart * pulseStart;
                 float finalAlphaEnd = strand.alpha * alphaEnd * pulseStart;
 
                 float widthStart = strand.width * taperStart;
                 float widthEnd = strand.width * taperEnd;
+
+                // Ink splotch — irregular density and thickness
+                float noiseStart = InkNoise(tStart, strand.wavePhase);
+                float noiseEnd   = InkNoise(tEnd,   strand.wavePhase);
+                finalAlphaStart *= 0.2f + 0.8f * noiseStart;
+                finalAlphaEnd   *= 0.2f + 0.8f * noiseEnd;
+                widthStart      *= 0.4f + 1.2f * noiseStart;
+                widthEnd        *= 0.4f + 1.2f * noiseEnd;
+
+                // Large-scale ink pooling — slower spatial frequency for blob clusters
+                float poolStart = InkNoise(tStart * 0.7f, strand.wavePhase + 99f);
+                float poolEnd   = InkNoise(tEnd   * 0.7f, strand.wavePhase + 99f);
+                if (poolStart > 0.6f) widthStart *= 1.0f + (poolStart - 0.6f) * 1.0f;
+                if (poolEnd   > 0.6f) widthEnd   *= 1.0f + (poolEnd   - 0.6f) * 1.0f;
 
                 AddLineQuad(vh, start, end, baseColor, widthStart, widthEnd,
                     finalAlphaStart, finalAlphaEnd);

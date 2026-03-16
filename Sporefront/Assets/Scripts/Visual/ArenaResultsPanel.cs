@@ -45,9 +45,10 @@ namespace Sporefront.Visual
         public void Initialize(Transform canvasTransform)
         {
             // Full-screen panel
-            panel = UIHelper.CreatePanel(canvasTransform, "ArenaResultsPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "ArenaResultsPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // ScrollView fills panel above back button
             var scroll = UIHelper.CreateScrollView(panel.transform, "ResultsScroll", out contentRT);
@@ -149,7 +150,7 @@ namespace Sporefront.Visual
 
             AddCenteredLabel(winnerText, 22, winnerColor, true);
             AddCenteredLabel(string.Format("Duration: {0:F1}s", result.combatDuration),
-                14, SporefrontColors.ParchmentShadow, false);
+                14, UIHelper.InkMutedText, false);
             AddSpacer(10);
 
             // Attacker section
@@ -181,14 +182,14 @@ namespace Sporefront.Visual
             int draws = results.Count(r => r.winner == SimWinner.Draw);
 
             // Win Rate section
-            AddSectionHeader("WIN RATE", UIHelper.HeaderTextColor);
+            AddSectionHeader("WIN RATE", UIHelper.InkHeaderText);
             BuildWinRateBar("Attacker", attackerWins, total, AttackerWinColor);
             BuildWinRateBar("Defender", defenderWins, total, DefenderWinColor);
-            BuildWinRateBar("Draw", draws, total, SporefrontColors.ParchmentShadow);
+            BuildWinRateBar("Draw", draws, total, UIHelper.InkMutedText);
             AddSpacer(10);
 
             // Averages section
-            AddSectionHeader("AVERAGES", UIHelper.HeaderTextColor);
+            AddSectionHeader("AVERAGES", UIHelper.InkHeaderText);
 
             double avgDuration = results.Sum(r => r.combatDuration) / total;
             AddInfoLabel(string.Format("Avg Duration: {0:F1}s", avgDuration));
@@ -204,7 +205,7 @@ namespace Sporefront.Visual
             AddSpacer(10);
 
             // Individual runs list
-            AddSectionHeader("INDIVIDUAL RUNS", UIHelper.HeaderTextColor);
+            AddSectionHeader("INDIVIDUAL RUNS", UIHelper.InkHeaderText);
 
             for (int i = 0; i < results.Count; i++)
             {
@@ -252,7 +253,7 @@ namespace Sporefront.Visual
                 int killed = kvp.Value - finalCount;
 
                 string text = string.Format("  {0}:  {1} -> {2}  ({3} killed)", kvp.Key, kvp.Value, finalCount, killed);
-                var label = UIHelper.CreateLabel(contentRT, text, 13, UIHelper.BodyTextColor, TextAnchor.MiddleLeft);
+                var label = UIHelper.CreateLabel(contentRT, text, 13, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
                 var le = label.gameObject.AddComponent<LayoutElement>();
                 le.preferredHeight = 22;
             }
@@ -261,7 +262,7 @@ namespace Sporefront.Visual
             int totalFinal = remaining != null ? remaining.Values.Sum() : 0;
             var totalLabel = UIHelper.CreateLabel(contentRT,
                 string.Format("  Total: {0} -> {1}", totalInitial, totalFinal),
-                13, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft);
+                13, UIHelper.InkHeaderText, TextAnchor.MiddleLeft);
             totalLabel.fontStyle = FontStyle.Bold;
             var totalLE = totalLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.preferredHeight = 22;
@@ -278,12 +279,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
 
             // Name label
-            var nameLabel = UIHelper.CreateLabel(row.transform, "  " + label, 13, UIHelper.BodyTextColor);
+            var nameLabel = UIHelper.CreateLabel(row.transform, "  " + label, 13, UIHelper.InkBodyText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredWidth = 80;
 
             // Bar background
-            var barBg = UIHelper.CreatePanel(row.transform, "BarBg", SporefrontColors.BgSurface);
+            var barBg = UIHelper.CreatePanel(row.transform, "BarBg", SporefrontColors.ParchmentDeep);
             var barBgLE = barBg.AddComponent<LayoutElement>();
             barBgLE.flexibleWidth = 1;
             barBgLE.preferredHeight = 20;
@@ -299,7 +300,7 @@ namespace Sporefront.Visual
             // Count label
             string countText = string.Format("{0}/{1} ({2}%)", count, total, (int)(pct * 100));
             var countLabel = UIHelper.CreateLabel(row.transform, countText,
-                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleRight);
+                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 90;
         }
@@ -312,7 +313,7 @@ namespace Sporefront.Visual
         {
             if (scenarioConfig == null) return;
 
-            AddSectionHeader("MODIFIERS", SporefrontColors.ParchmentShadow);
+            AddSectionHeader("MODIFIERS", UIHelper.InkMutedText);
 
             // Terrain
             string terrainName = scenarioConfig.enemyTerrain.ToString();
@@ -374,7 +375,7 @@ namespace Sporefront.Visual
         private void AddTitle(string text)
         {
             var label = UIHelper.CreateLabel(contentRT, text,
-                24, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+                24, UIHelper.InkHeaderText, TextAnchor.MiddleCenter, true);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 40;
         }
@@ -400,7 +401,7 @@ namespace Sporefront.Visual
         private void AddInfoLabel(string text)
         {
             var label = UIHelper.CreateLabel(contentRT, "  " + text,
-                UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
+                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 20;
         }

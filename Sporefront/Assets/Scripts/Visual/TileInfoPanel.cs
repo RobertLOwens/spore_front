@@ -106,7 +106,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
 
             // Center-screen modal panel (~420x600)
-            panel = UIHelper.CreatePanel(canvasTransform, "TileInfoPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "TileInfoPanel", UIHelper.PanelParchmentBg);
             var rt = panel.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -123,12 +123,12 @@ namespace Sporefront.Visual
             headerBarRT.offsetMax = new Vector2(-8, -4);
 
             modalHeaderLabel = UIHelper.CreateLabel(headerBar.transform, "",
-                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var headerLabelLE = modalHeaderLabel.gameObject.AddComponent<LayoutElement>();
             headerLabelLE.flexibleWidth = 1;
 
             var closeBtn = UIHelper.CreateButton(headerBar.transform, "X",
-                SporefrontColors.BgSurface, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
+                SporefrontColors.ParchmentDeep, UIHelper.HudTextColor, 12, () => OnCloseRequested?.Invoke());
             var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeBtnLE.preferredWidth = 28;
             closeBtnLE.preferredHeight = 28;
@@ -215,23 +215,23 @@ namespace Sporefront.Visual
             var panelImg = panel.GetComponent<Image>();
             if (showingEntrenchConfirm)
             {
-                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeAmber, 0.08f);
+                panelImg.color = Color.Lerp(UIHelper.PanelParchmentBg, SporefrontColors.SporeAmber, 0.08f);
                 BuildEntrenchConfirmView(gameState, coord);
                 return;
             }
             if (showingMoveSelection)
             {
-                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeTeal, 0.06f);
+                panelImg.color = Color.Lerp(UIHelper.PanelParchmentBg, SporefrontColors.SporeTeal, 0.06f);
                 BuildMoveSelectionView(gameState, coord);
                 return;
             }
             if (showingAttackSelection)
             {
-                panelImg.color = Color.Lerp(UIHelper.PanelBg, SporefrontColors.SporeRed, 0.06f);
+                panelImg.color = Color.Lerp(UIHelper.PanelParchmentBg, SporefrontColors.SporeRed, 0.06f);
                 BuildAttackSelectionView(gameState, coord);
                 return;
             }
-            panelImg.color = UIHelper.PanelBg;
+            panelImg.color = UIHelper.PanelParchmentBg;
 
             var tileNullable = gameState.mapData.GetTile(coord);
             if (!tileNullable.HasValue) return;
@@ -239,7 +239,7 @@ namespace Sporefront.Visual
 
             // 1. Header: terrain + coordinate
             var header = UIHelper.CreateLabel(contentRT, $"{tile.terrain} ({coord.q},{coord.r})",
-                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 30;
 
@@ -281,7 +281,7 @@ namespace Sporefront.Visual
             if (building == null && gameState.CanBuildAt(coord, localPlayerID))
             {
                 var buildBtn = UIHelper.CreateButton(contentRT, "Build Here",
-                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                     () => OnBuildRequested?.Invoke(coord));
                 var btnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 38;
@@ -289,7 +289,7 @@ namespace Sporefront.Visual
 
             // 7. "Move Here" — destination-first move flow
             var moveHereBtn = UIHelper.CreateButton(contentRT, "Move Here",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                 () => { showingMoveSelection = true; Rebuild(cachedGameState); });
             var moveHereBtnLE = moveHereBtn.gameObject.AddComponent<LayoutElement>();
             moveHereBtnLE.preferredHeight = 38;
@@ -454,8 +454,8 @@ namespace Sporefront.Visual
             // HP bar
             if (building.maxHealth > 0)
             {
-                var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
-                    SporefrontColors.ParchmentShadow, SporefrontColors.SporeGreen);
+                var (bg, fill) = UIHelper.CreateInkProgressBar(contentRT, 14f,
+                    UIHelper.InkMutedText, SporefrontColors.SporeGreen);
                 float hpPct = (float)(building.health / building.maxHealth);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01(hpPct), 1);
@@ -468,7 +468,7 @@ namespace Sporefront.Visual
             if (isOwned && building.IsOperational)
             {
                 var detailBtn = UIHelper.CreateButton(contentRT, "Details",
-                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                     () => OnBuildingDetailRequested?.Invoke(building.id));
                 var btnLE = detailBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.preferredHeight = 34;
@@ -514,8 +514,8 @@ namespace Sporefront.Visual
                 var capturedBuildingID = building.id;
                 var upgradeBtn = UIHelper.CreateButton(contentRT,
                     $"Upgrade to Lv.{nextLevel} ({UIHelper.FormatCost(cost)})",
-                    canAfford ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow,
-                    canAfford ? UIHelper.ButtonText : SporefrontColors.ParchmentShadow,
+                    canAfford ? SporefrontColors.SporeAmber : UIHelper.InkMutedText,
+                    canAfford ? UIHelper.ButtonText : UIHelper.InkMutedText,
                     UIConstants.FontBody,
                     () => OnUpgradeBuildingRequested?.Invoke(capturedBuildingID));
                 upgradeBtn.interactable = canAfford;
@@ -527,7 +527,7 @@ namespace Sporefront.Visual
         private void BuildArmiesSection(List<ArmyData> armies, GameState gameState)
         {
             var sectionHeader = UIHelper.CreateLabel(contentRT, "Armies",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 28;
@@ -557,8 +557,8 @@ namespace Sporefront.Visual
                     float progress = Mathf.Clamp01((float)(elapsed / buildTime));
                     double remaining = buildTime - elapsed;
 
-                    var (bg, fill) = UIHelper.CreateProgressBar(contentRT, 14f,
-                        SporefrontColors.ParchmentShadow, SporefrontColors.SporeAmber);
+                    var (bg, fill) = UIHelper.CreateInkProgressBar(contentRT, 14f,
+                        UIHelper.InkMutedText, SporefrontColors.SporeAmber);
                     var fillRT = fill.GetComponent<RectTransform>();
                     fillRT.anchorMax = new Vector2(progress, 1);
                     var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -692,7 +692,7 @@ namespace Sporefront.Visual
         private void BuildVillagersSection(List<VillagerGroupData> groups, HexCoordinate coord, GameState gameState)
         {
             var sectionHeader = UIHelper.CreateLabel(contentRT, "Villagers",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 28;
@@ -714,7 +714,7 @@ namespace Sporefront.Visual
                     var capturedGroupID = group.id;
 
                     var moveBtn = UIHelper.CreateButton(row.transform, "Move",
-                        SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                        SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                         () => OnMoveRequested?.Invoke(capturedGroupID, coord));
                     var moveBtnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
                     moveBtnLE.preferredWidth = 50;
@@ -724,7 +724,7 @@ namespace Sporefront.Visual
                     if (group.currentTask != null && !group.currentTask.IsIdle)
                     {
                         var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
-                            SporefrontColors.BgSurface, UIHelper.HudTextColor, UIConstants.FontBody,
+                            SporefrontColors.ParchmentDeep, UIHelper.HudTextColor, UIConstants.FontBody,
                             () =>
                             {
                                 var cmd = new StopGatheringCommand(localPlayerID, capturedGroupID);
@@ -783,7 +783,7 @@ namespace Sporefront.Visual
                         ? "Lumber Camp"
                         : "Mining Camp";
                     var needsLabel = UIHelper.CreateLabel(contentRT,
-                        $"Needs {campName}", UIConstants.FontBody, SporefrontColors.ParchmentShadow,
+                        $"Needs {campName}", UIConstants.FontBody, UIHelper.InkMutedText,
                         TextAnchor.MiddleLeft);
                     var needsLE = needsLabel.gameObject.AddComponent<LayoutElement>();
                     needsLE.preferredHeight = 26;
@@ -826,14 +826,14 @@ namespace Sporefront.Visual
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                 () => { showingMoveSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
             arrowLE.preferredHeight = 28;
 
             var header = UIHelper.CreateLabel(headerRow.transform, $"Move to ({coord.q},{coord.r})",
-                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.flexibleWidth = 1;
             headerLE.preferredHeight = 30;
@@ -854,7 +854,7 @@ namespace Sporefront.Visual
                     if (!hasArmies)
                     {
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Armies",
-                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                            UIConstants.FontSubheader, UIHelper.InkHeaderText,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
                         shLE.preferredHeight = 28;
@@ -880,7 +880,7 @@ namespace Sporefront.Visual
                     {
                         if (hasArmies) UIHelper.CreateDivider(contentRT);
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Villagers",
-                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                            UIConstants.FontSubheader, UIHelper.InkHeaderText,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
                         shLE.preferredHeight = 28;
@@ -915,12 +915,12 @@ namespace Sporefront.Visual
                     var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
                     var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                         $"{group.name} ({group.villagerCount})", UIConstants.FontBody,
-                        isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
+                        isBusy ? SporefrontColors.SporeAmber : UIHelper.InkBodyText);
                     var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                     nameLE.flexibleWidth = 1;
 
                     var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                        $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                        $"{distance} tiles", UIConstants.FontCaption, UIHelper.InkMutedText);
                     var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
                     distLE.preferredWidth = 55;
 
@@ -928,12 +928,12 @@ namespace Sporefront.Visual
                     var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
                     var taskLabel = UIHelper.CreateLabel(infoRow.transform,
                         taskDesc, UIConstants.FontCaption,
-                        isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
+                        isBusy ? SporefrontColors.SporeAmber : UIHelper.InkMutedText);
                     var taskLE = taskLabel.gameObject.AddComponent<LayoutElement>();
                     taskLE.flexibleWidth = 1;
 
                     var walkLabel = UIHelper.CreateLabel(infoRow.transform,
-                        walkTimeStr, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                        walkTimeStr, UIConstants.FontCaption, UIHelper.InkMutedText);
                     var walkLE = walkLabel.gameObject.AddComponent<LayoutElement>();
                     walkLE.preferredWidth = 55;
 
@@ -956,7 +956,7 @@ namespace Sporefront.Visual
                     }
 
                     var capturedID = group.id;
-                    Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface;
+                    Color btnColor = isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDeep;
                     Color btnTextColor = isBusy ? UIHelper.HudTextColor : UIHelper.ButtonText;
                     var selectBtn = UIHelper.CreateButton(actionRow.transform,
                         isSelected ? "Selected" : "Select",
@@ -1037,14 +1037,14 @@ namespace Sporefront.Visual
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 30f, 4f);
 
             var backArrow = UIHelper.CreateButton(headerRow.transform, "<",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                 () => { showingAttackSelection = false; ClearPreview(); Rebuild(cachedGameState); });
             var arrowLE = backArrow.gameObject.AddComponent<LayoutElement>();
             arrowLE.preferredWidth = 28;
             arrowLE.preferredHeight = 28;
 
             var header = UIHelper.CreateLabel(headerRow.transform, $"Attack ({coord.q},{coord.r})",
-                UIConstants.FontHeader, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                UIConstants.FontHeader, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.flexibleWidth = 1;
             headerLE.preferredHeight = 30;
@@ -1065,7 +1065,7 @@ namespace Sporefront.Visual
                     if (!hasArmies)
                     {
                         var sectionHeader = UIHelper.CreateLabel(contentRT, "Your Armies",
-                            UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                            UIConstants.FontSubheader, UIHelper.InkHeaderText,
                             TextAnchor.MiddleLeft, true);
                         var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
                         shLE.preferredHeight = 28;
@@ -1162,12 +1162,12 @@ namespace Sporefront.Visual
             var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
             var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                 $"{army.name} ({total})", UIConstants.FontBody,
-                isBusy ? SporefrontColors.SporeAmber : UIHelper.BodyTextColor);
+                isBusy ? SporefrontColors.SporeAmber : UIHelper.InkBodyText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
             var distLabel = UIHelper.CreateLabel(nameRow.transform,
-                $"{distance} tiles", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                $"{distance} tiles", UIConstants.FontCaption, UIHelper.InkMutedText);
             var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
             distLE.preferredWidth = 55;
 
@@ -1175,12 +1175,12 @@ namespace Sporefront.Visual
             var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
             var statusLabel = UIHelper.CreateLabel(infoRow.transform,
                 status, UIConstants.FontCaption,
-                isBusy ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow);
+                isBusy ? SporefrontColors.SporeAmber : UIHelper.InkMutedText);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
             statusLE.flexibleWidth = 1;
 
             var timeLabel = UIHelper.CreateLabel(infoRow.transform,
-                travelTimeStr, UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                travelTimeStr, UIConstants.FontCaption, UIHelper.InkMutedText);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 55;
 
@@ -1204,7 +1204,7 @@ namespace Sporefront.Visual
 
             var capturedID = army.id;
             Color btnColor = isAttack ? SporefrontColors.SporeRed
-                : (isEntrenched ? SporefrontColors.SporeAmber : SporefrontColors.BgSurface);
+                : (isEntrenched ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDeep);
             Color btnTextColor = isAttack || isEntrenched ? UIHelper.HudTextColor : UIHelper.ButtonText;
             var selectBtn = UIHelper.CreateButton(actionRow.transform,
                 isSelected ? "Selected" : "Select",
@@ -1242,7 +1242,7 @@ namespace Sporefront.Visual
             // Warning message
             var msg = UIHelper.CreateLabel(contentRT,
                 $"{action} {armyName} will abandon its entrenched position, losing all defensive bonuses.",
-                UIConstants.FontBody, UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+                UIConstants.FontBody, UIHelper.InkBodyText, TextAnchor.MiddleCenter);
             var msgLE = msg.gameObject.AddComponent<LayoutElement>();
             msgLE.preferredHeight = 50;
 
@@ -1281,7 +1281,7 @@ namespace Sporefront.Visual
 
             // Cancel button
             var cancelBtn = UIHelper.CreateButton(contentRT, "Cancel",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontBody,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
                 () =>
                 {
                     showingEntrenchConfirm = false;
@@ -1298,7 +1298,7 @@ namespace Sporefront.Visual
         private Button CreateActionButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                SporefrontColors.BgSurface, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
+                SporefrontColors.ParchmentDeep, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 56;
             le.preferredHeight = 34;

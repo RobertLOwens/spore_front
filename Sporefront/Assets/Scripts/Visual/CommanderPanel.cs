@@ -63,13 +63,14 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Hide);
 
             // Main panel — centered 700x520
-            panel = UIHelper.CreatePanel(backdrop.transform, "CommanderPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "CommanderPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, UIConstants.ModalXLW, UIConstants.ModalMediumH);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // Title
             var titleLabel = UIHelper.CreateLabel(panel.transform, "Commanders",
-                UIHelper.DefaultHeaderFontSize + 2, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize + 2, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var titleRT = titleLabel.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0, 1);
@@ -104,14 +105,13 @@ namespace Sporefront.Visual
             UIHelper.StretchFull(detailScrollRT);
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 42);
+            closeBtnRT.offsetMin = new Vector2(8, 4);
+            closeBtnRT.offsetMax = new Vector2(-8, 36);
 
             backdrop.SetActive(false);
         }
@@ -175,7 +175,7 @@ namespace Sporefront.Visual
             if (commanders.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(listContentRT, "No commanders.\nRecruit one below.",
-                    UIConstants.FontCaption, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                    UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 60;
             }
@@ -183,7 +183,7 @@ namespace Sporefront.Visual
             foreach (var commander in commanders)
             {
                 bool isSelected = selectedCommanderID.HasValue && selectedCommanderID.Value == commander.id;
-                Color rowBg = isSelected ? SporefrontColors.BgSurface : SporefrontColors.BgCard;
+                Color rowBg = isSelected ? SporefrontColors.ParchmentDeep : SporefrontColors.ParchmentDark;
 
                 var rowPanel = UIHelper.CreatePanel(listContentRT, "CmdrRow", rowBg);
                 var rowLE = rowPanel.AddComponent<LayoutElement>();
@@ -200,13 +200,13 @@ namespace Sporefront.Visual
                 // Name + rank
                 var nameLabel = UIHelper.CreateLabel(rowPanel.transform,
                     $"{commander.name} ({commander.rank.DisplayName()})",
-                    13, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, false);
+                    13, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, false);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.preferredHeight = 20;
 
                 // Specialty
                 var specLabel = UIHelper.CreateLabel(rowPanel.transform,
-                    commander.specialty.DisplayName(), UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                    commander.specialty.DisplayName(), UIConstants.FontCaption, UIHelper.InkMutedText);
                 var specLE = specLabel.gameObject.AddComponent<LayoutElement>();
                 specLE.preferredHeight = 16;
 
@@ -261,7 +261,7 @@ namespace Sporefront.Visual
             {
                 var placeholder = UIHelper.CreateLabel(detailContentRT,
                     "Select a commander to view details.",
-                    13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                    13, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var plLE = placeholder.gameObject.AddComponent<LayoutElement>();
                 plLE.preferredHeight = 60;
                 return;
@@ -276,7 +276,7 @@ namespace Sporefront.Visual
 
             // Name + specialty header
             var header = UIHelper.CreateLabel(detailContentRT, commander.name,
-                UIHelper.DefaultHeaderFontSize + 2, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize + 2, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 30;
@@ -289,14 +289,14 @@ namespace Sporefront.Visual
             iconLE.preferredWidth = 60;
 
             var specName = UIHelper.CreateLabel(specRow.transform,
-                commander.specialty.DisplayName(), 13, UIHelper.BodyTextColor);
+                commander.specialty.DisplayName(), 13, UIHelper.InkBodyText);
             var specNameLE = specName.gameObject.AddComponent<LayoutElement>();
             specNameLE.flexibleWidth = 1;
 
             // Level + Rank
             var levelRow = UIHelper.CreateHorizontalRow(detailContentRT, 22f, 6f);
             var levelLabel = UIHelper.CreateLabel(levelRow.transform,
-                $"Level {commander.level}", 13, UIHelper.BodyTextColor);
+                $"Level {commander.level}", 13, UIHelper.InkBodyText);
             var levelLE = levelLabel.gameObject.AddComponent<LayoutElement>();
             levelLE.preferredWidth = 80;
 
@@ -342,12 +342,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(detailContentRT, 20f, 4f);
 
             xpLabel = UIHelper.CreateLabel(row.transform,
-                $"XP: {commander.experience}/{requiredXP}", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                $"XP: {commander.experience}/{requiredXP}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var labelLE = xpLabel.gameObject.AddComponent<LayoutElement>();
             labelLE.preferredWidth = 100;
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
-                SporefrontColors.ParchmentShadow, SporefrontColors.SporePurple);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 14f,
+                UIHelper.InkMutedText, SporefrontColors.SporePurple);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(xpPct, 1);
             xpFill = fill;
@@ -375,8 +375,8 @@ namespace Sporefront.Visual
                                  staminaPct > 0.2f ? SporefrontColors.SporeAmber :
                                  SporefrontColors.SporeRed;
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 14f,
-                SporefrontColors.ParchmentShadow, staminaColor);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 14f,
+                UIHelper.InkMutedText, staminaColor);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(staminaPct, 1);
             staminaFill = fill;
@@ -392,7 +392,7 @@ namespace Sporefront.Visual
         private void BuildStatsSection(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Commander Stats",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -416,8 +416,8 @@ namespace Sporefront.Visual
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredWidth = 90;
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 12f,
-                SporefrontColors.ParchmentShadow, barColor);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 12f,
+                UIHelper.InkMutedText, barColor);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(pct, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -425,7 +425,7 @@ namespace Sporefront.Visual
             barLE.preferredHeight = 12;
 
             var valLabel = UIHelper.CreateLabel(row.transform, value.ToString(), UIConstants.FontCaption,
-                UIHelper.BodyTextColor, TextAnchor.MiddleRight);
+                UIHelper.InkBodyText, TextAnchor.MiddleRight);
             var valLE = valLabel.gameObject.AddComponent<LayoutElement>();
             valLE.preferredWidth = 30;
         }
@@ -437,7 +437,7 @@ namespace Sporefront.Visual
         private void BuildStatBenefits(CommanderData commander)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Stat Effects",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -464,12 +464,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(detailContentRT, 18f, 4f);
 
             var nameLabel = UIHelper.CreateLabel(row.transform, $"{statName}:", UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow);
+                UIHelper.InkMutedText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.preferredWidth = 80;
 
             var benefitLabel = UIHelper.CreateLabel(row.transform, benefit, UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow);
+                UIHelper.InkMutedText);
             var benefitLE = benefitLabel.gameObject.AddComponent<LayoutElement>();
             benefitLE.flexibleWidth = 1;
         }
@@ -481,7 +481,7 @@ namespace Sporefront.Visual
         private void BuildAssignmentInfo(CommanderData commander, GameState gameState)
         {
             var sectionLabel = UIHelper.CreateLabel(detailContentRT, "Assignment",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -498,13 +498,13 @@ namespace Sporefront.Visual
 
                     var locLabel = UIHelper.CreateLabel(detailContentRT,
                         $"Location: ({army.coordinate.q}, {army.coordinate.r})", UIConstants.FontCaption,
-                        SporefrontColors.ParchmentShadow);
+                        UIHelper.InkMutedText);
                     var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
                     locLE.preferredHeight = 18;
 
                     var unitsLabel = UIHelper.CreateLabel(detailContentRT,
                         $"Army Strength: {army.GetTotalUnits()} units", UIConstants.FontCaption,
-                        SporefrontColors.ParchmentShadow);
+                        UIHelper.InkMutedText);
                     var unitsLE = unitsLabel.gameObject.AddComponent<LayoutElement>();
                     unitsLE.preferredHeight = 18;
                 }
@@ -519,7 +519,7 @@ namespace Sporefront.Visual
             else
             {
                 var unassignedLabel = UIHelper.CreateLabel(detailContentRT,
-                    "Unassigned (available for deployment)", UIConstants.FontCaption, SporefrontColors.ParchmentShadow);
+                    "Unassigned (available for deployment)", UIConstants.FontCaption, UIHelper.InkMutedText);
                 var unassignedLE = unassignedLabel.gameObject.AddComponent<LayoutElement>();
                 unassignedLE.preferredHeight = 20;
             }
@@ -532,7 +532,7 @@ namespace Sporefront.Visual
         private void BuildRecruitFlow()
         {
             var header = UIHelper.CreateLabel(detailContentRT, "Recruit Commander",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerLE = header.gameObject.AddComponent<LayoutElement>();
             headerLE.preferredHeight = 30;
@@ -586,7 +586,7 @@ namespace Sporefront.Visual
 
             var infoLabel = UIHelper.CreateLabel(detailContentRT,
                 "Choose a specialty for the new commander:", UIConstants.FontCaption,
-                SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var infoLE = infoLabel.gameObject.AddComponent<LayoutElement>();
             infoLE.preferredHeight = 24;
 
@@ -597,9 +597,9 @@ namespace Sporefront.Visual
             {
                 var capturedSpec = spec;
 
-                Color rowBg = canAfford ? SporefrontColors.BgCard :
-                    new Color(SporefrontColors.BgCard.r, SporefrontColors.BgCard.g,
-                        SporefrontColors.BgCard.b, 0.5f);
+                Color rowBg = canAfford ? SporefrontColors.ParchmentDark :
+                    new Color(SporefrontColors.ParchmentDark.r, SporefrontColors.ParchmentDark.g,
+                        SporefrontColors.ParchmentDark.b, 0.5f);
                 var rowPanel = UIHelper.CreatePanel(detailContentRT, "SpecRow", rowBg);
                 var rowLE = rowPanel.AddComponent<LayoutElement>();
                 rowLE.preferredHeight = 56;
@@ -615,20 +615,20 @@ namespace Sporefront.Visual
                 // Specialty name + icon
                 var nameRow = UIHelper.CreateHorizontalRow(rowPanel.transform, 20f, 4f);
 
-                Color textColor = canAfford ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentShadow;
+                Color textColor = canAfford ? SporefrontColors.SporeAmber : UIHelper.InkMutedText;
                 var iconLabel = UIHelper.CreateLabel(nameRow.transform,
                     $"[{spec.Icon()}]", UIConstants.FontCaption, textColor);
                 var iconLE2 = iconLabel.gameObject.AddComponent<LayoutElement>();
                 iconLE2.preferredWidth = 50;
 
                 var nameLabel = UIHelper.CreateLabel(nameRow.transform,
-                    spec.DisplayName(), 13, canAfford ? UIHelper.HeaderTextColor : SporefrontColors.ParchmentShadow);
+                    spec.DisplayName(), 13, canAfford ? UIHelper.InkHeaderText : UIHelper.InkMutedText);
                 var nameLE2 = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE2.flexibleWidth = 1;
 
                 // Description
                 var descLabel = UIHelper.CreateLabel(rowPanel.transform,
-                    spec.Description(), UIConstants.FontCaption, canAfford ? SporefrontColors.ParchmentShadow : SporefrontColors.ParchmentShadow);
+                    spec.Description(), UIConstants.FontCaption, canAfford ? UIHelper.InkMutedText : UIHelper.InkMutedText);
                 var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
                 descLE.preferredHeight = 16;
 
@@ -649,7 +649,7 @@ namespace Sporefront.Visual
 
             // Cancel button
             var cancelBtn = UIHelper.CreateButton(detailContentRT, "Cancel",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, () =>
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, () =>
                 {
                     isRecruitFlowActive = false;
                     if (cachedGameState != null) Rebuild(cachedGameState);

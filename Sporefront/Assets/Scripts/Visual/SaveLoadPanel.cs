@@ -48,9 +48,10 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Close);
 
             // Center panel
-            panel = UIHelper.CreatePanel(backdrop.transform, "SaveLoadPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "SaveLoadPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
+            PopupTendrilDecorator.Attach(panelRT);
 
             BuildContent();
             backdrop.SetActive(false);
@@ -102,11 +103,11 @@ namespace Sporefront.Visual
 
             // Title
             var title = UIHelper.CreateLabel(panel.transform, "Save / Load Game",
-                20, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+                20, UIHelper.InkHeaderText, TextAnchor.MiddleCenter, true);
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 36;
 
-            UIHelper.CreateDivider(panel.transform, SporefrontColors.ParchmentShadow, 2f);
+            UIHelper.CreateDivider(panel.transform, UIHelper.InkMutedText, 2f);
 
             // Save name input (only visible in save mode)
             var inputRow = new GameObject("InputRow", typeof(RectTransform), typeof(LayoutElement));
@@ -125,7 +126,7 @@ namespace Sporefront.Visual
             inputBGLE.flexibleWidth = 1;
             saveNameInput = inputBG.AddComponent<InputField>();
             var placeholder = UIHelper.CreateLabel(inputBG.transform, "Enter save name...",
-                13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
+                13, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var placeholderRT = placeholder.GetComponent<RectTransform>();
             UIHelper.StretchFull(placeholderRT);
             placeholderRT.offsetMin = new Vector2(8, 0);
@@ -167,8 +168,7 @@ namespace Sporefront.Visual
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 14, Close);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Close);
             var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeBtnLE.preferredHeight = 36;
         }
@@ -188,7 +188,7 @@ namespace Sporefront.Visual
             if (saves.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(slotContainer, "No saved games.",
-                    13, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                    13, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -235,7 +235,7 @@ namespace Sporefront.Visual
 
             string details = $"{dateDisplay}  |  {info.mapWidth}x{info.mapHeight}";
             var detailLabel = UIHelper.CreateLabel(infoCol.transform, details,
-                11, SporefrontColors.ParchmentShadow, TextAnchor.MiddleLeft);
+                11, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
             detailLE.preferredHeight = 18;
 

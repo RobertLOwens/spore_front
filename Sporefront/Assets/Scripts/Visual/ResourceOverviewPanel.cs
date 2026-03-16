@@ -2,7 +2,7 @@
 // FILE: Visual/ResourceOverviewPanel.cs
 // PURPOSE: Modal overview with per-resource detail cards showing storage,
 //          collection rates, gathering groups, and active bonuses.
-//          Port from ResourceOverviewViewController.swift
+//          Parchment/ink ledger style with watercolor progress bars.
 // ============================================================================
 
 using System;
@@ -56,14 +56,16 @@ namespace Sporefront.Visual
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Hide);
 
-            // Main panel -- centered 440x560
-            panel = UIHelper.CreatePanel(backdrop.transform, "ResourceOverviewPanel", UIHelper.PanelBg);
+            // Main panel -- parchment background
+            panel = UIHelper.CreatePanel(backdrop.transform, "ResourceOverviewPanel",
+                UIHelper.PanelParchmentBg);
             var rt = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalLargeH);
+            PopupTendrilDecorator.Attach(rt);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Resource Overview",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerRT = headerLabel.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
@@ -77,18 +79,17 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 44);
+            scrollRT.offsetMin = new Vector2(0, 40);
             scrollRT.offsetMax = new Vector2(0, -36);
 
-            // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption, Hide);
+            // Ink-styled close annotation
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 42);
+            closeBtnRT.offsetMin = new Vector2(8, 4);
+            closeBtnRT.offsetMax = new Vector2(-8, 36);
 
             backdrop.SetActive(false);
         }
@@ -158,7 +159,7 @@ namespace Sporefront.Visual
             foreach (var resType in resourceOrder)
             {
                 BuildResourceCard(resType, gameState, player, foodInfo);
-                UIHelper.CreateDivider(contentRT);
+                UIHelper.CreateDivider(contentRT, UIHelper.InkDividerColor);
             }
 
             // Active bonuses section
@@ -172,74 +173,72 @@ namespace Sporefront.Visual
         private void BuildResourceCard(ResourceType resType, GameState gameState,
             PlayerState player, GameState.FoodConsumptionInfo foodInfo)
         {
-            var card = UIHelper.CreatePanel(contentRT, $"{resType}Card", SporefrontColors.BgCard);
-            var cardLE = card.AddComponent<LayoutElement>();
-            cardLE.flexibleWidth = 1;
+            var vlg = UIHelper.CreateLedgerCard(contentRT, $"{resType}Card");
+            var card = vlg.transform;
 
-            var vlg = card.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 3f;
-            vlg.padding = new RectOffset(10, 10, 6, 6);
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
+            // Row 1: Key badge + Resource name + amount
+            // Row 1: Key badge + Resource name + amount
+            var topRow = UIHelper.CreateHorizontalRow(card, 36f, 6f);
+            var topRowLE = topRow.gameObject.AddComponent<LayoutElement>();
+            topRowLE.preferredHeight = 36;
 
-            // Row 1: Resource name + icon + amount
-            var topRow = UIHelper.CreateHorizontalRow(card.transform, 24f, 4f);
+            UIHelper.CreateKeyBadge(topRow.transform, UIHelper.ResourceIcon(resType));
 
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
-                $"[{UIHelper.ResourceIcon(resType)}] {resType.DisplayName()}", 14,
-                UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                resType.DisplayName(), UIConstants.FontSubheader,
+                UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
-            nameLE.preferredHeight = 24;
+            nameLE.preferredHeight = 36;
 
             int amount = player.GetResource(resType);
             int capacity = gameState.GetStorageCapacity(localPlayerID, resType);
             var amountLabel = UIHelper.CreateLabel(topRow.transform,
-                $"{amount} / {capacity}", 13,
-                amount >= capacity ? SporefrontColors.SporeRed : UIHelper.BodyTextColor,
+                $"{amount} / {capacity}", UIConstants.FontBody,
+                amount >= capacity ? SporefrontColors.SporeRed : UIHelper.InkBodyText,
                 TextAnchor.MiddleRight);
             var amountLE = amountLabel.gameObject.AddComponent<LayoutElement>();
-            amountLE.preferredWidth = 100;
-            amountLE.preferredHeight = 24;
+            amountLE.preferredWidth = 120;
+            amountLE.preferredHeight = 36;
 
-            // Storage bar
+            // Ink-outlined storage bar with resource-appropriate watercolor fill
             float storagePct = capacity > 0 ? Mathf.Clamp01((float)amount / capacity) : 0f;
             Color barColor = storagePct > 0.9f ? SporefrontColors.SporeRed :
-                storagePct > 0.7f ? SporefrontColors.SporeAmber : SporefrontColors.SporeGreen;
-            var (bg, fill) = UIHelper.CreateProgressBar(card.transform, 10f,
-                SporefrontColors.ParchmentShadow, barColor);
+                storagePct > 0.7f ? SporefrontColors.SporeAmber :
+                UIHelper.GetResourceBarColor(resType);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(card, 14f, barColor);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(storagePct, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
-            barLE.preferredHeight = 10;
+            barLE.preferredHeight = 14;
 
             // Row 2: Collection rate (net for food)
-            var rateRow = UIHelper.CreateHorizontalRow(card.transform, 18f, 4f);
+            var rateRow = UIHelper.CreateHorizontalRow(card, 26f, 4f);
+            var rateRowLE = rateRow.gameObject.AddComponent<LayoutElement>();
+            rateRowLE.preferredHeight = 26;
 
             double rate = player.GetCollectionRate(resType);
             if (resType == ResourceType.Food)
                 rate -= foodInfo.adjustedRate;
             string rateSign = rate >= 0 ? "+" : "";
             Color rateColor = rate > 0.01 ? SporefrontColors.SporeGreen :
-                rate < -0.01 ? SporefrontColors.SporeRed : SporefrontColors.ParchmentShadow;
+                rate < -0.01 ? SporefrontColors.SporeRed : UIHelper.InkMutedText;
 
             var rateLabel = UIHelper.CreateLabel(rateRow.transform,
-                $"Rate: {rateSign}{rate:F2}/s", 12, rateColor);
+                $"Rate: {rateSign}{rate:F2}/s", UIConstants.FontBody, rateColor);
             var rateLE = rateLabel.gameObject.AddComponent<LayoutElement>();
             rateLE.flexibleWidth = 1;
-            rateLE.preferredHeight = 18;
+            rateLE.preferredHeight = 26;
 
             // Food-specific: consumption breakdown
             if (resType == ResourceType.Food)
             {
                 var consumeLabel = UIHelper.CreateLabel(rateRow.transform,
                     $"Consumption: -{foodInfo.adjustedRate:F2}/s ({foodInfo.civilian}civ + {foodInfo.military}mil)",
-                    10, SporefrontColors.SporeRed, TextAnchor.MiddleRight);
+                    UIConstants.FontSmall, SporefrontColors.SporeRed, TextAnchor.MiddleRight);
                 var consumeLE = consumeLabel.gameObject.AddComponent<LayoutElement>();
                 consumeLE.flexibleWidth = 1;
-                consumeLE.preferredHeight = 18;
+                consumeLE.preferredHeight = 26;
             }
 
             // Wood-specific: farm upkeep note
@@ -248,15 +247,15 @@ namespace Sporefront.Visual
                 int farmCount = gameState.GetBuildingCount(BuildingType.Farm, localPlayerID);
                 if (farmCount > 0)
                 {
-                    var upkeepLabel = UIHelper.CreateLabel(card.transform,
-                        $"Farm wood upkeep: {farmCount} farm(s) active", 10,
-                        SporefrontColors.ParchmentShadow);
+                    var upkeepLabel = UIHelper.CreateLabel(card,
+                        $"Farm wood upkeep: {farmCount} farm(s) active", UIConstants.FontSmall,
+                        UIHelper.InkMutedText);
                     var upkeepLE = upkeepLabel.gameObject.AddComponent<LayoutElement>();
-                    upkeepLE.preferredHeight = 16;
+                    upkeepLE.preferredHeight = 24;
                 }
             }
 
-            // Row 3: Gathering groups
+            // Row 3: Gathering groups — compact when empty
             var villagerGroups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
             int gatheringGroups = 0;
             int gatheringVillagers = 0;
@@ -272,28 +271,24 @@ namespace Sporefront.Visual
 
             if (gatheringGroups > 0)
             {
-                var gatherLabel = UIHelper.CreateLabel(card.transform,
-                    $"Gathering: {gatheringGroups} group(s), {gatheringVillagers} villager(s)", 11,
+                var gatherLabel = UIHelper.CreateLabel(card,
+                    $"Gathering: {gatheringGroups} group(s), {gatheringVillagers} villager(s)", UIConstants.FontBody,
                     SporefrontColors.SporeGreen);
                 var gatherLE = gatherLabel.gameObject.AddComponent<LayoutElement>();
-                gatherLE.preferredHeight = 18;
+                gatherLE.preferredHeight = 26;
             }
             else
             {
-                var noGatherLabel = UIHelper.CreateLabel(card.transform,
-                    "No villagers assigned", 11, SporefrontColors.ParchmentShadow);
+                // Faded null state — compact and italic
+                var noGatherLabel = UIHelper.CreateLabel(card,
+                    "No villagers assigned", UIConstants.FontSmall, UIHelper.InkMutedText);
+                noGatherLabel.fontStyle = FontStyle.Italic;
                 var noGatherLE = noGatherLabel.gameObject.AddComponent<LayoutElement>();
-                noGatherLE.preferredHeight = 18;
+                noGatherLE.preferredHeight = 24;
             }
 
             // Resource-specific building bonuses
-            BuildBuildingBonuses(card.transform, resType, gameState);
-
-            // Auto-size card
-            int rowCount = 4; // base rows
-            if (resType == ResourceType.Food) rowCount++;
-            if (resType == ResourceType.Wood && gameState.GetBuildingCount(BuildingType.Farm, localPlayerID) > 0) rowCount++;
-            cardLE.preferredHeight = 28 + rowCount * 20;
+            BuildBuildingBonuses(card, resType, gameState);
         }
 
         // ================================================================
@@ -349,10 +344,10 @@ namespace Sporefront.Visual
                 if (millCount > 0)
                 {
                     var millLabel = UIHelper.CreateLabel(parent,
-                        $"Mill(s): {millCount} (+25% adjacent farm rate each)", 10,
+                        $"Mill(s): {millCount} (+25% adjacent farm rate each)", UIConstants.FontSmall,
                         SporefrontColors.SporeTeal);
                     var millLE = millLabel.gameObject.AddComponent<LayoutElement>();
-                    millLE.preferredHeight = 16;
+                    millLE.preferredHeight = 24;
                 }
             }
         }
@@ -376,7 +371,7 @@ namespace Sporefront.Visual
             if (bonuses.Count == 0) return;
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Active Bonuses",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 26;
@@ -389,9 +384,9 @@ namespace Sporefront.Visual
                 Color color = value >= 0 ? SporefrontColors.SporeGreen : SporefrontColors.SporeRed;
 
                 var bonusLabel = UIHelper.CreateLabel(contentRT,
-                    $"  {name}: {display}", 11, color);
+                    $"  {name}: {display}", UIConstants.FontBody, color);
                 var bonusLE = bonusLabel.gameObject.AddComponent<LayoutElement>();
-                bonusLE.preferredHeight = 18;
+                bonusLE.preferredHeight = 26;
             }
         }
 

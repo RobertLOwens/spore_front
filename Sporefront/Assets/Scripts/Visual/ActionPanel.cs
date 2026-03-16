@@ -238,13 +238,13 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Cancel);
 
             // Centered modal panel
-            buildPanel = UIHelper.CreatePanel(buildBackdrop.transform, "BuildPanel", UIHelper.PanelBg);
+            buildPanel = UIHelper.CreatePanel(buildBackdrop.transform, "BuildPanel", UIHelper.PanelParchmentBg);
             var rt = buildPanel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(rt, UIConstants.ModalBuildMenuW, UIConstants.ModalBuildMenuH);
 
             // Header
             var header = UIHelper.CreateLabel(buildPanel.transform, "Build",
-                UIConstants.FontTitle, UIHelper.HeaderTextColor,
+                UIConstants.FontTitle, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerRT = header.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
@@ -255,7 +255,7 @@ namespace Sporefront.Visual
 
             // Rotation label (between header and scroll)
             rotationLabel = UIHelper.CreateLabel(buildPanel.transform, "Rotation: 0",
-                UIConstants.FontSmall, SporefrontColors.ParchmentShadow, TextAnchor.MiddleCenter);
+                UIConstants.FontSmall, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var rotLabelRT = rotationLabel.GetComponent<RectTransform>();
             rotLabelRT.anchorMin = new Vector2(0, 1);
             rotLabelRT.anchorMax = new Vector2(1, 1);
@@ -272,8 +272,7 @@ namespace Sporefront.Visual
             scrollRT.offsetMax = new Vector2(0, -60); // Space for header + rotation label
 
             // Close button at bottom
-            var closeBtn = UIHelper.CreateButton(buildPanel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontBody, Cancel);
+            var closeBtn = UIHelper.CreateInkCloseButton(buildPanel.transform, Cancel);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
@@ -364,7 +363,7 @@ namespace Sporefront.Visual
             nameRowLE.preferredHeight = 28;
             var nameLabel = UIHelper.CreateLabel(nameRow.transform,
                 bt.DisplayName(), UIConstants.FontBody,
-                available ? UIHelper.HeaderTextColor : SporefrontColors.ParchmentShadow,
+                available ? UIHelper.InkHeaderText : UIHelper.InkMutedText,
                 TextAnchor.MiddleLeft, false);
             nameLabel.fontStyle = FontStyle.Bold;
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
@@ -384,7 +383,7 @@ namespace Sporefront.Visual
             // Row 2: Cost
             string costStr = UIHelper.FormatCost(cost);
             var costLabel = UIHelper.CreateLabel(card.transform, costStr, UIConstants.FontSmall,
-                canAfford ? SporefrontColors.ParchmentShadow : SporefrontColors.SporeRed);
+                canAfford ? UIHelper.InkMutedText : SporefrontColors.SporeRed);
             costLabel.supportRichText = true;
             var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
             costLE.preferredHeight = 20;
@@ -404,7 +403,7 @@ namespace Sporefront.Visual
             if (bt.HexSize() > 1 || bt.RequiresRotation())
             {
                 var rotateBtn = UIHelper.CreateButton(btnRow.transform, "Rotate",
-                    SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption, null);
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, null);
                 var rotBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
                 rotBtnLE.preferredWidth = 62;
 
@@ -419,8 +418,8 @@ namespace Sporefront.Visual
 
             // Build button
             var buildBtn = UIHelper.CreateButton(btnRow.transform, "Build",
-                available ? SporefrontColors.SporeGreen : SporefrontColors.ParchmentShadow,
-                available ? UIHelper.HudTextColor : SporefrontColors.ParchmentShadow,
+                available ? SporefrontColors.SporeGreen : UIHelper.InkMutedText,
+                available ? UIHelper.HudTextColor : UIHelper.InkMutedText,
                 UIConstants.FontSmall, null);
             buildBtn.interactable = available;
             var buildBtnLE = buildBtn.gameObject.AddComponent<LayoutElement>();
@@ -551,7 +550,7 @@ namespace Sporefront.Visual
             confirmLE.preferredHeight = 30;
 
             var cancelBtn = UIHelper.CreateButton(btnRow.transform, "Cancel",
-                SporefrontColors.BgSurface, UIHelper.ButtonText, UIConstants.FontCaption,
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption,
                 () => CancelEntrenchConfirm());
             var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
             cancelLE.preferredWidth = 80;
