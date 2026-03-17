@@ -45,6 +45,7 @@ namespace Sporefront.Visual
             panel = UIHelper.CreatePanel(canvasTransform, "DisplayNamePanel", SporefrontColors.ParchmentDeep);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
+            PopupTendrilDecorator.Attach(panelRT);
 
             BuildContent();
             panel.SetActive(false);
@@ -126,14 +127,14 @@ namespace Sporefront.Visual
 
             // Title
             var title = UIHelper.CreateLabel(centerColumn.transform, "Choose a Display Name",
-                UIConstants.FontHeader, SporefrontColors.InkBlack, TextAnchor.MiddleCenter, true);
+                UIConstants.FontHeader, SporefrontColors.ParchmentLight, TextAnchor.MiddleCenter, true);
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 50f;
 
             // Subtitle
             var subtitle = UIHelper.CreateLabel(centerColumn.transform,
                 "3-20 characters, letters, numbers, underscores",
-                UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var subtitleLE = subtitle.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 24f;
 
@@ -141,7 +142,7 @@ namespace Sporefront.Visual
 
             // Username field
             UIHelper.CreateLabel(centerColumn.transform, "Display Name",
-                UIConstants.FontSmall, UIHelper.BodyTextColor, TextAnchor.MiddleLeft);
+                UIConstants.FontSmall, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
             usernameInput = CreateInputField(centerColumn.transform, "Enter display name...");
             usernameInput.characterLimit = 20;
             usernameInput.onValueChanged.AddListener((_) => { checkTimer = 0f; });
@@ -150,7 +151,7 @@ namespace Sporefront.Visual
 
             // Availability label
             availabilityLabel = UIHelper.CreateLabel(centerColumn.transform, "",
-                UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var availLE = availabilityLabel.gameObject.AddComponent<LayoutElement>();
             availLE.preferredHeight = 20f;
 
@@ -203,7 +204,7 @@ namespace Sporefront.Visual
 
             isChecking = true;
             availabilityLabel.text = "Checking...";
-            availabilityLabel.color = SporefrontColors.InkLight;
+            availabilityLabel.color = UIHelper.InkMutedText;
 
             AuthService.Instance.CheckUsernameAvailability(name, (available) =>
             {
@@ -241,7 +242,7 @@ namespace Sporefront.Visual
             isClaiming = true;
             claimButton.interactable = false;
             statusLabel.text = "Claiming name...";
-            statusLabel.color = SporefrontColors.InkMid;
+            statusLabel.color = UIHelper.InkMutedText;
 
             AuthService.Instance.ClaimUsername(name, (success, error) =>
             {
@@ -279,7 +280,7 @@ namespace Sporefront.Visual
             var input = inputBG.AddComponent<InputField>();
 
             var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
-                13, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                13, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var placeholderRT = placeholderText.GetComponent<RectTransform>();
             UIHelper.StretchFull(placeholderRT);
             placeholderRT.offsetMin = new Vector2(8, 0);

@@ -29,14 +29,14 @@ namespace Sporefront.Visual
             boxRect.anchorMax = Vector2.zero;
             boxRect.pivot = Vector2.zero;
 
-            // Semi-transparent blue fill
+            // Nearly transparent dark fill
             boxImage = boxGO.AddComponent<Image>();
-            boxImage.color = new Color(0.2f, 0.5f, 0.8f, 0.25f);
+            boxImage.color = new Color(SporefrontColors.InkDark.r, SporefrontColors.InkDark.g, SporefrontColors.InkDark.b, 0.08f);
             boxImage.raycastTarget = false;
 
             // Border using Outline component
             var outline = boxGO.AddComponent<Outline>();
-            outline.effectColor = new Color(0.3f, 0.6f, 0.9f, 0.8f);
+            outline.effectColor = new Color(SporefrontColors.InkLight.r, SporefrontColors.InkLight.g, SporefrontColors.InkLight.b, 0.5f);
             outline.effectDistance = new Vector2(2f, 2f);
 
             boxGO.SetActive(false);

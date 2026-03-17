@@ -43,7 +43,7 @@ namespace Sporefront.Visual
 
             // Tooltip container
             tooltipGO = UIHelper.CreatePanel(canvas.transform, "Tooltip",
-                SporefrontColors.InkDark);
+                SporefrontColors.BgDeep);
             tooltipRT = tooltipGO.GetComponent<RectTransform>();
             tooltipRT.pivot = new Vector2(0f, 1f);
             tooltipRT.sizeDelta = new Vector2(200, 30);

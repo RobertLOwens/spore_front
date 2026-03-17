@@ -41,9 +41,10 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Close);
 
             // Center panel
-            panel = UIHelper.CreatePanel(backdrop.transform, "AboutPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "AboutPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, UIConstants.ModalSmallW, UIConstants.ModalSmallH);
+            PopupTendrilDecorator.Attach(panelRT);
 
             BuildContent();
             backdrop.SetActive(false);
@@ -82,11 +83,11 @@ namespace Sporefront.Visual
 
             // Title
             var title = UIHelper.CreateLabel(panel.transform, "About Sporefront",
-                22, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+                22, UIHelper.InkHeaderText, TextAnchor.MiddleCenter, true);
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 40;
 
-            UIHelper.CreateDivider(panel.transform, SporefrontColors.ParchmentShadow, 2f);
+            UIHelper.CreateDivider(panel.transform, UIHelper.InkMutedText, 2f);
 
             // Spacer
             var spacer1 = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
@@ -109,7 +110,7 @@ namespace Sporefront.Visual
                 "- Arena mode with configurable scenarios";
 
             var descLabel = UIHelper.CreateLabel(panel.transform, description,
-                13, UIHelper.BodyTextColor, TextAnchor.UpperLeft);
+                13, UIHelper.InkBodyText, TextAnchor.UpperLeft);
             descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
             descLabel.verticalOverflow = VerticalWrapMode.Overflow;
             var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
@@ -122,7 +123,7 @@ namespace Sporefront.Visual
 
             // Version
             var versionLabel = UIHelper.CreateLabel(panel.transform, "v0.1.0",
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                11, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var versionLE = versionLabel.gameObject.AddComponent<LayoutElement>();
             versionLE.preferredHeight = 20;
 
@@ -132,8 +133,7 @@ namespace Sporefront.Visual
             spacer2.GetComponent<LayoutElement>().preferredHeight = 4;
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 14, Close);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Close);
             var closeBtnLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeBtnLE.preferredHeight = 38;
         }

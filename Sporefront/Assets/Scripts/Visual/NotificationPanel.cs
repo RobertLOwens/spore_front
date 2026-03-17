@@ -188,7 +188,7 @@ namespace Sporefront.Visual
             accentRT.offsetMax = new Vector2(4, 0);
 
             // Title
-            var titleLabel = UIHelper.CreateLabel(banner.transform, title, 12,
+            var titleLabel = UIHelper.CreateLabel(banner.transform, title, UIConstants.FontCaption,
                 UIHelper.HudTextColor, TextAnchor.UpperLeft);
             titleLabel.fontStyle = FontStyle.Bold;
             var titleRT = titleLabel.GetComponent<RectTransform>();
@@ -198,7 +198,7 @@ namespace Sporefront.Visual
             titleRT.offsetMax = new Vector2(-8, -4);
 
             // Message
-            var msgLabel = UIHelper.CreateLabel(banner.transform, message, 11,
+            var msgLabel = UIHelper.CreateLabel(banner.transform, message, UIConstants.FontCaption,
                 new Color(UIHelper.HudTextColor.r, UIHelper.HudTextColor.g,
                     UIHelper.HudTextColor.b, 0.8f), TextAnchor.LowerLeft);
             var msgRT = msgLabel.GetComponent<RectTransform>();

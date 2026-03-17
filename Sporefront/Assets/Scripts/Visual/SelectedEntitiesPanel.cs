@@ -59,7 +59,7 @@ namespace Sporefront.Visual
             // Panel root — anchored bottom-left, above menu bar
             panelRoot = UIHelper.CreatePanel(canvasTransform, "SelectedEntitiesPanel",
                 new Color(SporefrontColors.ParchmentMid.r, SporefrontColors.ParchmentMid.g,
-                    SporefrontColors.ParchmentMid.b, 0.85f),
+                    SporefrontColors.ParchmentMid.b, 0.95f),
                 UIHelper.SmallCornerRadius);
 
             var rt = panelRoot.GetComponent<RectTransform>();
@@ -225,8 +225,8 @@ namespace Sporefront.Visual
             vlg.spacing = 2;
             vlg.padding = new RectOffset(6, 6, 4, 4);
 
-            UIHelper.CreateLabel(rowGO.transform, mainLine, 14, SporefrontColors.InkDark);
-            UIHelper.CreateLabel(rowGO.transform, detailLine, 12, SporefrontColors.InkMid);
+            UIHelper.CreateLabel(rowGO.transform, mainLine, 14, UIHelper.InkMutedText);
+            UIHelper.CreateLabel(rowGO.transform, detailLine, UIConstants.FontCaption, UIHelper.InkMutedText);
 
             // Make card clickable
             var btn = rowGO.AddComponent<Button>();

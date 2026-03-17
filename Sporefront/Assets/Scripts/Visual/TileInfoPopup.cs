@@ -81,7 +81,7 @@ namespace Sporefront.Visual
         private const float OffsetX = 60f;
         private const float OffsetY = 40f;
         private const float SafeTop = 75f;    // resource bar
-        private const float SafeBottom = 60f;  // menu bar
+        private const float SafeBottom = 100f; // tendril wheel buttons extend ~195px at corners
 
         // ================================================================
         // Initialization
@@ -99,16 +99,17 @@ namespace Sporefront.Visual
             rootRT.pivot = new Vector2(0f, 1f); // top-left pivot for positioning
             rootRT.sizeDelta = new Vector2(PopupWidth + SidebarWidth, 0f); // auto-height
 
-            // Content area (left side)
+            // Content area (left side) — parchment background
             var contentGO = UIHelper.CreatePanel(root.transform, "PopupContent",
                 new Color(SporefrontColors.ParchmentMid.r, SporefrontColors.ParchmentMid.g,
-                    SporefrontColors.ParchmentMid.b, 0.85f));
+                    SporefrontColors.ParchmentMid.b, 0.97f));
             var contentRT = contentGO.GetComponent<RectTransform>();
             contentRT.anchorMin = new Vector2(0, 0);
             contentRT.anchorMax = new Vector2(0, 1);
             contentRT.pivot = new Vector2(0, 1);
             contentRT.offsetMin = new Vector2(0, 0);
             contentRT.offsetMax = new Vector2(PopupWidth, 0);
+            PopupTendrilDecorator.Attach(contentRT);
 
             var vlg = contentGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(12, 12, 10, 10);
@@ -167,10 +168,10 @@ namespace Sporefront.Visual
             rootHLG.childControlWidth = false;
             rootHLG.childControlHeight = true;
 
-            // Quick action sidebar (right side)
+            // Quick action sidebar (right side) — darker parchment
             sidebar = UIHelper.CreatePanel(root.transform, "Sidebar",
-                new Color(SporefrontColors.InkMid.r, SporefrontColors.InkMid.g,
-                    SporefrontColors.InkMid.b, 0.90f));
+                new Color(SporefrontColors.ParchmentDeep.r, SporefrontColors.ParchmentDeep.g,
+                    SporefrontColors.ParchmentDeep.b, 0.95f));
             var sidebarRT = sidebar.GetComponent<RectTransform>();
             sidebarRT.anchorMin = new Vector2(1, 0);
             sidebarRT.anchorMax = new Vector2(1, 1);
@@ -190,7 +191,7 @@ namespace Sporefront.Visual
 
             // Create sidebar buttons
             infoBtn = CreateSidebarButton(sidebar.transform, "Info",
-                SporefrontColors.ParchmentDark, () =>
+                SporefrontColors.InkLight, () =>
                 {
                     if (currentCoord.HasValue)
                         OnInfoRequested?.Invoke(currentCoord.Value);
@@ -680,7 +681,7 @@ namespace Sporefront.Visual
             le.preferredHeight = bold ? 26f : 22f;
 
             label = UIHelper.CreateLabel(row.transform, "",
-                fontSize, bold ? UIHelper.HeaderTextColor : UIHelper.BodyTextColor,
+                fontSize, bold ? UIHelper.InkHeaderText : UIHelper.InkBodyText,
                 TextAnchor.MiddleLeft, bold);
             var labelRT = label.GetComponent<RectTransform>();
             UIHelper.StretchFull(labelRT);
@@ -705,10 +706,10 @@ namespace Sporefront.Visual
             Color bgColor, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                bgColor, UIHelper.HudTextColor, UIConstants.FontBody, onClick);
+                bgColor, UIHelper.HudTextColor, UIConstants.FontSmall, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 82f;
-            le.preferredHeight = 32f;
+            le.preferredHeight = 40f;
             return btn.gameObject;
         }
     }

@@ -21,7 +21,7 @@ namespace Sporefront.Visual
         [Header("Zoom")]
         public float zoomLevel = 8f;
         public float minZoom = 3f;
-        public float maxZoom = 20f;
+        public float maxZoom = 12f;
         public float zoomSpeed = 2f;
 
         [Header("Pan")]
@@ -73,8 +73,8 @@ namespace Sporefront.Visual
             cam.orthographicSize = zoomLevel;
             targetZoom = zoomLevel;
 
-            // Set background to parchment
-            cam.backgroundColor = SporefrontColors.ParchmentLight;
+            // Set background to dark — map edges fade to dark instead of light
+            cam.backgroundColor = SporefrontColors.BgDeep;
         }
 
         private void Update()

@@ -61,9 +61,10 @@ namespace Sporefront.Visual
             UIHelper.StretchFull(bdRT);
 
             // Center panel
-            panel = UIHelper.CreatePanel(backdrop.transform, "GameOverPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "GameOverPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, 420, 520);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // ScrollView inside panel
             var scroll = UIHelper.CreateScrollView(panel.transform, "GameOverScroll", out contentRT);
@@ -129,7 +130,7 @@ namespace Sporefront.Visual
 
             // Reason text
             var reasonLabel = UIHelper.CreateLabel(contentRT, reason,
-                UIHelper.DefaultBodyFontSize, UIHelper.BodyTextColor,
+                UIHelper.DefaultBodyFontSize, UIHelper.InkBodyText,
                 TextAnchor.MiddleCenter);
             reasonLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
             reasonLabel.verticalOverflow = VerticalWrapMode.Overflow;
@@ -142,7 +143,7 @@ namespace Sporefront.Visual
 
             // Statistics section
             var statsHeader = UIHelper.CreateLabel(contentRT, "Statistics",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var statsHeaderLE = statsHeader.gameObject.AddComponent<LayoutElement>();
             statsHeaderLE.preferredHeight = 30;
@@ -182,12 +183,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
 
             var nameLabel = UIHelper.CreateLabel(row.transform, label, 13,
-                SporefrontColors.InkMid, TextAnchor.MiddleLeft);
+                UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
             var valueLabel = UIHelper.CreateLabel(row.transform, value, 13,
-                SporefrontColors.InkBlack, TextAnchor.MiddleRight);
+                SporefrontColors.ParchmentLight, TextAnchor.MiddleRight);
             valueLabel.fontStyle = FontStyle.Bold;
             var valueLE = valueLabel.gameObject.AddComponent<LayoutElement>();
             valueLE.preferredWidth = 120;

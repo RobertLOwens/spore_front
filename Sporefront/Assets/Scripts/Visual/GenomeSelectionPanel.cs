@@ -47,7 +47,7 @@ namespace Sporefront.Visual
         // Colors
         private static readonly Color Slot1Color = new Color(0.4f, 0.6f, 1.0f, 1.0f);   // blue
         private static readonly Color Slot2Color = new Color(1.0f, 0.4f, 0.4f, 1.0f);   // red
-        private static readonly Color UnselectedColor = SporefrontColors.InkFaded;
+        private static readonly Color UnselectedColor = UIHelper.InkMutedText;
 
         // ================================================================
         // Initialization
@@ -65,9 +65,10 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(() => OnClose?.Invoke());
 
             // Centered panel 420x600
-            panel = UIHelper.CreatePanel(backdrop.transform, "GenomeSelectionPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "GenomeSelectionPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, 420, 600);
+            PopupTendrilDecorator.Attach(panelRT);
 
             BuildContent();
             backdrop.SetActive(false);
@@ -112,14 +113,14 @@ namespace Sporefront.Visual
 
             // Title
             var title = UIHelper.CreateLabel(panel.transform, "Spectate AI",
-                22, UIHelper.HeaderTextColor, TextAnchor.MiddleCenter, true);
+                22, UIHelper.InkHeaderText, TextAnchor.MiddleCenter, true);
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 36;
 
-            UIHelper.CreateDivider(panel.transform, SporefrontColors.ParchmentShadow, 2f);
+            UIHelper.CreateDivider(panel.transform, UIHelper.InkMutedText, 2f);
 
             // ---- Slot Container ----
-            var slotContainer = UIHelper.CreatePanel(panel.transform, "SlotContainer", SporefrontColors.ParchmentDark);
+            var slotContainer = UIHelper.CreatePanel(panel.transform, "SlotContainer", SporefrontColors.ParchmentDeep);
             var slotContainerLE = slotContainer.AddComponent<LayoutElement>();
             slotContainerLE.preferredHeight = 65;
 
@@ -155,7 +156,7 @@ namespace Sporefront.Visual
 
             // VS label
             var vsLabel = UIHelper.CreateLabel(slotRow.transform, "vs",
-                14, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                14, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             vsLabel.fontStyle = FontStyle.Bold;
             var vsLE = vsLabel.gameObject.AddComponent<LayoutElement>();
             vsLE.preferredWidth = 30;
@@ -185,12 +186,12 @@ namespace Sporefront.Visual
 
             // Instruction label
             instructionLabel = UIHelper.CreateLabel(panel.transform, "Tap a genome to fill Slot 1",
-                12, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                12, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var instrLE = instructionLabel.gameObject.AddComponent<LayoutElement>();
             instrLE.preferredHeight = 22;
 
             // ---- Genome List ----
-            var listPanel = UIHelper.CreatePanel(panel.transform, "GenomeListArea", SporefrontColors.ParchmentDark);
+            var listPanel = UIHelper.CreatePanel(panel.transform, "GenomeListArea", SporefrontColors.ParchmentDeep);
             var listPanelLE = listPanel.AddComponent<LayoutElement>();
             listPanelLE.flexibleHeight = 1;
             listPanelLE.minHeight = 200;
@@ -212,7 +213,7 @@ namespace Sporefront.Visual
 
             // Close button
             var closeBtn = UIHelper.CreateButton(panel.transform, "Cancel",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 13, () => OnClose?.Invoke());
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, 13, () => OnClose?.Invoke());
             var closeLE = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeLE.preferredHeight = 36;
         }
@@ -239,7 +240,7 @@ namespace Sporefront.Visual
             if (genomes.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(genomeListContentRT, "No genomes saved.",
-                    13, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                    13, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -268,7 +269,7 @@ namespace Sporefront.Visual
             else if (isSelected2)
                 checkmark = " [2]";
 
-            Color nameColor = isSelected1 ? Slot1Color : (isSelected2 ? Slot2Color : UIHelper.BodyTextColor);
+            Color nameColor = isSelected1 ? Slot1Color : (isSelected2 ? Slot2Color : UIHelper.InkBodyText);
 
             var row = UIHelper.CreatePanel(genomeListContentRT, "GenomePickRow", rowBg);
             var rowLE = row.AddComponent<LayoutElement>();
@@ -294,7 +295,7 @@ namespace Sporefront.Visual
             string detail = string.Format("Gen {0} | Fitness: {1:F2} | WR: {2}%",
                 genome.generation, genome.fitness, genome.WinRatePercent);
             var detailLabel = UIHelper.CreateLabel(rowVLG.transform, detail,
-                11, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+                11, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
             detailLE.preferredHeight = 16;
 
@@ -333,13 +334,13 @@ namespace Sporefront.Visual
             if (slot1Label != null)
             {
                 slot1Label.text = selectedGenome1 != null ? selectedGenome1.name : "[tap to select]";
-                slot1Label.color = selectedGenome1 != null ? UIHelper.BodyTextColor : UnselectedColor;
+                slot1Label.color = selectedGenome1 != null ? UIHelper.InkBodyText : UnselectedColor;
             }
 
             if (slot2Label != null)
             {
                 slot2Label.text = selectedGenome2 != null ? selectedGenome2.name : "[tap to select]";
-                slot2Label.color = selectedGenome2 != null ? UIHelper.BodyTextColor : UnselectedColor;
+                slot2Label.color = selectedGenome2 != null ? UIHelper.InkBodyText : UnselectedColor;
             }
 
             if (instructionLabel != null)

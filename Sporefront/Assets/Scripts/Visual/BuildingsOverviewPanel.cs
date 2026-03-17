@@ -72,13 +72,14 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Hide);
 
             // Main panel -- centered 420x520
-            panel = UIHelper.CreatePanel(backdrop.transform, "BuildingsOverviewPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "BuildingsOverviewPanel", UIHelper.PanelParchmentBg);
             var rt = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(rt, UIConstants.ModalMediumW, UIConstants.ModalMediumH);
+            PopupTendrilDecorator.Attach(rt);
 
             // Header
             var headerLabel = UIHelper.CreateLabel(panel.transform, "Buildings",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var headerRT = headerLabel.GetComponent<RectTransform>();
             headerRT.anchorMin = new Vector2(0, 1);
@@ -101,8 +102,8 @@ namespace Sporefront.Visual
             militaryFilterBtn = CreateFilterButton(filterRow.transform, "Military", () => SetFilter(FilterMode.Military));
 
             // Count label
-            countLabel = UIHelper.CreateLabel(filterRow.transform, "", 11,
-                SporefrontColors.InkLight, TextAnchor.MiddleRight);
+            countLabel = UIHelper.CreateLabel(filterRow.transform, "", UIConstants.FontCaption,
+                UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.flexibleWidth = 1;
             countLE.preferredHeight = 30;
@@ -112,18 +113,17 @@ namespace Sporefront.Visual
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
-            scrollRT.offsetMin = new Vector2(0, 40);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = new Vector2(0, -70);
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 12, Hide);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
             closeBtnRT.offsetMin = new Vector2(8, 6);
-            closeBtnRT.offsetMax = new Vector2(-8, 36);
+            closeBtnRT.offsetMax = new Vector2(-8, 42);
 
             backdrop.SetActive(false);
         }
@@ -195,7 +195,7 @@ namespace Sporefront.Visual
         private void SetFilterActive(Button btn, bool active)
         {
             var img = btn.GetComponent<Image>();
-            img.color = active ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDark;
+            img.color = active ? SporefrontColors.SporeAmber : SporefrontColors.ParchmentDeep;
         }
 
         // ================================================================
@@ -250,7 +250,7 @@ namespace Sporefront.Visual
             if (filtered.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No buildings found.",
-                    UIHelper.DefaultBodyFontSize, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    UIHelper.DefaultBodyFontSize, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 40;
                 return;
@@ -270,7 +270,7 @@ namespace Sporefront.Visual
         private void BuildBuildingRow(BuildingData building, GameState gameState)
         {
             // Card background
-            var card = UIHelper.CreatePanel(contentRT, "BuildingCard", SporefrontColors.ParchmentMid);
+            var card = UIHelper.CreatePanel(contentRT, "BuildingCard", SporefrontColors.ParchmentDark);
             var cardRT = card.GetComponent<RectTransform>();
             var cardLE = card.AddComponent<LayoutElement>();
             cardLE.preferredHeight = 74;
@@ -290,14 +290,14 @@ namespace Sporefront.Visual
             string catIcon = building.buildingType.Category() == BuildingCategory.Military ? "[M]" : "[E]";
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
                 $"{catIcon} {building.buildingType.DisplayName()} Lv.{building.level}", 13,
-                UIHelper.HeaderTextColor);
+                UIHelper.InkHeaderText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
             nameLE.preferredHeight = 22;
 
             var locLabel = UIHelper.CreateLabel(topRow.transform,
-                $"({building.coordinate.q},{building.coordinate.r})", 11,
-                SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                $"({building.coordinate.q},{building.coordinate.r})", UIConstants.FontCaption,
+                UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.preferredWidth = 60;
             locLE.preferredHeight = 22;
@@ -308,8 +308,8 @@ namespace Sporefront.Visual
             if (building.maxHealth > 0)
             {
                 var hpText = UIHelper.CreateLabel(midRow.transform,
-                    $"HP: {(int)building.health}/{(int)building.maxHealth}", 10,
-                    SporefrontColors.InkLight);
+                    $"HP: {(int)building.health}/{(int)building.maxHealth}", UIConstants.FontCaption,
+                    UIHelper.InkMutedText);
                 var hpTextLE = hpText.gameObject.AddComponent<LayoutElement>();
                 hpTextLE.preferredWidth = 80;
                 hpTextLE.preferredHeight = 16;
@@ -318,8 +318,8 @@ namespace Sporefront.Visual
                 Color hpColor = hpPct > 0.5f ? SporefrontColors.SporeGreen :
                     hpPct > 0.25f ? SporefrontColors.SporeAmber : SporefrontColors.SporeRed;
 
-                var (bg, fill) = UIHelper.CreateProgressBar(midRow.transform, 12f,
-                    SporefrontColors.InkFaded, hpColor);
+                var (bg, fill) = UIHelper.CreateInkProgressBar(midRow.transform, 12f,
+                    UIHelper.InkMutedText, hpColor);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(hpPct, 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -338,8 +338,8 @@ namespace Sporefront.Visual
                 stateLabelLE.preferredWidth = 100;
                 stateLabelLE.preferredHeight = 16;
 
-                var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                var (bg, fill) = UIHelper.CreateInkProgressBar(progressRow.transform, 12f,
+                    UIHelper.InkMutedText, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.constructionProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -359,8 +359,8 @@ namespace Sporefront.Visual
                 stateLabelLE.preferredWidth = 130;
                 stateLabelLE.preferredHeight = 16;
 
-                var (bg, fill) = UIHelper.CreateProgressBar(progressRow.transform, 12f,
-                    SporefrontColors.InkFaded, SporefrontColors.SporeAmber);
+                var (bg, fill) = UIHelper.CreateInkProgressBar(progressRow.transform, 12f,
+                    UIHelper.InkMutedText, SporefrontColors.SporeAmber);
                 var fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMax = new Vector2(Mathf.Clamp01((float)building.upgradeProgress), 1);
                 var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -371,7 +371,7 @@ namespace Sporefront.Visual
             }
             else if (building.state == BuildingState.Damaged)
             {
-                var statusLabel = UIHelper.CreateLabel(card.transform, "Damaged", 10,
+                var statusLabel = UIHelper.CreateLabel(card.transform, "Damaged", UIConstants.FontCaption,
                     SporefrontColors.SporeRed);
                 var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
                 statusLE.preferredHeight = 16;
@@ -381,7 +381,7 @@ namespace Sporefront.Visual
             // Make entire card tappable
             var cardBtn = card.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
-            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentMid);
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentDark);
 
             var capturedID = building.id;
             cardBtn.onClick.AddListener(() => OnBuildingSelected?.Invoke(capturedID));
@@ -394,7 +394,7 @@ namespace Sporefront.Visual
         private Button CreateFilterButton(Transform parent, string text, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, onClick);
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 70;
             le.preferredHeight = 28;

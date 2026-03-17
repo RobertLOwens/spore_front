@@ -150,7 +150,7 @@ namespace Sporefront.Visual
 
             // VS label (center)
             var vsLabel = UIHelper.CreateLabel(topBar.transform, "vs",
-                12, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                12, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             vsLabel.fontStyle = FontStyle.Bold;
             var vsRT = vsLabel.GetComponent<RectTransform>();
             vsRT.anchorMin = new Vector2(0.45f, 0.4f);

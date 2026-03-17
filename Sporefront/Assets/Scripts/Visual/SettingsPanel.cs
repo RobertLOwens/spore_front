@@ -60,13 +60,14 @@ namespace Sporefront.Visual
             bdBtn.onClick.AddListener(Hide);
 
             // Main panel — centered 420x560
-            panel = UIHelper.CreatePanel(backdrop.transform, "SettingsPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(backdrop.transform, "SettingsPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, 420, 560);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // Header bar
             var headerBar = UIHelper.CreatePanel(panel.transform, "HeaderBar",
-                SporefrontColors.ParchmentDark);
+                SporefrontColors.ParchmentDeep);
             var headerBarRT = headerBar.GetComponent<RectTransform>();
             headerBarRT.anchorMin = new Vector2(0, 1);
             headerBarRT.anchorMax = new Vector2(1, 1);
@@ -83,7 +84,7 @@ namespace Sporefront.Visual
             headerHLG.childControlHeight = true;
 
             var titleLabel = UIHelper.CreateLabel(headerBar.transform, "Settings",
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.flexibleWidth = 1;
@@ -261,7 +262,7 @@ namespace Sporefront.Visual
                 string email = AuthService.Instance.CurrentEmail ?? "—";
                 var signedInLabel = UIHelper.CreateLabel(contentRT,
                     $"Signed in as {displayName} ({email})",
-                    UIConstants.FontCaption, SporefrontColors.InkLight, TextAnchor.MiddleLeft);
+                    UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
                 var siLE = signedInLabel.gameObject.AddComponent<LayoutElement>();
                 siLE.preferredHeight = 22;
 
@@ -304,7 +305,7 @@ namespace Sporefront.Visual
         private void BuildSectionHeader(string title)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, title,
-                UIHelper.DefaultHeaderFontSize, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 30;
@@ -342,19 +343,19 @@ namespace Sporefront.Visual
             textVLG.childControlWidth = true;
             textVLG.childControlHeight = false;
 
-            var titleLabel = UIHelper.CreateLabel(textCol.transform, title, UIConstants.FontSmall, UIHelper.BodyTextColor);
+            var titleLabel = UIHelper.CreateLabel(textCol.transform, title, UIConstants.FontSmall, UIHelper.InkBodyText);
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.preferredHeight = 20;
 
             var subtitleLabel = UIHelper.CreateLabel(textCol.transform, subtitle, UIConstants.FontCaption,
-                SporefrontColors.InkLight);
+                UIHelper.InkMutedText);
             var subtitleLE = subtitleLabel.gameObject.AddComponent<LayoutElement>();
             subtitleLE.preferredHeight = 16;
 
             // Toggle button
-            Color toggleBg = isOn ? SporefrontColors.SporeGreen : SporefrontColors.InkFaded;
+            Color toggleBg = isOn ? SporefrontColors.SporeGreen : UIHelper.InkMutedText;
             string toggleText = isOn ? "ON" : "OFF";
-            Color toggleTextColor = isOn ? UIHelper.HudTextColor : SporefrontColors.InkLight;
+            Color toggleTextColor = isOn ? UIHelper.HudTextColor : UIHelper.InkMutedText;
 
             var toggleBtn = UIHelper.CreateButton(row.transform, toggleText,
                 toggleBg, toggleTextColor, UIConstants.FontSmall, () =>

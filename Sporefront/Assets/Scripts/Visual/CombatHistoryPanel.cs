@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: Visual/CombatHistoryPanel.cs
-// PURPOSE: Modal panel showing active battles and combat history log
-//          Ported from CombatHistoryViewController.swift
+// PURPOSE: Modal panel showing active battles and combat history log.
+//          Parchment/ink ledger style.
 // ============================================================================
 
 using System;
@@ -52,14 +52,16 @@ namespace Sporefront.Visual
             bdBtn.transition = Selectable.Transition.None;
             bdBtn.onClick.AddListener(Hide);
 
-            // Main panel — centered
-            panel = UIHelper.CreatePanel(backdrop.transform, "CombatHistoryPanel", UIHelper.PanelBg);
+            // Main panel — parchment background
+            panel = UIHelper.CreatePanel(backdrop.transform, "CombatHistoryPanel",
+                UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.SetFixedSize(panelRT, 938, 938);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // Title
             var titleLabel = UIHelper.CreateLabel(panel.transform, "Combat Log",
-                UIHelper.DefaultHeaderFontSize + 4, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize + 4, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var titleRT = titleLabel.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0, 1);
@@ -72,18 +74,17 @@ namespace Sporefront.Visual
             var scroll = UIHelper.CreateScrollView(panel.transform, "HistoryScroll", out contentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             UIHelper.StretchFull(scrollRT);
-            scrollRT.offsetMin = new Vector2(0, 60);
+            scrollRT.offsetMin = new Vector2(0, 44);
             scrollRT.offsetMax = new Vector2(0, -52);
 
-            // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 18, Hide);
+            // Ink-styled close annotation
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
             closeBtnRT.pivot = new Vector2(0.5f, 0);
-            closeBtnRT.offsetMin = new Vector2(12, 9);
-            closeBtnRT.offsetMax = new Vector2(-12, 54);
+            closeBtnRT.offsetMin = new Vector2(12, 4);
+            closeBtnRT.offsetMax = new Vector2(-12, 40);
 
             backdrop.SetActive(false);
         }
@@ -132,7 +133,7 @@ namespace Sporefront.Visual
             // Section 1: Active Battles
             BuildActiveBattlesSection(combatEngine, gameState);
 
-            UIHelper.CreateDivider(contentRT, SporefrontColors.InkMid, 2f);
+            UIHelper.CreateDivider(contentRT, UIHelper.InkDividerColor, 2f);
 
             // Section 2: Combat History
             BuildHistorySection(combatEngine, gameState);
@@ -145,7 +146,7 @@ namespace Sporefront.Visual
         private void BuildActiveBattlesSection(CombatEngine combatEngine, GameState gameState)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Active Battles",
-                UIHelper.DefaultHeaderFontSize + 4, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize + 4, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 42;
@@ -163,7 +164,8 @@ namespace Sporefront.Visual
             if (activeCombats.Count == 0 && stackCombats.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No active battles.",
-                    18, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    18, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
+                emptyLabel.fontStyle = FontStyle.Italic;
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 45;
                 return;
@@ -191,6 +193,10 @@ namespace Sporefront.Visual
             var rowPanel = UIHelper.CreatePanel(contentRT, "ActiveRow",
                 new Color(SporefrontColors.SporeRed.r, SporefrontColors.SporeRed.g,
                     SporefrontColors.SporeRed.b, 0.1f));
+            var rowOutline = rowPanel.GetComponent<Outline>();
+            rowOutline.effectColor = new Color(
+                SporefrontColors.InkBorder.r, SporefrontColors.InkBorder.g,
+                SporefrontColors.InkBorder.b, 0.25f);
             var rowLE = rowPanel.AddComponent<LayoutElement>();
             rowLE.preferredHeight = 81;
 
@@ -205,7 +211,7 @@ namespace Sporefront.Visual
             // Top row: pulsing indicator + participants + duration
             var topRow = UIHelper.CreateHorizontalRow(rowPanel.transform, 30f, 6f);
 
-            // Pulsing dot indicator (red circle)
+            // Pulsing dot indicator
             var pulseLabel = UIHelper.CreateLabel(topRow.transform, "*",
                 21, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
             var pulseLE = pulseLabel.gameObject.AddComponent<LayoutElement>();
@@ -215,7 +221,7 @@ namespace Sporefront.Visual
             string atkName = combat.attackerArmies.Count > 0 ? combat.attackerArmies[0].armyName : "Attacker";
             string defName = combat.defenderArmies.Count > 0 ? combat.defenderArmies[0].armyName : "Defender";
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
-                $"{atkName} vs {defName}", 18, UIHelper.BodyTextColor);
+                $"{atkName} vs {defName}", 18, UIHelper.InkBodyText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
@@ -223,7 +229,7 @@ namespace Sporefront.Visual
             int elapsed = (int)combat.elapsedTime;
             string timeStr = elapsed >= 60 ? $"{elapsed / 60}:{(elapsed % 60):D2}" : $"0:{elapsed:D2}";
             var timeLabel = UIHelper.CreateLabel(topRow.transform, timeStr,
-                17, SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                17, UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 75;
 
@@ -236,7 +242,7 @@ namespace Sporefront.Visual
             phaseLE.preferredWidth = 180;
 
             var locLabel = UIHelper.CreateLabel(bottomRow.transform,
-                $"at ({combat.location.q},{combat.location.r})", 15, SporefrontColors.InkLight);
+                $"at ({combat.location.q},{combat.location.r})", 15, UIHelper.InkMutedText);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.flexibleWidth = 1;
 
@@ -259,6 +265,10 @@ namespace Sporefront.Visual
             var rowPanel = UIHelper.CreatePanel(contentRT, "StackRow",
                 new Color(SporefrontColors.SporePurple.r, SporefrontColors.SporePurple.g,
                     SporefrontColors.SporePurple.b, 0.1f));
+            var rowOutline = rowPanel.GetComponent<Outline>();
+            rowOutline.effectColor = new Color(
+                SporefrontColors.InkBorder.r, SporefrontColors.InkBorder.g,
+                SporefrontColors.InkBorder.b, 0.25f);
             var rowLE = rowPanel.AddComponent<LayoutElement>();
             rowLE.preferredHeight = 81;
 
@@ -279,7 +289,7 @@ namespace Sporefront.Visual
 
             var titleLabel = UIHelper.CreateLabel(topRow.transform,
                 $"Stack Combat ({stackCombat.activePairings.Count} pairings)",
-                18, UIHelper.BodyTextColor);
+                18, UIHelper.InkBodyText);
             var titleLE = titleLabel.gameObject.AddComponent<LayoutElement>();
             titleLE.flexibleWidth = 1;
 
@@ -292,7 +302,7 @@ namespace Sporefront.Visual
 
             var locLabel = UIHelper.CreateLabel(bottomRow.transform,
                 $"at ({stackCombat.coordinate.q},{stackCombat.coordinate.r})", 15,
-                SporefrontColors.InkLight);
+                UIHelper.InkMutedText);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.flexibleWidth = 1;
 
@@ -317,7 +327,7 @@ namespace Sporefront.Visual
         private void BuildHistorySection(CombatEngine combatEngine, GameState gameState)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Battle History",
-                UIHelper.DefaultHeaderFontSize + 4, UIHelper.HeaderTextColor,
+                UIHelper.DefaultHeaderFontSize + 4, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 42;
@@ -327,7 +337,8 @@ namespace Sporefront.Visual
             if (history.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No battles recorded yet.",
-                    18, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    18, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
+                emptyLabel.fontStyle = FontStyle.Italic;
                 var emptyLE = emptyLabel.gameObject.AddComponent<LayoutElement>();
                 emptyLE.preferredHeight = 45;
                 return;
@@ -354,22 +365,26 @@ namespace Sporefront.Visual
             {
                 case CombatResult.AttackerVictory:
                     rowBg = new Color(SporefrontColors.SporeRed.r, SporefrontColors.SporeRed.g,
-                        SporefrontColors.SporeRed.b, 0.05f);
-                    resultIcon = "[V]";
+                        SporefrontColors.SporeRed.b, 0.08f);
+                    resultIcon = "Victory";
                     break;
                 case CombatResult.DefenderVictory:
                     rowBg = new Color(SporefrontColors.SporeTeal.r, SporefrontColors.SporeTeal.g,
-                        SporefrontColors.SporeTeal.b, 0.05f);
-                    resultIcon = "[V]";
+                        SporefrontColors.SporeTeal.b, 0.08f);
+                    resultIcon = "Victory";
                     break;
                 default:
-                    rowBg = new Color(SporefrontColors.InkFaded.r, SporefrontColors.InkFaded.g,
-                        SporefrontColors.InkFaded.b, 0.05f);
-                    resultIcon = "[D]";
+                    rowBg = new Color(SporefrontColors.InkBorder.r, SporefrontColors.InkBorder.g,
+                        SporefrontColors.InkBorder.b, 0.06f);
+                    resultIcon = "Draw";
                     break;
             }
 
             var rowPanel = UIHelper.CreatePanel(contentRT, "HistoryRow", rowBg);
+            var rowOutline = rowPanel.GetComponent<Outline>();
+            rowOutline.effectColor = new Color(
+                SporefrontColors.InkBorder.r, SporefrontColors.InkBorder.g,
+                SporefrontColors.InkBorder.b, 0.2f);
             var rowLE = rowPanel.AddComponent<LayoutElement>();
             rowLE.preferredHeight = 75;
 
@@ -381,7 +396,7 @@ namespace Sporefront.Visual
             vlg.childControlWidth = true;
             vlg.childControlHeight = false;
 
-            // Top row: result icon + participants
+            // Top row: result text + participants
             var topRow = UIHelper.CreateHorizontalRow(rowPanel.transform, 30f, 6f);
 
             Color iconColor;
@@ -389,14 +404,15 @@ namespace Sporefront.Visual
             {
                 case CombatResult.AttackerVictory: iconColor = SporefrontColors.SporeRed; break;
                 case CombatResult.DefenderVictory: iconColor = SporefrontColors.SporeTeal; break;
-                default: iconColor = SporefrontColors.InkFaded; break;
+                default: iconColor = UIHelper.InkMutedText; break;
             }
-            var iconLabel = UIHelper.CreateLabel(topRow.transform, resultIcon, 18, iconColor);
+            var iconLabel = UIHelper.CreateLabel(topRow.transform, resultIcon, 13, iconColor);
+            iconLabel.fontStyle = FontStyle.Italic;
             var iconLE = iconLabel.gameObject.AddComponent<LayoutElement>();
-            iconLE.preferredWidth = 36;
+            iconLE.preferredWidth = 50;
 
             var nameLabel = UIHelper.CreateLabel(topRow.transform,
-                $"{record.Attacker.Name} vs {record.Defender.Name}", 18, UIHelper.BodyTextColor);
+                $"{record.Attacker.Name} vs {record.Defender.Name}", 18, UIHelper.InkBodyText);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
@@ -404,7 +420,7 @@ namespace Sporefront.Visual
             double secondsAgo = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0) - record.Timestamp;
             string timeAgo = FormatTimeAgo(secondsAgo);
             var timeLabel = UIHelper.CreateLabel(topRow.transform, timeAgo,
-                15, SporefrontColors.InkFaded, TextAnchor.MiddleRight);
+                15, UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 90;
 
@@ -413,13 +429,13 @@ namespace Sporefront.Visual
 
             var casualtyLabel = UIHelper.CreateLabel(bottomRow.transform,
                 $"Casualties: {record.AttackerCasualties} / {record.DefenderCasualties}",
-                15, SporefrontColors.InkLight);
+                15, UIHelper.InkSubText);
             var casualtyLE = casualtyLabel.gameObject.AddComponent<LayoutElement>();
             casualtyLE.flexibleWidth = 1;
 
             var locLabel = UIHelper.CreateLabel(bottomRow.transform,
                 $"({record.Location.q},{record.Location.r})",
-                15, SporefrontColors.InkFaded, TextAnchor.MiddleRight);
+                15, UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var locLE = locLabel.gameObject.AddComponent<LayoutElement>();
             locLE.preferredWidth = 90;
 

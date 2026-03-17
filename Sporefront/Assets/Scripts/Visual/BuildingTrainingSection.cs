@@ -41,7 +41,7 @@ namespace Sporefront.Visual
             state.villagerTimeLabels = new List<Text>();
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Training",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -72,7 +72,7 @@ namespace Sporefront.Visual
             {
                 UIHelper.CreateDivider(contentRT, null, 1);
                 state.queueLabel = UIHelper.CreateLabel(contentRT,
-                    $"Queue: {building.trainingQueue.Count} item(s)", 11, SporefrontColors.InkLight);
+                    $"Queue: {building.trainingQueue.Count} item(s)", UIConstants.FontCaption, UIHelper.InkMutedText);
                 var qlLE = state.queueLabel.gameObject.AddComponent<LayoutElement>();
                 qlLE.preferredHeight = 20;
 
@@ -88,8 +88,8 @@ namespace Sporefront.Visual
                     UIHelper.CreateDivider(contentRT, null, 1);
 
                 state.villagerQueueLabel = UIHelper.CreateLabel(contentRT,
-                    $"Villager queue: {building.villagerTrainingQueue.Count} item(s)", 11,
-                    SporefrontColors.InkLight);
+                    $"Villager queue: {building.villagerTrainingQueue.Count} item(s)", UIConstants.FontCaption,
+                    UIHelper.InkMutedText);
                 var vtLE = state.villagerQueueLabel.gameObject.AddComponent<LayoutElement>();
                 vtLE.preferredHeight = 20;
 
@@ -126,13 +126,13 @@ namespace Sporefront.Visual
 
             // Unit name row
             var nameRow = UIHelper.CreateHorizontalRow(contentRT, 22f, 4f);
-            var nameLabel = UIHelper.CreateLabel(nameRow.transform, ut.DisplayName(), 12);
+            var nameLabel = UIHelper.CreateLabel(nameRow.transform, ut.DisplayName(), UIConstants.FontCaption);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
             var costPerUnit = UIHelper.FormatCost(cost);
-            var baseCostLabel = UIHelper.CreateLabel(nameRow.transform, costPerUnit, 10,
-                maxTrainable > 0 ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
+            var baseCostLabel = UIHelper.CreateLabel(nameRow.transform, costPerUnit, UIConstants.FontCaption,
+                maxTrainable > 0 ? UIHelper.InkMutedText : SporefrontColors.SporeRed);
             baseCostLabel.supportRichText = true;
             var baseCostLE = baseCostLabel.gameObject.AddComponent<LayoutElement>();
             baseCostLE.preferredWidth = 100;
@@ -142,7 +142,7 @@ namespace Sporefront.Visual
                 // No slider — just a disabled Train button
                 var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
                 var trainBtn = UIHelper.CreateButton(row.transform, "Train",
-                    SporefrontColors.InkFaded, UIHelper.ButtonText, 11, null);
+                    UIHelper.InkMutedText, UIHelper.ButtonText, UIConstants.FontCaption, null);
                 trainBtn.interactable = false;
                 var btnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.flexibleWidth = 1;
@@ -162,8 +162,8 @@ namespace Sporefront.Visual
             var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
             sliderLE.flexibleWidth = 1;
 
-            countLabel = UIHelper.CreateLabel(sliderRow.transform, "1", 12,
-                UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+            countLabel = UIHelper.CreateLabel(sliderRow.transform, "1", UIConstants.FontCaption,
+                UIHelper.InkBodyText, TextAnchor.MiddleCenter);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 28;
 
@@ -172,7 +172,7 @@ namespace Sporefront.Visual
             var capturedCost = cost;
 
             trainButton = UIHelper.CreateButton(sliderRow.transform, "Train",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, () =>
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, () =>
                 {
                     var cmd = new TrainMilitaryCommand(localPlayerID, capturedBuildingID,
                         capturedUT, selectedQty);
@@ -184,7 +184,7 @@ namespace Sporefront.Visual
             // Total cost row
             var totalRow = UIHelper.CreateHorizontalRow(contentRT, 16f, 4f);
             totalCostLabel = UIHelper.CreateLabel(totalRow.transform,
-                $"Total: {costPerUnit}", UIConstants.FontCaption, SporefrontColors.InkLight);
+                $"Total: {costPerUnit}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var totalLE = totalCostLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.flexibleWidth = 1;
 
@@ -221,12 +221,12 @@ namespace Sporefront.Visual
 
             // Unit name row
             var nameRow = UIHelper.CreateHorizontalRow(contentRT, 22f, 4f);
-            var nameLabel = UIHelper.CreateLabel(nameRow.transform, "Villager", 12);
+            var nameLabel = UIHelper.CreateLabel(nameRow.transform, "Villager", UIConstants.FontCaption);
             var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
             nameLE.flexibleWidth = 1;
 
-            var baseCostLabel = UIHelper.CreateLabel(nameRow.transform, $"F{villagerCostFood}", 10,
-                maxTrainable > 0 ? SporefrontColors.InkLight : SporefrontColors.SporeRed);
+            var baseCostLabel = UIHelper.CreateLabel(nameRow.transform, $"F{villagerCostFood}", UIConstants.FontCaption,
+                maxTrainable > 0 ? UIHelper.InkMutedText : SporefrontColors.SporeRed);
             var baseCostLE = baseCostLabel.gameObject.AddComponent<LayoutElement>();
             baseCostLE.preferredWidth = 100;
 
@@ -234,7 +234,7 @@ namespace Sporefront.Visual
             {
                 var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
                 var trainBtn = UIHelper.CreateButton(row.transform, "Train",
-                    SporefrontColors.InkFaded, UIHelper.ButtonText, 11, null);
+                    UIHelper.InkMutedText, UIHelper.ButtonText, UIConstants.FontCaption, null);
                 trainBtn.interactable = false;
                 var btnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
                 btnLE.flexibleWidth = 1;
@@ -253,14 +253,14 @@ namespace Sporefront.Visual
             var sliderLE = slider.gameObject.AddComponent<LayoutElement>();
             sliderLE.flexibleWidth = 1;
 
-            countLabel = UIHelper.CreateLabel(sliderRow.transform, "1", 12,
-                UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+            countLabel = UIHelper.CreateLabel(sliderRow.transform, "1", UIConstants.FontCaption,
+                UIHelper.InkBodyText, TextAnchor.MiddleCenter);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
             countLE.preferredWidth = 28;
 
             var capturedBuildingID = building.id;
             var trainButton = UIHelper.CreateButton(sliderRow.transform, "Train",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 11, () =>
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, () =>
                 {
                     var cmd = new TrainVillagerCommand(localPlayerID, capturedBuildingID, selectedQty);
                     UIManager.ExecutePlayerCommand(cmd);
@@ -271,7 +271,7 @@ namespace Sporefront.Visual
             // Total cost row
             var totalRow = UIHelper.CreateHorizontalRow(contentRT, 16f, 4f);
             totalCostLabel = UIHelper.CreateLabel(totalRow.transform,
-                $"Total: F{villagerCostFood}", UIConstants.FontCaption, SporefrontColors.InkLight);
+                $"Total: F{villagerCostFood}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var totalLE = totalCostLabel.gameObject.AddComponent<LayoutElement>();
             totalLE.flexibleWidth = 1;
 
@@ -302,12 +302,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
 
             var unitLabel = UIHelper.CreateLabel(row.transform,
-                $"{entry.unitType.DisplayName()} x{entry.quantity}", 11, SporefrontColors.InkDark);
+                $"{entry.unitType.DisplayName()} x{entry.quantity}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
             unitLE.preferredWidth = 100;
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 12f,
+                UIHelper.InkMutedText, SporefrontColors.SporeTeal);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(progressFloat, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -317,7 +317,7 @@ namespace Sporefront.Visual
             state.trainingProgressFills.Add(fill);
 
             var pctLabel = UIHelper.CreateLabel(row.transform,
-                $"{(int)(progressFloat * 100)}%", UIConstants.FontCaption, SporefrontColors.InkLight);
+                $"{(int)(progressFloat * 100)}%", UIConstants.FontCaption, UIHelper.InkMutedText);
             var pctLE = pctLabel.gameObject.AddComponent<LayoutElement>();
             pctLE.preferredWidth = 30;
 
@@ -332,7 +332,7 @@ namespace Sporefront.Visual
 
             var timeLabel = UIHelper.CreateLabel(row.transform,
                 $"~{UIHelper.FormatTime(remaining)}",
-                UIConstants.FontCaption, SporefrontColors.InkLight);
+                UIConstants.FontCaption, UIHelper.InkMutedText);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 50;
 
@@ -353,12 +353,12 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
 
             var unitLabel = UIHelper.CreateLabel(row.transform,
-                $"Villager x{entry.quantity}", 11, SporefrontColors.InkDark);
+                $"Villager x{entry.quantity}", UIConstants.FontCaption, UIHelper.InkMutedText);
             var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
             unitLE.preferredWidth = 100;
 
-            var (bg, fill) = UIHelper.CreateProgressBar(row.transform, 12f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeGreen);
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 12f,
+                UIHelper.InkMutedText, SporefrontColors.SporeGreen);
             var fillRT = fill.GetComponent<RectTransform>();
             fillRT.anchorMax = new Vector2(progressFloat, 1);
             var barLE = bg.gameObject.AddComponent<LayoutElement>();
@@ -368,7 +368,7 @@ namespace Sporefront.Visual
             state.villagerProgressFills.Add(fill);
 
             var pctLabel = UIHelper.CreateLabel(row.transform,
-                $"{(int)(progressFloat * 100)}%", UIConstants.FontCaption, SporefrontColors.InkLight);
+                $"{(int)(progressFloat * 100)}%", UIConstants.FontCaption, UIHelper.InkMutedText);
             var pctLE = pctLabel.gameObject.AddComponent<LayoutElement>();
             pctLE.preferredWidth = 30;
 
@@ -381,7 +381,7 @@ namespace Sporefront.Visual
 
             var timeLabel = UIHelper.CreateLabel(row.transform,
                 $"~{UIHelper.FormatTime(remaining)}",
-                UIConstants.FontCaption, SporefrontColors.InkLight);
+                UIConstants.FontCaption, UIHelper.InkMutedText);
             var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
             timeLE.preferredWidth = 50;
 
@@ -400,7 +400,7 @@ namespace Sporefront.Visual
 
             var sectionLabel = UIHelper.CreateLabel(contentRT,
                 $"Garrison ({total}/{capacity})",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -412,7 +412,7 @@ namespace Sporefront.Visual
                 {
                     if (kvp.Value <= 0) continue;
                     var label = UIHelper.CreateLabel(contentRT,
-                        $"  {kvp.Key.DisplayName()}: {kvp.Value}", 12);
+                        $"  {kvp.Key.DisplayName()}: {kvp.Value}", UIConstants.FontCaption);
                     var le = label.gameObject.AddComponent<LayoutElement>();
                     le.preferredHeight = 20;
                 }
@@ -422,7 +422,7 @@ namespace Sporefront.Visual
             if (building.villagerGarrison > 0)
             {
                 var vlLabel = UIHelper.CreateLabel(contentRT,
-                    $"  Villagers: {building.villagerGarrison}", 12);
+                    $"  Villagers: {building.villagerGarrison}", UIConstants.FontCaption);
                 var vlLE = vlLabel.gameObject.AddComponent<LayoutElement>();
                 vlLE.preferredHeight = 20;
             }
@@ -439,7 +439,7 @@ namespace Sporefront.Visual
             if (totalGarrison <= 0) return;
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Deploy",
-                UIConstants.FontSubheader, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
                 TextAnchor.MiddleLeft, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 24;
@@ -452,7 +452,7 @@ namespace Sporefront.Visual
                 var capturedBuildingID = building.id;
                 var capturedGarrison = new Dictionary<MilitaryUnitType, int>(building.garrison);
                 var deployArmyBtn = UIHelper.CreateButton(row.transform, "Deploy Army",
-                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                     {
                         var cmd = new DeployArmyCommand(localPlayerID, capturedBuildingID, capturedGarrison);
                         UIManager.ExecutePlayerCommand(cmd);
@@ -468,7 +468,7 @@ namespace Sporefront.Visual
                 var capturedBuildingID = building.id;
                 var capturedVillagerCount = building.villagerGarrison;
                 var deployVilBtn = UIHelper.CreateButton(row.transform, "Deploy Villagers",
-                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, 12, () =>
+                    SporefrontColors.SporeGreen, UIHelper.HudTextColor, UIConstants.FontCaption, () =>
                     {
                         var cmd = new DeployVillagersCommand(localPlayerID, capturedBuildingID,
                             capturedVillagerCount);

@@ -60,13 +60,14 @@ namespace Sporefront.Visual
             localPlayerID = playerID;
 
             // Side panel — anchored to right edge
-            panel = UIHelper.CreatePanel(canvasTransform, "LiveCombatPanel", UIHelper.PanelBg);
+            panel = UIHelper.CreatePanel(canvasTransform, "LiveCombatPanel", UIHelper.PanelParchmentBg);
             var panelRT = panel.GetComponent<RectTransform>();
             panelRT.anchorMin = new Vector2(1, 0.1f);
             panelRT.anchorMax = new Vector2(1, 0.95f);
             panelRT.pivot = new Vector2(1, 0.5f);
             panelRT.offsetMin = new Vector2(-765, 0);
             panelRT.offsetMax = new Vector2(-4, 0);
+            PopupTendrilDecorator.Attach(panelRT);
 
             // ScrollView
             var scroll = UIHelper.CreateScrollView(panel.transform, "CombatScroll", out contentRT);
@@ -76,8 +77,7 @@ namespace Sporefront.Visual
             scrollRT.offsetMax = Vector2.zero;
 
             // Close button
-            var closeBtn = UIHelper.CreateButton(panel.transform, "Close",
-                SporefrontColors.SporeRed, UIHelper.HudTextColor, 17, Hide);
+            var closeBtn = UIHelper.CreateInkCloseButton(panel.transform, Hide);
             var closeBtnRT = closeBtn.GetComponent<RectTransform>();
             closeBtnRT.anchorMin = new Vector2(0, 0);
             closeBtnRT.anchorMax = new Vector2(1, 0);
@@ -159,7 +159,7 @@ namespace Sporefront.Visual
 
             // Combat not found — may have ended
             var endedLabel = UIHelper.CreateLabel(contentRT, "Combat has ended.",
-                21, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                21, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var endedLE = endedLabel.gameObject.AddComponent<LayoutElement>();
             endedLE.preferredHeight = 60;
         }
@@ -216,7 +216,7 @@ namespace Sporefront.Visual
 
             var tierLabel = UIHelper.CreateLabel(contentRT,
                 $"Current Tier: {stackCombat.currentTier}  |  Pairings: {stackCombat.activePairings.Count}",
-                18, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                18, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var tierLE = tierLabel.gameObject.AddComponent<LayoutElement>();
             tierLE.preferredHeight = 30;
 
@@ -254,7 +254,7 @@ namespace Sporefront.Visual
             int elapsed = (int)combat.elapsedTime;
             string timeStr = elapsed >= 60 ? $"{elapsed / 60}:{(elapsed % 60):D2}" : $"0:{elapsed:D2}";
             timerLabel = UIHelper.CreateLabel(headerRow.transform, timeStr,
-                21, UIHelper.HeaderTextColor, TextAnchor.MiddleLeft, true);
+                21, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
             var timerLE = timerLabel.gameObject.AddComponent<LayoutElement>();
             timerLE.preferredWidth = 90;
 
@@ -268,7 +268,7 @@ namespace Sporefront.Visual
             // Location
             locationLabel = UIHelper.CreateLabel(headerRow.transform,
                 $"({combat.location.q},{combat.location.r})", 17,
-                SporefrontColors.InkLight, TextAnchor.MiddleRight);
+                UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var locLE = locationLabel.gameObject.AddComponent<LayoutElement>();
             locLE.preferredWidth = 105;
         }
@@ -282,7 +282,7 @@ namespace Sporefront.Visual
             var terrainRow = UIHelper.CreateHorizontalRow(contentRT, 27f, 6f);
 
             var terrainNameLabel = UIHelper.CreateLabel(terrainRow.transform,
-                $"Terrain: {combat.terrainType}", 17, SporefrontColors.InkLight);
+                $"Terrain: {combat.terrainType}", 17, UIHelper.InkMutedText);
             var tnLE = terrainNameLabel.gameObject.AddComponent<LayoutElement>();
             tnLE.flexibleWidth = 1;
 
@@ -320,7 +320,7 @@ namespace Sporefront.Visual
             atkHeaderLE.flexibleWidth = 1;
 
             var vsLabel = UIHelper.CreateLabel(labelRow.transform, "vs",
-                17, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+                17, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
             var vsLE = vsLabel.gameObject.AddComponent<LayoutElement>();
             vsLE.preferredWidth = 36;
 
@@ -334,7 +334,7 @@ namespace Sporefront.Visual
 
             string atkName = combat.attackerArmies.Count > 0 ? combat.attackerArmies[0].armyName : "Attacker";
             attackerNameLabel = UIHelper.CreateLabel(nameRow.transform, atkName,
-                17, UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+                17, UIHelper.InkBodyText, TextAnchor.MiddleCenter);
             var atkNameLE = attackerNameLabel.gameObject.AddComponent<LayoutElement>();
             atkNameLE.flexibleWidth = 1;
 
@@ -344,7 +344,7 @@ namespace Sporefront.Visual
 
             string defName = combat.defenderArmies.Count > 0 ? combat.defenderArmies[0].armyName : "Defender";
             defenderNameLabel = UIHelper.CreateLabel(nameRow.transform, defName,
-                17, UIHelper.BodyTextColor, TextAnchor.MiddleCenter);
+                17, UIHelper.InkBodyText, TextAnchor.MiddleCenter);
             var defNameLE = defenderNameLabel.gameObject.AddComponent<LayoutElement>();
             defNameLE.flexibleWidth = 1;
 
@@ -356,7 +356,7 @@ namespace Sporefront.Visual
                 string atkCmdr = combat.attackerArmies.Count > 0 && combat.attackerArmies[0].commanderName != null
                     ? combat.attackerArmies[0].commanderName : "--";
                 var atkCmdrLabel = UIHelper.CreateLabel(cmdrRow.transform, atkCmdr,
-                    15, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    15, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var atkCmdrLE = atkCmdrLabel.gameObject.AddComponent<LayoutElement>();
                 atkCmdrLE.flexibleWidth = 1;
 
@@ -367,7 +367,7 @@ namespace Sporefront.Visual
                 string defCmdr = combat.defenderArmies.Count > 0 && combat.defenderArmies[0].commanderName != null
                     ? combat.defenderArmies[0].commanderName : "--";
                 var defCmdrLabel = UIHelper.CreateLabel(cmdrRow.transform, defCmdr,
-                    15, SporefrontColors.InkLight, TextAnchor.MiddleCenter);
+                    15, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
                 var defCmdrLE = defCmdrLabel.gameObject.AddComponent<LayoutElement>();
                 defCmdrLE.flexibleWidth = 1;
             }
@@ -408,13 +408,13 @@ namespace Sporefront.Visual
             var atkRow = UIHelper.CreateHorizontalRow(contentRT, 33f, 6f);
             var atkUnitLabel = UIHelper.CreateLabel(atkRow.transform,
                 $"{combat.attackerState.TotalUnits}/{combat.attackerState.initialUnitCount}", 15,
-                SporefrontColors.InkLight);
+                UIHelper.InkMutedText);
             var atkUnitLE = atkUnitLabel.gameObject.AddComponent<LayoutElement>();
             atkUnitLE.preferredWidth = 75;
 
             float atkPct = Mathf.Clamp01((float)(combat.attackerState.CurrentTotalHP / maxHP));
-            var (atkBg, atkFill) = UIHelper.CreateProgressBar(atkRow.transform, 24f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeRed);
+            var (atkBg, atkFill) = UIHelper.CreateInkProgressBar(atkRow.transform, 24f,
+                UIHelper.InkMutedText, SporefrontColors.SporeRed);
             var atkFillRT = atkFill.GetComponent<RectTransform>();
             atkFillRT.anchorMax = new Vector2(atkPct, 1);
             attackerHPFill = atkFill;
@@ -426,13 +426,13 @@ namespace Sporefront.Visual
             var defRow = UIHelper.CreateHorizontalRow(contentRT, 33f, 6f);
             var defUnitLabel = UIHelper.CreateLabel(defRow.transform,
                 $"{combat.defenderState.TotalUnits}/{combat.defenderState.initialUnitCount}", 15,
-                SporefrontColors.InkLight);
+                UIHelper.InkMutedText);
             var defUnitLE = defUnitLabel.gameObject.AddComponent<LayoutElement>();
             defUnitLE.preferredWidth = 75;
 
             float defPct = Mathf.Clamp01((float)(combat.defenderState.CurrentTotalHP / maxHP));
-            var (defBg, defFill) = UIHelper.CreateProgressBar(defRow.transform, 24f,
-                SporefrontColors.InkFaded, SporefrontColors.SporeTeal);
+            var (defBg, defFill) = UIHelper.CreateInkProgressBar(defRow.transform, 24f,
+                UIHelper.InkMutedText, SporefrontColors.SporeTeal);
             var defFillRT = defFill.GetComponent<RectTransform>();
             defFillRT.anchorMax = new Vector2(defPct, 1);
             defenderHPFill = defFill;
@@ -467,14 +467,14 @@ namespace Sporefront.Visual
         private void BuildUnitBreakdowns(ActiveCombat combat)
         {
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Unit Breakdown",
-                UIConstants.FontSubheader + 4, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader + 4, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 33;
 
             // Table header
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 27f, 3f);
-            CreateTableCell(headerRow.transform, "Unit Type", 120, SporefrontColors.InkMid, 15, true);
+            CreateTableCell(headerRow.transform, "Unit Type", 120, UIHelper.InkMutedText, 15, true);
             CreateTableCell(headerRow.transform, "Atk", 57, SporefrontColors.SporeRed, 15, true);
             CreateTableCell(headerRow.transform, "Def", 57, SporefrontColors.SporeTeal, 15, true);
             CreateTableCell(headerRow.transform, "A.Dmg", 66, SporefrontColors.SporeRed, 14, true);
@@ -502,11 +502,11 @@ namespace Sporefront.Visual
                 combat.defenderState.damageDealtByType.TryGetValue(unitType, out defDmg);
 
                 var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 3f);
-                CreateTableCell(row.transform, unitType.DisplayName(), 120, UIHelper.BodyTextColor, 15, false);
+                CreateTableCell(row.transform, unitType.DisplayName(), 120, UIHelper.InkBodyText, 15, false);
                 CreateTableCell(row.transform, $"{atkCount}/{atkInitial}", 57,
-                    atkCount < atkInitial ? SporefrontColors.SporeRed : SporefrontColors.InkLight, 15, false);
+                    atkCount < atkInitial ? SporefrontColors.SporeRed : UIHelper.InkMutedText, 15, false);
                 CreateTableCell(row.transform, $"{defCount}/{defInitial}", 57,
-                    defCount < defInitial ? SporefrontColors.SporeRed : SporefrontColors.InkLight, 15, false);
+                    defCount < defInitial ? SporefrontColors.SporeRed : UIHelper.InkMutedText, 15, false);
                 CreateTableCell(row.transform, atkDmg > 0 ? $"{(int)atkDmg}" : "--", 66,
                     SporefrontColors.SporeRed, 14, false);
                 CreateTableCell(row.transform, defDmg > 0 ? $"{(int)defDmg}" : "--", 66,
@@ -525,23 +525,23 @@ namespace Sporefront.Visual
             UIHelper.CreateDivider(contentRT);
 
             var sectionLabel = UIHelper.CreateLabel(contentRT, "Phase History",
-                UIConstants.FontSubheader + 4, UIHelper.HeaderTextColor,
+                UIConstants.FontSubheader + 4, UIHelper.InkHeaderText,
                 TextAnchor.MiddleCenter, true);
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 33;
 
             // Table header
             var headerRow = UIHelper.CreateHorizontalRow(contentRT, 27f, 3f);
-            CreateTableCell(headerRow.transform, "Phase", 120, SporefrontColors.InkMid, 15, true);
-            CreateTableCell(headerRow.transform, "Time", 60, SporefrontColors.InkMid, 15, true);
+            CreateTableCell(headerRow.transform, "Phase", 120, UIHelper.InkMutedText, 15, true);
+            CreateTableCell(headerRow.transform, "Time", 60, UIHelper.InkMutedText, 15, true);
             CreateTableCell(headerRow.transform, "Atk Dmg", 78, SporefrontColors.SporeRed, 14, true);
             CreateTableCell(headerRow.transform, "Def Dmg", 78, SporefrontColors.SporeTeal, 14, true);
 
             foreach (var record in combat.phaseRecords)
             {
                 var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 3f);
-                CreateTableCell(row.transform, PhaseIndexToName(record.Phase), 120, UIHelper.BodyTextColor, 15, false);
-                CreateTableCell(row.transform, $"{record.Duration:F1}s", 60, SporefrontColors.InkLight, 15, false);
+                CreateTableCell(row.transform, PhaseIndexToName(record.Phase), 120, UIHelper.InkBodyText, 15, false);
+                CreateTableCell(row.transform, $"{record.Duration:F1}s", 60, UIHelper.InkMutedText, 15, false);
                 CreateTableCell(row.transform, $"{(int)record.AttackerDamageDealt}", 78, SporefrontColors.SporeRed, 14, false);
                 CreateTableCell(row.transform, $"{(int)record.DefenderDamageDealt}", 78, SporefrontColors.SporeTeal, 14, false);
             }
@@ -579,7 +579,7 @@ namespace Sporefront.Visual
                     resultText = "DEFENDER VICTORY";
                     break;
                 default:
-                    badgeColor = SporefrontColors.InkMid;
+                    badgeColor = UIHelper.InkMutedText;
                     resultText = "DRAW";
                     break;
             }
@@ -600,7 +600,7 @@ namespace Sporefront.Visual
         private void BuildFocusButton(HexCoordinate location)
         {
             var focusBtn = UIHelper.CreateButton(contentRT, "Focus Camera",
-                SporefrontColors.ParchmentDark, UIHelper.ButtonText, 17, () =>
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, 17, () =>
                 {
                     OnFocusCombat?.Invoke(location);
                 });
@@ -628,8 +628,8 @@ namespace Sporefront.Visual
                 case CombatPhase.RangedExchange: return SporefrontColors.SporeAmber;
                 case CombatPhase.MeleeEngagement: return SporefrontColors.SporeRed;
                 case CombatPhase.Cleanup: return SporefrontColors.SporePurple;
-                case CombatPhase.Ended: return SporefrontColors.InkFaded;
-                default: return SporefrontColors.InkLight;
+                case CombatPhase.Ended: return UIHelper.InkMutedText;
+                default: return UIHelper.InkMutedText;
             }
         }
     }
