@@ -283,6 +283,10 @@ namespace Sporefront.Visual
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0f, height);
 
+            // Ensure row height is respected when inside a parent VLG with childControlHeight
+            var le = go.AddComponent<LayoutElement>();
+            le.preferredHeight = height;
+
             var hlg = go.GetComponent<HorizontalLayoutGroup>();
             hlg.spacing = spacing;
             hlg.childAlignment = TextAnchor.MiddleLeft;

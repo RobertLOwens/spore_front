@@ -228,6 +228,23 @@ namespace Sporefront.Engine
                 }
             }
 
+            // Apply faction highland speed bonus
+            if (army.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(army.ownerID.Value);
+                if (owner != null)
+                {
+                    var terrain = gameState.mapData.GetTerrain(targetCoord);
+                    if (terrain.HasValue &&
+                        (terrain.Value == TerrainType.Mountain || terrain.Value == TerrainType.Hill))
+                    {
+                        double highlandBonus = owner.faction.HighlandSpeedBonus();
+                        if (highlandBonus > 0)
+                            speed *= (1.0 + highlandBonus);
+                    }
+                }
+            }
+
             // Apply commander logistics bonus
             if (army.commanderID.HasValue)
             {

@@ -192,6 +192,10 @@ namespace Sporefront.Engine
             var garrisonChanges = garrisonDefenseEngine.ProcessGarrisonDefense(currentTime, gameState, 1.0);
             changes.AddRange(garrisonChanges);
 
+            // Process poison damage-over-time on all armies
+            var poisonChanges = ProcessPoisonDamage(currentTime, gameState);
+            changes.AddRange(poisonChanges);
+
             return changes;
         }
 
@@ -336,6 +340,10 @@ namespace Sporefront.Engine
                             AutoStartBuildingCombat(winnerID, combat.location, state, currentTime, changes);
                         }
                     }
+
+                    // Apply Toxic Strikes poison DoT from Amanita Muscaria faction
+                    var poisonApplicationChanges = ApplyToxicStrikesPoison(combat, state);
+                    changes.AddRange(poisonApplicationChanges);
                 }
             }
 
@@ -486,6 +494,12 @@ namespace Sporefront.Engine
             BuildingData building = gameState.GetBuilding(buildingID);
             if (building == null) return null;
 
+            // False Morel: instant destruction + poison attacker
+            if (building.buildingType == BuildingType.FalseMorel)
+            {
+                return HandleFalseMorelAttack(attacker, building);
+            }
+
             Guid combatID = Guid.NewGuid();
             var combat = new ActiveCombatData(
                 id: combatID,
@@ -509,6 +523,71 @@ namespace Sporefront.Engine
             return new CombatStartedChange
             {
                 attackerID = attackerArmyID,
+                defenderID = buildingID,
+                coordinate = building.coordinate
+            };
+        }
+
+        /// <summary>
+        /// Handle False Morel attack: instant destruction + poison the attacker.
+        /// Returns a CombatStartedChange for notification purposes.
+        /// </summary>
+        private StateChange HandleFalseMorelAttack(ArmyData attacker, BuildingData building)
+        {
+            var changes = new List<StateChange>();
+            Guid buildingID = building.id;
+
+            // Instantly destroy the False Morel
+            building.TakeDamage(building.health);
+
+            changes.Add(new BuildingDestroyedChange
+            {
+                buildingID = buildingID,
+                coordinate = building.coordinate
+            });
+
+            // Apply poison to the attacking army
+            Guid falseMorelOwnerID = building.ownerID ?? Guid.Empty;
+            double poisonDPS = GameConfig.FalseMorel.PoisonDamagePerTick;
+            double poisonDuration = GameConfig.FalseMorel.PoisonDuration;
+
+            // Apply research bonuses (Toxic Spores → Lethal Spores)
+            var owner = gameState.GetPlayer(falseMorelOwnerID);
+            if (owner != null)
+            {
+                if (owner.HasCompletedResearch(ResearchType.LethalSpores.ToString()))
+                {
+                    poisonDPS *= GameConfig.FalseMorel.LethalSporesDPSMultiplier;
+                    poisonDuration *= GameConfig.FalseMorel.LethalSporesDurationMultiplier;
+                }
+                else if (owner.HasCompletedResearch(ResearchType.ToxicSpores.ToString()))
+                {
+                    poisonDPS *= GameConfig.FalseMorel.ToxicSporesMultiplier;
+                }
+            }
+
+            ApplyPoisonToArmy(attacker, poisonDPS, falseMorelOwnerID, false, changes);
+            // Override duration (ApplyPoisonToArmy uses default 5s)
+            if (attacker.activePoisonState != null)
+                attacker.activePoisonState.remainingDuration = poisonDuration;
+
+            // Attacker is not stuck in combat — False Morel is already gone
+            attacker.isInCombat = false;
+            attacker.combatTargetID = null;
+
+            // Remove building from game state
+            gameState.RemoveBuilding(buildingID);
+
+            // Emit all changes via the state change event
+            if (changes.Count > 0)
+            {
+                var batch = new StateChangeBatch(changes, Guid.Empty);
+                GameEngine.Instance?.EmitStateChanges(batch);
+            }
+
+            return new CombatStartedChange
+            {
+                attackerID = attacker.id,
                 defenderID = buildingID,
                 coordinate = building.coordinate
             };
@@ -2739,6 +2818,288 @@ namespace Sporefront.Engine
                     army.combatTargetID = null;
                 }
             }
+        }
+
+        // MARK: - Toxic Strikes Poison System
+
+        /// <summary>
+        /// Apply poison DoT to surviving enemy armies when a Muscaria faction army participates in combat.
+        /// Called at the end of combat resolution.
+        /// </summary>
+        private List<StateChange> ApplyToxicStrikesPoison(ActiveCombat combat, GameState state)
+        {
+            var changes = new List<StateChange>();
+
+            // Check if attacker side has Toxic Strikes
+            bool attackerHasToxic = false;
+            Guid attackerOwnerID = Guid.Empty;
+            PlayerState attackerPlayer = combat.attackerPlayerState;
+            if (attackerPlayer != null && attackerPlayer.faction.HasToxicStrikes())
+            {
+                attackerHasToxic = true;
+                attackerOwnerID = attackerPlayer.id;
+            }
+
+            // Check if defender side has Toxic Strikes
+            bool defenderHasToxic = false;
+            Guid defenderOwnerID = Guid.Empty;
+            PlayerState defenderPlayer = combat.defenderPlayerState;
+            if (defenderPlayer != null && defenderPlayer.faction.HasToxicStrikes())
+            {
+                defenderHasToxic = true;
+                defenderOwnerID = defenderPlayer.id;
+            }
+
+            if (!attackerHasToxic && !defenderHasToxic) return changes;
+
+            // Calculate base poison damage scaled by army size
+            // Attacker's Muscaria units poison surviving defenders
+            if (attackerHasToxic)
+            {
+                int totalAttackerUnits = 0;
+                foreach (var armyState in combat.attackerArmies)
+                {
+                    var army = state.GetArmy(armyState.armyID);
+                    if (army != null) totalAttackerUnits += army.GetTotalUnits();
+                }
+
+                double baseDamage = GameConfig.Poison.BasePoisonDamagePerTick +
+                    (totalAttackerUnits * 0.1);
+
+                // Check for IncreasedPoisonDamage research
+                if (attackerPlayer.HasCompletedResearch(ResearchType.IncreasedPoisonDamage.ToString()))
+                    baseDamage *= GameConfig.Poison.IncreasedPoisonMultiplier;
+
+                bool canStack = attackerPlayer.HasCompletedResearch(ResearchType.ToxinAccumulation.ToString());
+
+                // Apply to all surviving defender armies
+                foreach (var defState in combat.defenderArmies)
+                {
+                    var defArmy = state.GetArmy(defState.armyID);
+                    if (defArmy == null || defArmy.GetTotalUnits() <= 0) continue;
+
+                    ApplyPoisonToArmy(defArmy, baseDamage, attackerOwnerID, canStack, changes);
+                }
+            }
+
+            // Defender's Muscaria units poison surviving attackers
+            if (defenderHasToxic)
+            {
+                int totalDefenderUnits = 0;
+                foreach (var armyState in combat.defenderArmies)
+                {
+                    var army = state.GetArmy(armyState.armyID);
+                    if (army != null) totalDefenderUnits += army.GetTotalUnits();
+                }
+
+                double baseDamage = GameConfig.Poison.BasePoisonDamagePerTick +
+                    (totalDefenderUnits * 0.1);
+
+                if (defenderPlayer.HasCompletedResearch(ResearchType.IncreasedPoisonDamage.ToString()))
+                    baseDamage *= GameConfig.Poison.IncreasedPoisonMultiplier;
+
+                bool canStack = defenderPlayer.HasCompletedResearch(ResearchType.ToxinAccumulation.ToString());
+
+                foreach (var atkState in combat.attackerArmies)
+                {
+                    var atkArmy = state.GetArmy(atkState.armyID);
+                    if (atkArmy == null || atkArmy.GetTotalUnits() <= 0) continue;
+
+                    ApplyPoisonToArmy(atkArmy, baseDamage, defenderOwnerID, canStack, changes);
+                }
+            }
+
+            return changes;
+        }
+
+        /// <summary>
+        /// Apply or stack poison on a single army.
+        /// </summary>
+        private void ApplyPoisonToArmy(ArmyData army, double damagePerTick, Guid sourcePlayerID,
+            bool canStack, List<StateChange> changes)
+        {
+            if (army.activePoisonState != null && canStack)
+            {
+                // Stack poison (up to max)
+                if (army.activePoisonState.stacks < GameConfig.Poison.MaxPoisonStacks)
+                {
+                    army.activePoisonState.stacks++;
+                    army.activePoisonState.damagePerTick = damagePerTick; // refresh damage rate
+                    army.activePoisonState.remainingDuration = GameConfig.Poison.PoisonDuration; // refresh duration
+                }
+                else
+                {
+                    // At max stacks — just refresh duration and damage
+                    army.activePoisonState.damagePerTick = damagePerTick;
+                    army.activePoisonState.remainingDuration = GameConfig.Poison.PoisonDuration;
+                }
+            }
+            else
+            {
+                // Apply new poison
+                army.activePoisonState = new PoisonState(
+                    damagePerTick, GameConfig.Poison.PoisonDuration, sourcePlayerID);
+            }
+
+            changes.Add(new PoisonAppliedChange
+            {
+                armyID = army.id,
+                sourcePlayerID = sourcePlayerID,
+                damagePerTick = army.activePoisonState.damagePerTick,
+                duration = army.activePoisonState.remainingDuration,
+                stacks = army.activePoisonState.stacks
+            });
+        }
+
+        /// <summary>
+        /// Process poison damage ticks on all armies with active poison.
+        /// Called each combat engine update.
+        /// </summary>
+        private List<StateChange> ProcessPoisonDamage(double currentTime, GameState state)
+        {
+            var changes = new List<StateChange>();
+            double deltaTime = GameConfig.EngineIntervals.CombatUpdate;
+
+            // Collect all poisoned armies (use ToList for safe iteration)
+            var allArmies = state.armies.Values;
+            if (allArmies == null) return changes;
+
+            foreach (var army in allArmies.ToList())
+            {
+                if (army.activePoisonState == null) continue;
+                if (army.isInCombat) continue; // Don't double-dip during active combat
+
+                var poison = army.activePoisonState;
+                double damage = poison.EffectiveDamagePerTick * deltaTime;
+
+                // Apply damage to the army — kill units based on accumulated damage
+                ApplyPoisonDamageToArmy(army, damage, state);
+
+                poison.remainingDuration -= deltaTime;
+
+                changes.Add(new PoisonDamageTickChange
+                {
+                    armyID = army.id,
+                    damage = damage,
+                    remainingDuration = Math.Max(0, poison.remainingDuration)
+                });
+
+                // Check if army is destroyed
+                if (army.GetTotalUnits() <= 0)
+                {
+                    // Check for Spore Burst before removing army
+                    var sporeBurstChanges = CheckSporeBurst(army, state);
+                    changes.AddRange(sporeBurstChanges);
+
+                    changes.Add(new ArmyDestroyedChange
+                    {
+                        armyID = army.id,
+                        coordinate = army.coordinate
+                    });
+                    state.RemoveArmy(army.id);
+                    continue;
+                }
+
+                // Check if poison expired
+                if (poison.remainingDuration <= 0)
+                {
+                    army.activePoisonState = null;
+                    changes.Add(new PoisonExpiredChange { armyID = army.id });
+                }
+            }
+
+            return changes;
+        }
+
+        /// <summary>
+        /// Apply poison damage to an army, killing units when enough damage accumulates.
+        /// Uses a simplified damage model (distributes evenly across unit types).
+        /// </summary>
+        private void ApplyPoisonDamageToArmy(ArmyData army, double damage, GameState state)
+        {
+            if (damage <= 0) return;
+
+            // Distribute damage across all unit types proportionally
+            var composition = army.militaryComposition.ToList();
+            int totalUnits = army.GetTotalUnits();
+            if (totalUnits <= 0) return;
+
+            foreach (var kvp in composition)
+            {
+                MilitaryUnitType unitType = kvp.Key;
+                int unitCount = kvp.Value;
+                if (unitCount <= 0) continue;
+
+                // Proportional damage share
+                double share = (double)unitCount / totalUnits;
+                double unitDamage = damage * share;
+
+                // Calculate kills based on unit HP
+                double unitHP = unitType.HP();
+                int kills = (int)(unitDamage / unitHP);
+                if (kills > 0)
+                {
+                    kills = Math.Min(kills, unitCount);
+                    army.RemoveMilitaryUnits(unitType, kills);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check and trigger Spore Burst AoE poison when a poisoned army is destroyed.
+        /// Requires the source Muscaria player to have completed SporeBurst research.
+        /// </summary>
+        private List<StateChange> CheckSporeBurst(ArmyData destroyedArmy, GameState state)
+        {
+            var changes = new List<StateChange>();
+            if (destroyedArmy.activePoisonState == null) return changes;
+
+            Guid sourcePlayerID = destroyedArmy.activePoisonState.sourcePlayerID;
+            var sourcePlayer = state.GetPlayer(sourcePlayerID);
+            if (sourcePlayer == null) return changes;
+
+            if (!sourcePlayer.HasCompletedResearch(ResearchType.SporeBurst.ToString()))
+                return changes;
+
+            // Find enemy armies within burst radius
+            var nearbyCoords = destroyedArmy.coordinate.CoordinatesWithinRange(
+                GameConfig.Poison.SporeBurstRadius);
+
+            var affectedArmyIDs = new List<Guid>();
+            double burstDamage = destroyedArmy.activePoisonState.EffectiveDamagePerTick *
+                GameConfig.Poison.SporeBurstDamageMultiplier;
+            burstDamage = Math.Max(burstDamage, GameConfig.Poison.BasePoisonDamagePerTick * 0.5);
+
+            bool canStack = sourcePlayer.HasCompletedResearch(ResearchType.ToxinAccumulation.ToString());
+
+            foreach (var coord in nearbyCoords)
+            {
+                var armiesAtCoord = state.GetArmies(coord);
+                if (armiesAtCoord == null) continue;
+
+                foreach (var nearbyArmy in armiesAtCoord)
+                {
+                    // Only poison enemy armies (not the source player's own armies)
+                    if (nearbyArmy.ownerID.HasValue && nearbyArmy.ownerID.Value == sourcePlayerID)
+                        continue;
+                    if (nearbyArmy.GetTotalUnits() <= 0) continue;
+
+                    ApplyPoisonToArmy(nearbyArmy, burstDamage, sourcePlayerID, canStack, changes);
+                    affectedArmyIDs.Add(nearbyArmy.id);
+                }
+            }
+
+            if (affectedArmyIDs.Count > 0)
+            {
+                changes.Add(new SporeBurstTriggeredChange
+                {
+                    sourceArmyID = destroyedArmy.id,
+                    coordinate = destroyedArmy.coordinate,
+                    affectedArmyIDs = affectedArmyIDs
+                });
+            }
+
+            return changes;
         }
     }
 }

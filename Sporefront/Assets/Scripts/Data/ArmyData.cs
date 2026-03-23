@@ -71,6 +71,9 @@ namespace Sporefront.Data
         [System.NonSerialized] public Guid? combatTargetID;
         public HexCoordinate? pendingAttackTarget;
 
+        // Poison state (transient — applied during/after combat by Toxic Strikes)
+        [System.NonSerialized] public PoisonState activePoisonState;
+
         // Entrenchment state (transient)
         [System.NonSerialized] public bool isEntrenching;
         [System.NonSerialized] public bool isEntrenched;

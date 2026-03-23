@@ -320,7 +320,7 @@ namespace Sporefront.Engine
             rate *= adjacencyMultiplier;
 
             // Apply camp/farm level bonus
-            double campLevelMultiplier = CalculateCampLevelBonus(resourceType, resourceCoordinate, state);
+            double campLevelMultiplier = CalculateCampLevelBonus(resourceType, resourceCoordinate, state, ownerPlayerID);
             rate *= campLevelMultiplier;
 
             // Apply research gathering rate bonuses
@@ -344,6 +344,18 @@ namespace Sporefront.Engine
                         return rate;
                 }
                 rate *= owner.GetResearchBonusMultiplier(bonusType.ToString());
+
+                // Apply faction wood gathering bonus
+                if (resourceType == ResourcePointType.Trees && owner.faction.WoodGatheringBonus() > 0)
+                    rate *= (1.0 + owner.faction.WoodGatheringBonus());
+
+                // Apply faction stone gathering bonus
+                if (resourceType == ResourcePointType.StoneQuarry && owner.faction.StoneGatheringBonus() > 0)
+                    rate *= (1.0 + owner.faction.StoneGatheringBonus());
+
+                // Apply faction ore gathering bonus
+                if (resourceType == ResourcePointType.OreMine && owner.faction.OreGatheringBonus() > 0)
+                    rate *= (1.0 + owner.faction.OreGatheringBonus());
             }
 
             return rate;
@@ -400,7 +412,7 @@ namespace Sporefront.Engine
         }
 
         private double CalculateCampLevelBonus(ResourcePointType resourceType,
-            HexCoordinate coordinate, GameState state)
+            HexCoordinate coordinate, GameState state, Guid ownerPlayerID)
         {
             // Determine which building type boosts this resource
             BuildingType matchingType;
@@ -420,9 +432,17 @@ namespace Sporefront.Engine
                     return 1.0;
             }
 
-            // Check the tile itself and all neighbors for the highest-level matching building
-            var tilesToCheck = new List<HexCoordinate> { coordinate };
-            tilesToCheck.AddRange(coordinate.Neighbors());
+            // Check the tile itself and surrounding tiles for the highest-level matching building
+            // Faction bonus: Morel LumberCamps have extended 2-tile reach
+            int reach = 1;
+            if (matchingType == BuildingType.LumberCamp)
+            {
+                var owner = state.GetPlayer(ownerPlayerID);
+                if (owner != null)
+                    reach = owner.faction.LumberCampReach();
+            }
+
+            var tilesToCheck = coordinate.CoordinatesWithinRange(reach);
             int highestLevel = 0;
 
             foreach (var coord in tilesToCheck)

@@ -2441,6 +2441,12 @@ namespace Sporefront.AI
             foreach (ResearchType research in Enum.GetValues(typeof(ResearchType)))
             {
                 if (player.HasCompletedResearch(research.ToString())) continue;
+
+                // Skip faction-blocked and faction-exclusive research
+                if (player.faction.BlockedResearch().Contains(research)) continue;
+                var exclusiveFaction = research.ExclusiveFaction();
+                if (exclusiveFaction != FactionType.None && exclusiveFaction != player.faction) continue;
+
                 if (research.CityCenterLevelRequirement() > ccLevel) continue;
 
                 bool prereqsMet = true;

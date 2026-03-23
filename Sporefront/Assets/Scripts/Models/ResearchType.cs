@@ -231,7 +231,15 @@ namespace Sporefront.Models
         // Siege & Fortification
         SiegeBludgeonDamageI, SiegeBludgeonDamageII, SiegeBludgeonDamageIII,
         BuildingBludgeonArmorI, BuildingBludgeonArmorII, BuildingBludgeonArmorIII,
-        FortifiedBuildingsI, FortifiedBuildingsII, FortifiedBuildingsIII
+        FortifiedBuildingsI, FortifiedBuildingsII, FortifiedBuildingsIII,
+
+        // Faction-Specific Research
+        BurnAreas,
+        ToxicSpores,
+        LethalSpores,
+        IncreasedPoisonDamage,
+        ToxinAccumulation,
+        SporeBurst
     }
 
     // This is split into a separate partial-like file due to massive size.

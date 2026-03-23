@@ -94,6 +94,66 @@ Uses **Newtonsoft.Json** (`com.unity.nuget.newtonsoft-json`) for serialization. 
 
 Unity-specific code lives in `Scripts/Visual/`. `GameSceneManager` orchestrates the scene. `HexGridRenderer`/`HexTileView`/`HexMeshUtility` handle hex rendering. UI panels (`ActionPanel`, `ArmyDetailPanel`, `BuildingDetailPanel`, etc.) are managed by `UIManager`. The visual layer subscribes to `OnStateChangesProduced` events — it never mutates game state directly.
 
+### Faction System
+
+Each player selects a `FactionType` (defined in `Scripts/Models/FactionType.cs`) at game setup. Factions provide passive bonuses, unique research, and Tier III research restrictions. AI faction is independently configurable via `GameSetupConfig.aiFaction`.
+
+#### The Morels — Infantry & Woodland Stealth
+
+| Bonus | Effect | Engine File |
+|-------|--------|-------------|
+| Extended Vision | +1 army sight range | `VisionEngine.cs` |
+| Woodland Camouflage | Armies hidden in forests | `VisionEngine.cs` |
+| Wood Gathering | +5% wood collection rate | `ResourceEngine.cs` |
+| Extended Lumberyards | 2-tile lumber camp reach (vs 1) | `ResourceEngine.cs` |
+
+- **Unique Research**: `BurnAreas` (demolishing buildings returns food) — requires Library
+- **Unique Research Chain**: `ToxicSpores` → `LethalSpores` — boosts False Morel poison DPS (requires Library)
+- **Blocked T3**: Ranged (Piercing/Archer III), Cavalry III, Mining Efficiency III, Siege III
+- **Unique Building**: `FalseMorel` — decoy trap that appears as an army to enemies; instantly destroyed when attacked, poisoning the attacker (3 DPS, 10s). Faction-exclusive via `BuildingType.ExclusiveFaction()`
+
+#### False Morel System
+
+`FalseMorel` (50 HP, 60 Wood + 20 Stone, CC level 2) is a Morel-exclusive trap building:
+
+- **Disguise**: Appears as an enemy army in `EntityRenderer.ComputeDesiredStates()` — rendered as `EntityVisualType.Army` to opponents until a friendly unit is within 1 hex
+- **Visibility**: Only shows on `Visible` tiles (like armies), not `Explored` — won't persist in fog-of-war memory
+- **On Attack**: `CombatEngine.HandleFalseMorelAttack()` bypasses normal building combat — instant destruction + poison via `ApplyPoisonToArmy()`
+- **Research Scaling**: `ToxicSpores` (1.5x DPS → 4.5), `LethalSpores` (2x DPS + 1.5x duration → 6 DPS, 15s)
+- **Constants**: `GameConfig.FalseMorel` — `PoisonDamagePerTick=3.0`, `PoisonDuration=10.0`, `ToxicSporesMultiplier=1.5`, `LethalSporesDPSMultiplier=2.0`, `LethalSporesDurationMultiplier=1.5`
+
+#### Amanita Muscaria — Aggressive Poison & Mountain
+
+| Bonus | Effect | Engine File |
+|-------|--------|-------------|
+| Toxic Strikes | Poison DoT applied after combat | `CombatEngine.cs` |
+| Mountain Builders | -15% build cost on mountain/hill | `BuildCommand.cs` |
+| Highland Movement | +20% army speed on mountain/hill | `MovementEngine.cs` |
+| Stone Gathering | +5% stone collection rate | `ResourceEngine.cs` |
+| Ore Gathering | +5% ore collection rate | `ResourceEngine.cs` |
+
+- **Unique Research Chain**: `IncreasedPoisonDamage` → `ToxinAccumulation` → `SporeBurst` — all require Blacksmith
+- **Blocked T3**: Infantry III, Cavalry III, Lumber Efficiency III, Farm Efficiency III
+
+#### Poison DoT System
+
+`PoisonState` (in `Scripts/Models/PoisonState.cs`) tracks `damagePerTick`, `remainingDuration`, `stacks`, and `sourcePlayerID`. Stored as `[NonSerialized]` on `ArmyData.activePoisonState` (transient — resets on save/load).
+
+- **Apply**: `CombatEngine.ApplyToxicStrikesPoison()` after combat ends
+- **Tick**: `CombatEngine.ProcessPoisonDamage()` each update cycle
+- **Spore Burst**: On poisoned army death, AoE poison to nearby enemies (research-gated)
+- **Constants**: `GameConfig.Poison` — `BasePoisonDamagePerTick=2.0`, `PoisonDuration=5.0`, `MaxPoisonStacks=3`, `SporeBurstRadius=1`
+
+#### Faction Gating
+
+- `FactionType.BlockedResearch()` — returns `List<ResearchType>` of T3 research blocked per faction
+- `ResearchType.ExclusiveFaction()` — returns `FactionType` for faction-only research (e.g., `SporeBurst` → `Muscaria`)
+- `BuildingType.ExclusiveFaction()` — returns `FactionType` for faction-only buildings
+- Research tree shows `LockedFaction` state with "Faction Blocked" label; detail panel explains restriction
+- Both `ResearchCommand` and `AIStartResearchCommand` validate faction restrictions server-side
+- AI planners (`AIResearchPlanner`, `SimulationAIController`) filter faction-blocked research from consideration
+- AI planners are faction-aware: Morel AI favors infantry, forests, lumber; Muscaria AI favors ranged/siege, mountain/hill terrain, mining
+
 ## Key Conventions
 
 - **Namespaces** follow folder structure: `Sporefront.Engine`, `Sporefront.Data`, `Sporefront.Models`, `Sporefront.AI`, `Sporefront.AI.Commands`, `Sporefront.Visual`
@@ -114,6 +174,9 @@ Unity-specific code lives in `Scripts/Visual/`. `GameSceneManager` orchestrates 
 - `Scripts/Models/BuildingType.cs` — Building definitions with costs, levels, requirements
 - `Scripts/Models/MilitaryUnit.cs` — Unit stats, damage calc, `MilitaryUnitType` enum
 - `Scripts/Models/HexCoordinate.cs` — Hex math (odd-r offset)
+- `Scripts/Models/FactionType.cs` — `FactionType` enum, all faction bonuses, blocked research lists
+- `Scripts/Models/PoisonState.cs` — Poison DoT data class for Muscaria toxic strikes
+- `Scripts/Models/ResearchTypeData.cs` — Research extension methods including `ExclusiveFaction()`
 - `Scripts/Data/CommanderTypes.cs` — `CommanderSpecialty` enum, commander generation
 - `Scripts/Data/Serialization/HexCoordinateConverter.cs` — JSON converters for hex coordinates
 - `Scripts/Engine/SaveManager.cs` — Save/load file operations

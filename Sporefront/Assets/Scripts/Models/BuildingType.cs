@@ -46,7 +46,10 @@ namespace Sporefront.Models
         Tower,
         WoodenFort,
         Wall,
-        Gate
+        Gate,
+
+        // Faction-Exclusive Buildings
+        FalseMorel
     }
 
     public static class BuildingTypeExtensions
@@ -76,6 +79,7 @@ namespace Sporefront.Models
                 case BuildingType.WoodenFort: return "Wooden Fort";
                 case BuildingType.Wall: return "Wall";
                 case BuildingType.Gate: return "Gate";
+                case BuildingType.FalseMorel: return "False Morel";
                 default: return type.ToString();
             }
         }
@@ -105,6 +109,7 @@ namespace Sporefront.Models
                 case BuildingType.WoodenFort: return "wooden_fort";
                 case BuildingType.Wall: return "wall";
                 case BuildingType.Gate: return "gate";
+                case BuildingType.FalseMorel: return "false_morel";
                 default: return "";
             }
         }
@@ -125,6 +130,7 @@ namespace Sporefront.Models
                 case BuildingType.Library:
                 case BuildingType.Road:
                 case BuildingType.Mill:
+                case BuildingType.FalseMorel:
                     return BuildingCategory.Economic;
                 default:
                     return BuildingCategory.Military;
@@ -176,6 +182,7 @@ namespace Sporefront.Models
                 case BuildingType.Mill:
                 case BuildingType.Wall:
                 case BuildingType.Gate:
+                case BuildingType.FalseMorel:
                     return 2;
                 case BuildingType.Market:
                 case BuildingType.Blacksmith:
@@ -235,6 +242,8 @@ namespace Sporefront.Models
                     return new Dictionary<ResourceType, int> { { ResourceType.Wood, 30 }, { ResourceType.Stone, 50 } };
                 case BuildingType.Gate:
                     return new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 40 } };
+                case BuildingType.FalseMorel:
+                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 20 } };
                 default:
                     return new Dictionary<ResourceType, int>();
             }
@@ -265,6 +274,7 @@ namespace Sporefront.Models
                 case BuildingType.Mill: return 25.0;
                 case BuildingType.Wall: return 15.0;
                 case BuildingType.Gate: return 20.0;
+                case BuildingType.FalseMorel: return 20.0;
                 default: return 30.0;
             }
         }
@@ -310,6 +320,7 @@ namespace Sporefront.Models
                 case BuildingType.Mill: return "Boosts adjacent farm gather rates by 25%";
                 case BuildingType.Wall: return "Blocks all movement";
                 case BuildingType.Gate: return "Allows passage for owner and allies";
+                case BuildingType.FalseMorel: return "A decoy structure that appears as an army to enemies until they are adjacent";
                 default: return "";
             }
         }
@@ -336,6 +347,7 @@ namespace Sporefront.Models
                 case BuildingType.Road:
                 case BuildingType.Wall:
                 case BuildingType.Gate:
+                case BuildingType.FalseMorel:
                     return 1;
                 default: return 5;
             }

@@ -59,6 +59,19 @@ namespace Sporefront.Commands
 
             var player = state.GetPlayer(PlayerID);
 
+            // Find the recruiting building (Barracks or Castle) for spawn location
+            BuildingData recruitBuilding = null;
+            foreach (var building in state.GetBuildingsForPlayer(PlayerID))
+            {
+                if (building.IsOperational &&
+                    (building.buildingType == BuildingType.Barracks ||
+                     building.buildingType == BuildingType.Castle))
+                {
+                    recruitBuilding = building;
+                    break;
+                }
+            }
+
             // Deduct resources and emit state changes
             foreach (var kvp in RecruitCost)
             {
@@ -91,7 +104,46 @@ namespace Sporefront.Commands
                 specialty = specialty.ToString()
             });
 
-            DebugLog.Log($"RecruitCommanderCommand: Player recruited {commander.name} ({specialty})");
+            // Deploy commander as a standalone army at the recruiting building
+            HexCoordinate spawnCoord = recruitBuilding != null
+                ? recruitBuilding.coordinate
+                : state.GetCityCenter(PlayerID)?.coordinate ?? new HexCoordinate(0, 0);
+
+            // Find a walkable spawn tile if the building tile is full
+            var armiesAtSpawn = state.GetArmies(spawnCoord);
+            if (armiesAtSpawn.Count >= GameConfig.Stacking.MaxEntitiesPerTile)
+            {
+                foreach (var neighbor in spawnCoord.Neighbors())
+                {
+                    if (state.mapData.IsValidCoordinate(neighbor) && state.mapData.IsWalkable(neighbor))
+                    {
+                        var armiesAtNeighbor = state.GetArmies(neighbor);
+                        if (armiesAtNeighbor.Count < GameConfig.Stacking.MaxEntitiesPerTile)
+                        {
+                            spawnCoord = neighbor;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Create army with commander assigned
+            var army = new ArmyData(commander.name + "'s Company", spawnCoord, PlayerID);
+            army.commanderID = commander.id;
+            army.homeBaseID = recruitBuilding?.id ?? state.GetCityCenter(PlayerID)?.id ?? Guid.Empty;
+            commander.assignedArmyID = army.id;
+
+            state.AddArmy(army);
+
+            changeBuilder.Add(new ArmyCreatedChange
+            {
+                armyID = army.id,
+                ownerID = PlayerID,
+                coordinate = spawnCoord,
+                composition = new Dictionary<string, int>()
+            });
+
+            DebugLog.Log($"RecruitCommanderCommand: Player recruited {commander.name} ({specialty}) deployed at {spawnCoord}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

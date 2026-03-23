@@ -35,6 +35,13 @@ namespace Sporefront.AI.Commands
             if (player.HasCompletedResearch(rawValue))
                 return EngineCommandResult.Failure("Research already completed");
 
+            // Check faction restrictions
+            if (player.faction.BlockedResearch().Contains(researchType))
+                return EngineCommandResult.Failure("Faction cannot research this");
+            var exclusiveFaction = researchType.ExclusiveFaction();
+            if (exclusiveFaction != FactionType.None && exclusiveFaction != player.faction)
+                return EngineCommandResult.Failure("Research exclusive to " + exclusiveFaction.DisplayName());
+
             // Check prerequisites
             var prerequisites = researchType.Prerequisites();
             foreach (var prereq in prerequisites)

@@ -296,6 +296,30 @@ namespace Sporefront.Data
 
     // Map Changes
     public class FogOfWarUpdatedChange : StateChange { public Guid playerID; public HexCoordinate coordinate; public string visibility; }
+    public class CamouflagedArmiesChange : StateChange { public Guid observingPlayerID; public List<Guid> camouflagedArmyIDs; }
+
+    // Poison Changes
+    public class PoisonAppliedChange : StateChange
+    {
+        public Guid armyID;
+        public Guid sourcePlayerID;
+        public double damagePerTick;
+        public double duration;
+        public int stacks;
+    }
+    public class PoisonDamageTickChange : StateChange
+    {
+        public Guid armyID;
+        public double damage;
+        public double remainingDuration;
+    }
+    public class PoisonExpiredChange : StateChange { public Guid armyID; }
+    public class SporeBurstTriggeredChange : StateChange
+    {
+        public Guid sourceArmyID;
+        public HexCoordinate coordinate;
+        public List<Guid> affectedArmyIDs;
+    }
 
     // Research Changes
     public class ResearchStartedChange : StateChange { public Guid playerID; public string researchType; public double startTime; }

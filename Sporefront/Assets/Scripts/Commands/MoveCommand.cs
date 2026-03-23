@@ -45,6 +45,10 @@ namespace Sporefront.Commands
                 if (!army.commanderID.HasValue)
                     return EngineCommandResult.Failure("Army requires a commander to move");
 
+                // Check army has troops
+                if (army.IsEmpty())
+                    return EngineCommandResult.Failure("Army has no troops — assign units before moving");
+
                 // Check commander stamina
                 var commander = state.GetCommander(army.commanderID.Value);
                 if (commander == null)

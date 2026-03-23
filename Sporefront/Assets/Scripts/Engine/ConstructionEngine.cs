@@ -284,6 +284,14 @@ namespace Sporefront.Engine
                             int capacity = state.GetStorageCapacity(building.ownerID.Value, kvp.Key);
                             player.AddResource(kvp.Key, kvp.Value, capacity);
                         }
+
+                        // Burn Areas faction research: demolishing grants food based on building level
+                        if (player.HasCompletedResearch(ResearchType.BurnAreas.ToString()))
+                        {
+                            int foodBonus = building.level * GameConfig.Demolition.BurnAreasFoodPerLevel;
+                            int foodCapacity = state.GetStorageCapacity(building.ownerID.Value, ResourceType.Food);
+                            player.AddResource(ResourceType.Food, foodBonus, foodCapacity);
+                        }
                     }
                 }
 

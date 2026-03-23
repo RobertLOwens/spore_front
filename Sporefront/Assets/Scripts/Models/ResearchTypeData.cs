@@ -86,6 +86,12 @@ namespace Sporefront.Models
                 case ResearchType.FortifiedBuildingsI: return "Fortifications I";
                 case ResearchType.FortifiedBuildingsII: return "Fortifications II";
                 case ResearchType.FortifiedBuildingsIII: return "Fortifications III";
+                case ResearchType.BurnAreas: return "Burn Areas";
+                case ResearchType.ToxicSpores: return "Toxic Spores";
+                case ResearchType.LethalSpores: return "Lethal Spores";
+                case ResearchType.IncreasedPoisonDamage: return "Increased Poison Damage";
+                case ResearchType.ToxinAccumulation: return "Toxin Accumulation";
+                case ResearchType.SporeBurst: return "Spore Burst";
                 default: return type.ToString();
             }
         }
@@ -195,6 +201,12 @@ namespace Sporefront.Models
                 case ResearchType.FortifiedBuildingsI: return "Increases building hit points by 10%.";
                 case ResearchType.FortifiedBuildingsII: return "Increases building hit points by 15%.";
                 case ResearchType.FortifiedBuildingsIII: return "Increases building hit points by 20%.";
+                case ResearchType.BurnAreas: return "Demolishing buildings returns food based on the building's level.";
+                case ResearchType.ToxicSpores: return "False Morel poison deals 50% more damage per second.";
+                case ResearchType.LethalSpores: return "False Morel poison deals double damage per second and lasts 50% longer.";
+                case ResearchType.IncreasedPoisonDamage: return "Toxic Strikes deal 50% more poison damage over time.";
+                case ResearchType.ToxinAccumulation: return "Poison from Toxic Strikes stacks up to 3 times, intensifying damage.";
+                case ResearchType.SporeBurst: return "When a poisoned army is destroyed, it releases toxic spores that poison nearby enemy armies.";
                 default: return "";
             }
         }
@@ -209,6 +221,14 @@ namespace Sporefront.Models
 
         public static double ResearchTime(this ResearchType type)
         {
+            // Faction-specific research with custom times
+            if (type == ResearchType.BurnAreas) return 60.0;
+            if (type == ResearchType.ToxicSpores) return 45.0;
+            if (type == ResearchType.LethalSpores) return 75.0;
+            if (type == ResearchType.IncreasedPoisonDamage) return 45.0;
+            if (type == ResearchType.ToxinAccumulation) return 60.0;
+            if (type == ResearchType.SporeBurst) return 90.0;
+
             switch (type.Tier())
             {
                 case 1: return 30.0;
@@ -273,12 +293,30 @@ namespace Sporefront.Models
                 case ResearchType.FortifiedBuildingsI: case ResearchType.FortifiedBuildingsII: case ResearchType.FortifiedBuildingsIII:
                     return ResearchBranch.SiegeFortification;
 
+                case ResearchType.BurnAreas:
+                case ResearchType.ToxicSpores:
+                case ResearchType.LethalSpores:
+                    return ResearchBranch.Gathering;
+
+                case ResearchType.IncreasedPoisonDamage:
+                case ResearchType.ToxinAccumulation:
+                case ResearchType.SporeBurst:
+                    return ResearchBranch.MeleeEquipment;
+
                 default: return ResearchBranch.Gathering;
             }
         }
 
         public static (BuildingType buildingType, int level)? BuildingRequirement(this ResearchType type)
         {
+            // Faction-specific research with explicit building requirements
+            if (type == ResearchType.BurnAreas) return (BuildingType.Library, 1);
+            if (type == ResearchType.ToxicSpores) return (BuildingType.Library, 1);
+            if (type == ResearchType.LethalSpores) return (BuildingType.Library, 2);
+            if (type == ResearchType.IncreasedPoisonDamage) return (BuildingType.Blacksmith, 1);
+            if (type == ResearchType.ToxinAccumulation) return (BuildingType.Blacksmith, 1);
+            if (type == ResearchType.SporeBurst) return (BuildingType.Blacksmith, 2);
+
             if (type.Tier() < 2) return null;
             var gateBuilding = type.Branch().GateBuildingType();
             if (!gateBuilding.HasValue) return null;
@@ -494,6 +532,14 @@ namespace Sporefront.Models
                 case ResearchType.MilitaryRationsIII: return new[] { ResearchType.MilitaryRationsII, ResearchType.MilitaryTrainingSpeedII };
                 case ResearchType.FortifiedBuildingsIII: return new[] { ResearchType.FortifiedBuildingsII };
 
+                // Faction-Specific
+                case ResearchType.BurnAreas: return new[] { ResearchType.LumberCampGatheringII };
+                case ResearchType.ToxicSpores: return new ResearchType[0];
+                case ResearchType.LethalSpores: return new[] { ResearchType.ToxicSpores };
+                case ResearchType.IncreasedPoisonDamage: return new ResearchType[0];
+                case ResearchType.ToxinAccumulation: return new[] { ResearchType.IncreasedPoisonDamage };
+                case ResearchType.SporeBurst: return new[] { ResearchType.ToxinAccumulation };
+
                 default: return new ResearchType[0];
             }
         }
@@ -538,6 +584,14 @@ namespace Sporefront.Models
                 case ResearchType.EfficientRationsIII: return new Dictionary<ResourceType, int> { {ResourceType.Food, 320}, {ResourceType.Wood, 80}, {ResourceType.Stone, 40}, {ResourceType.Ore, 20} };
                 case ResearchType.BuildingSpeedIII: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 160}, {ResourceType.Stone, 160}, {ResourceType.Food, 60}, {ResourceType.Ore, 40} };
 
+                // Faction-Specific
+                case ResearchType.BurnAreas: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 100}, {ResourceType.Food, 50} };
+                case ResearchType.ToxicSpores: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 80}, {ResourceType.Food, 60} };
+                case ResearchType.LethalSpores: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 120}, {ResourceType.Food, 80}, {ResourceType.Ore, 40} };
+                case ResearchType.IncreasedPoisonDamage: return new Dictionary<ResourceType, int> { {ResourceType.Ore, 80}, {ResourceType.Food, 60} };
+                case ResearchType.ToxinAccumulation: return new Dictionary<ResourceType, int> { {ResourceType.Ore, 120}, {ResourceType.Stone, 80} };
+                case ResearchType.SporeBurst: return new Dictionary<ResourceType, int> { {ResourceType.Ore, 150}, {ResourceType.Food, 100}, {ResourceType.Stone, 50} };
+
                 default: break;
             }
 
@@ -549,6 +603,30 @@ namespace Sporefront.Models
                 case 2: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 150}, {ResourceType.Food, 100}, {ResourceType.Stone, 50}, {ResourceType.Ore, 25} };
                 case 3: return new Dictionary<ResourceType, int> { {ResourceType.Wood, 300}, {ResourceType.Food, 200}, {ResourceType.Stone, 100}, {ResourceType.Ore, 50} };
                 default: return new Dictionary<ResourceType, int>();
+            }
+        }
+
+        /// <summary>
+        /// Returns the faction this research is exclusive to, or None if available to all.
+        /// </summary>
+        public static FactionType ExclusiveFaction(this ResearchType type)
+        {
+            switch (type)
+            {
+                // Morel-exclusive
+                case ResearchType.BurnAreas:
+                case ResearchType.ToxicSpores:
+                case ResearchType.LethalSpores:
+                    return FactionType.Morel;
+
+                // Muscaria-exclusive
+                case ResearchType.IncreasedPoisonDamage:
+                case ResearchType.ToxinAccumulation:
+                case ResearchType.SporeBurst:
+                    return FactionType.Muscaria;
+
+                default:
+                    return FactionType.None;
             }
         }
     }

@@ -18,6 +18,7 @@ namespace Sporefront.Data
         public string name;
         public string colorHex;
         public bool isAI;
+        public FactionType faction = FactionType.None;
 
         // Resources
         public Dictionary<ResourceType, int> resources = new Dictionary<ResourceType, int>

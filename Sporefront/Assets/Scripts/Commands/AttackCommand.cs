@@ -44,6 +44,10 @@ namespace Sporefront.Commands
             if (army.isStranded)
                 return EngineCommandResult.Failure("Army is stranded — build a home base first");
 
+            // Check army has troops
+            if (army.IsEmpty())
+                return EngineCommandResult.Failure("Army has no troops — assign units before attacking");
+
             // Check army has a commander
             if (!army.commanderID.HasValue)
                 return EngineCommandResult.Failure("Army requires a commander to attack");

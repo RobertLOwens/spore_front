@@ -232,6 +232,23 @@ namespace Sporefront.AI
                     score -= 30.0;
             }
 
+            // Faction unit preferences
+            var faction = player.faction;
+            if (faction == FactionType.Morel)
+            {
+                if (category == UnitCategory.Infantry) score += 6.0;
+                if (unitType == MilitaryUnitType.Scout) score += 5.0; // +1 vision makes scouts more valuable
+                if (category == UnitCategory.Cavalry && unitType != MilitaryUnitType.Scout) score -= 5.0;
+                if (category == UnitCategory.Siege) score -= 5.0;
+            }
+            else if (faction == FactionType.Muscaria)
+            {
+                if (category == UnitCategory.Ranged) score += 6.0;
+                if (category == UnitCategory.Siege) score += 6.0;
+                if (category == UnitCategory.Infantry) score -= 4.0;
+                if (category == UnitCategory.Cavalry && unitType != MilitaryUnitType.Scout) score -= 4.0;
+            }
+
             return score;
         }
 
@@ -454,6 +471,21 @@ namespace Sporefront.AI
 
                 double score = baseScore + (15.0 / distance);
                 scores.Add(new TargetScore(building.id, building.coordinate, score, true));
+            }
+
+            // Muscaria aggression: poison DoT makes attacking armies more valuable
+            var attackerFaction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
+            if (attackerFaction == FactionType.Muscaria)
+            {
+                for (int i = 0; i < scores.Count; i++)
+                {
+                    if (!scores[i].isBuilding)
+                    {
+                        var s = scores[i];
+                        s.score += 8.0;
+                        scores[i] = s;
+                    }
+                }
             }
 
             scores.Sort((a, b) => b.score.CompareTo(a.score));

@@ -30,6 +30,10 @@ namespace Sporefront.Commands
             if (player == null)
                 return EngineCommandResult.Failure("Player not found.");
 
+            // Check faction-exclusive building restrictions
+            if (buildingType.IsFactionExclusive() && buildingType.ExclusiveFaction() != player.faction)
+                return EngineCommandResult.Failure("This building is exclusive to another faction.");
+
             // Get all coordinates this building will occupy
             var occupiedCoordinates = buildingType.GetOccupiedCoordinates(coordinate, rotation);
 
@@ -53,7 +57,7 @@ namespace Sporefront.Commands
                 return EngineCommandResult.Failure($"Requires City Center level {requiredCCLevel} (current: {currentCCLevel}).");
 
             // Check resources
-            var buildCost = buildingType.BuildCost();
+            var buildCost = GetEffectiveBuildCost(state, player);
             if (!player.CanAfford(buildCost))
                 return EngineCommandResult.Failure("Insufficient resources.");
 
@@ -89,7 +93,7 @@ namespace Sporefront.Commands
             var player = state.GetPlayer(PlayerID);
 
             // Deduct resources
-            var buildCost = buildingType.BuildCost();
+            var buildCost = GetEffectiveBuildCost(state, player);
             foreach (var kvp in buildCost)
             {
                 player.RemoveResource(kvp.Key, kvp.Value);
@@ -185,6 +189,28 @@ namespace Sporefront.Commands
             }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
+        }
+
+        private Dictionary<ResourceType, int> GetEffectiveBuildCost(GameState state, PlayerState player)
+        {
+            var baseCost = buildingType.BuildCost();
+
+            // Apply faction mountain building cost reduction
+            var tileTerrain = state.mapData.GetTerrain(coordinate);
+            if (tileTerrain.HasValue &&
+                (tileTerrain.Value == TerrainType.Mountain || tileTerrain.Value == TerrainType.Hill))
+            {
+                double reduction = player.faction.MountainBuildCostReduction();
+                if (reduction > 0)
+                {
+                    var reducedCost = new Dictionary<ResourceType, int>();
+                    foreach (var kvp in baseCost)
+                        reducedCost[kvp.Key] = Math.Max(1, (int)(kvp.Value * (1.0 - reduction)));
+                    return reducedCost;
+                }
+            }
+
+            return baseCost;
         }
     }
 }

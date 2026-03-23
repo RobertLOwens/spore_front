@@ -76,6 +76,7 @@ namespace Sporefront.Data
             {
                 case BuildingType.Wall: return GameConfig.BuildingHealth.Wall;
                 case BuildingType.Gate: return GameConfig.BuildingHealth.Gate;
+                case BuildingType.FalseMorel: return GameConfig.BuildingHealth.FalseMorel;
                 default:
                     return type.Category() == BuildingCategory.Military
                         ? GameConfig.BuildingHealth.Military

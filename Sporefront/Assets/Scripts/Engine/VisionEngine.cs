@@ -108,6 +108,28 @@ namespace Sporefront.Engine
                 }
             }
 
+            // Emit camouflage changes for each player
+            foreach (var player in gameState.players.Values)
+            {
+                var camouflagedIDs = new List<Guid>();
+                foreach (var army in gameState.armies.Values)
+                {
+                    if (!army.ownerID.HasValue || army.ownerID.Value == player.id) continue;
+                    if (player.IsVisible(army.coordinate) && IsArmyCamouflaged(army, player.id))
+                    {
+                        camouflagedIDs.Add(army.id);
+                    }
+                }
+                if (camouflagedIDs.Count > 0)
+                {
+                    changes.Add(new CamouflagedArmiesChange
+                    {
+                        observingPlayerID = player.id,
+                        camouflagedArmyIDs = camouflagedIDs
+                    });
+                }
+            }
+
             return changes;
         }
 
@@ -132,9 +154,11 @@ namespace Sporefront.Engine
             }
 
             // Vision from armies
+            var player = state.GetPlayer(playerID);
+            int factionVisionBonus = player != null ? player.faction.ArmyVisionBonus() : 0;
             foreach (var army in state.GetArmiesForPlayer(playerID))
             {
-                int range = baseUnitVisionRange;
+                int range = baseUnitVisionRange + factionVisionBonus;
                 GetCoordinatesInRange(army.coordinate, range, state, visibleCoords);
             }
 
@@ -338,11 +362,42 @@ namespace Sporefront.Engine
 
                 if (player.IsVisible(army.coordinate))
                 {
+                    // Check woodland camouflage
+                    if (IsArmyCamouflaged(army, playerID))
+                        continue;
+
                     visibleEnemies.Add(army);
                 }
             }
 
             return visibleEnemies;
+        }
+
+        private bool IsArmyCamouflaged(ArmyData army, Guid observingPlayerID)
+        {
+            if (gameState == null || !army.ownerID.HasValue) return false;
+
+            var owner = gameState.GetPlayer(army.ownerID.Value);
+            if (owner == null || !owner.faction.HasWoodlandCamouflage()) return false;
+
+            // Check if army is on a Trees resource tile
+            var resourcePoint = gameState.GetResourcePoint(army.coordinate);
+            if (resourcePoint == null || resourcePoint.resourceType != ResourcePointType.Trees)
+                return false;
+
+            // Check if observing player has any unit within 1 tile
+            foreach (var observerArmy in gameState.GetArmiesForPlayer(observingPlayerID))
+            {
+                if (observerArmy.coordinate.Distance(army.coordinate) <= 1)
+                    return false;
+            }
+            foreach (var observerVillager in gameState.GetVillagerGroupsForPlayer(observingPlayerID))
+            {
+                if (observerVillager.coordinate.Distance(army.coordinate) <= 1)
+                    return false;
+            }
+
+            return true;
         }
 
         public List<BuildingData> GetVisibleEnemyBuildings(Guid playerID)

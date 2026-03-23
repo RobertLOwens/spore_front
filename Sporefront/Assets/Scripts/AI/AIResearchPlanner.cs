@@ -331,6 +331,67 @@ namespace Sporefront.AI
                     score -= 5.0; // Penalty for over-specializing
             }
 
+            // Faction synergy bonuses
+            var faction = player?.faction ?? FactionType.None;
+
+            if (faction == FactionType.Morel)
+            {
+                switch (research)
+                {
+                    // Lumber gathering synergy (+5% wood bonus)
+                    case ResearchType.LumberCampGatheringI: score += 12.0; break;
+                    case ResearchType.LumberCampGatheringII: score += 10.0; break;
+                    // Faction-exclusive research
+                    case ResearchType.BurnAreas: score += 15.0; break;
+                    case ResearchType.ToxicSpores: score += 12.0; break;
+                    case ResearchType.LethalSpores: score += 10.0; break;
+                    // Infantry research (core army type)
+                    case ResearchType.InfantryMeleeAttackI:
+                    case ResearchType.InfantryMeleeAttackII:
+                    case ResearchType.InfantryMeleeAttackIII:
+                        score += 8.0; break;
+                    case ResearchType.InfantryMeleeArmorI:
+                    case ResearchType.InfantryMeleeArmorII:
+                    case ResearchType.InfantryMeleeArmorIII:
+                        score += 6.0; break;
+                    // March speed synergy with scouting focus
+                    case ResearchType.MarchSpeedI:
+                    case ResearchType.MarchSpeedII:
+                    case ResearchType.MarchSpeedIII:
+                        score += 5.0; break;
+                }
+                // Deprioritize T3-blocked categories (diminishing returns)
+                var name = research.ToString();
+                if (name.Contains("Cavalry")) score -= 5.0;
+                if (name.Contains("Siege")) score -= 5.0;
+            }
+            else if (faction == FactionType.Muscaria)
+            {
+                switch (research)
+                {
+                    // Poison research chain (faction-exclusive, high priority)
+                    case ResearchType.IncreasedPoisonDamage: score += 20.0; break;
+                    case ResearchType.ToxinAccumulation: score += 18.0; break;
+                    case ResearchType.SporeBurst: score += 15.0; break;
+                    // Mining gathering synergy (+5% stone/ore bonus)
+                    case ResearchType.MiningCampGatheringI: score += 12.0; break;
+                    case ResearchType.MiningCampGatheringII: score += 10.0; break;
+                    // Ranged/siege research (core army types)
+                    case ResearchType.PiercingDamageI:
+                    case ResearchType.PiercingDamageII:
+                    case ResearchType.PiercingDamageIII:
+                        score += 8.0; break;
+                    case ResearchType.SiegeBludgeonDamageI:
+                    case ResearchType.SiegeBludgeonDamageII:
+                    case ResearchType.SiegeBludgeonDamageIII:
+                        score += 8.0; break;
+                }
+                // Deprioritize T3-blocked categories
+                var name = research.ToString();
+                if (name.Contains("InfantryMelee")) score -= 5.0;
+                if (name.Contains("Cavalry")) score -= 5.0;
+            }
+
             return score;
         }
 
@@ -349,6 +410,13 @@ namespace Sporefront.AI
             foreach (ResearchType research in Enum.GetValues(typeof(ResearchType)))
             {
                 if (player.HasCompletedResearch(research.ToString()))
+                    continue;
+
+                // Skip faction-blocked and faction-exclusive research
+                if (player.faction.BlockedResearch().Contains(research))
+                    continue;
+                var exclusiveFaction = research.ExclusiveFaction();
+                if (exclusiveFaction != FactionType.None && exclusiveFaction != player.faction)
                     continue;
 
                 if (research.CityCenterLevelRequirement() > ccLevel)

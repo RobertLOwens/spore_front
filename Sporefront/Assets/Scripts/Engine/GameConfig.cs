@@ -33,6 +33,25 @@ namespace Sporefront.Engine
             public const double InfantryChargeBonus = 0.1;
         }
 
+        public static class Poison
+        {
+            public const double BasePoisonDamagePerTick = 2.0;
+            public const double PoisonDuration = 5.0;
+            public const double IncreasedPoisonMultiplier = 1.5;
+            public const int MaxPoisonStacks = 3;
+            public const int SporeBurstRadius = 1;
+            public const double SporeBurstDamageMultiplier = 0.5;
+        }
+
+        public static class FalseMorel
+        {
+            public const double PoisonDamagePerTick = 3.0;              // Base 3 DPS
+            public const double PoisonDuration = 10.0;                   // Base 10 seconds
+            public const double ToxicSporesMultiplier = 1.5;             // Tier I: +50% DPS
+            public const double LethalSporesDPSMultiplier = 2.0;         // Tier II: 2x DPS
+            public const double LethalSporesDurationMultiplier = 1.5;    // Tier II: +50% duration
+        }
+
         public static class Resources
         {
             public const double BaseGatherRatePerVillager = 0.2;
@@ -196,6 +215,7 @@ namespace Sporefront.Engine
             public const double Gate = 400.0;
             public const double Military = 500.0;
             public const double Civilian = 200.0;
+            public const double FalseMorel = 50.0;
         }
 
         public static class Demolition
@@ -203,6 +223,7 @@ namespace Sporefront.Engine
             public const double TimeMultiplier = 0.5;
             public const double DemolisherSpeedBonus = 0.5;
             public const double RefundMultiplier = 0.25;
+            public const int BurnAreasFoodPerLevel = 25;
         }
 
         public static class MapDimensions

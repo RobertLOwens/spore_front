@@ -28,6 +28,8 @@ namespace Sporefront.Visual
         public ResourceDensity resourceDensity;
         public StartingResources startingResources;
         public VisibilityMode visibilityMode;
+        public FactionType playerFaction;
+        public FactionType aiFaction;
 
         public static GameSetupConfig Default => new GameSetupConfig
         {
@@ -35,7 +37,9 @@ namespace Sporefront.Visual
             mapSize = MapSize.Medium,
             resourceDensity = ResourceDensity.Normal,
             startingResources = StartingResources.Medium,
-            visibilityMode = VisibilityMode.Normal
+            visibilityMode = VisibilityMode.Normal,
+            playerFaction = FactionType.Morel,
+            aiFaction = FactionType.Muscaria
         };
     }
 
@@ -105,6 +109,8 @@ namespace Sporefront.Visual
         private ResourceDensity selectedDensity = ResourceDensity.Normal;
         private StartingResources selectedStartingResources = StartingResources.Medium;
         private VisibilityMode selectedVisibility = VisibilityMode.Normal;
+        private FactionType selectedFaction = FactionType.Morel;
+        private FactionType selectedAIFaction = FactionType.Muscaria;
 
         // Arena config
         private ArenaScenarioConfig arenaScenario = ArenaScenarioConfig.Default;
@@ -538,6 +544,10 @@ namespace Sporefront.Visual
             BuildMapDropdownSection(innerParent);
             UIHelper.CreateDivider(innerParent, softDivider);
 
+            // Faction selection (full width)
+            BuildFactionSection(innerParent);
+            UIHelper.CreateDivider(innerParent, softDivider);
+
             // Two-column settings grid
             var settingsRow = new GameObject("SettingsGrid", typeof(RectTransform),
                 typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
@@ -811,6 +821,138 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
+        // Faction
+        // ================================================================
+
+        private Text factionBonusLabel;
+        private Text factionDescriptionLabel;
+        private Text aiFactionLabel;
+
+        private void BuildFactionSection(Transform parent)
+        {
+            // ── Your Faction ─────────────────────────────────────────
+            var sectionLabel = UIHelper.CreateLabel(parent, "Your Faction",
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 28;
+
+            var row = UIHelper.CreateHorizontalRow(parent, 36f, UIConstants.SpaceXS);
+            var buttons = new List<Button>();
+
+            // Build buttons for each faction (skip None)
+            var factions = new FactionType[] { FactionType.Morel, FactionType.Muscaria };
+            for (int i = 0; i < factions.Length; i++)
+            {
+                int idx = i;
+                var faction = factions[i];
+                var btn = UIHelper.CreateButton(row.transform, faction.DisplayName(),
+                    null, null, UIConstants.FontCaption, () =>
+                {
+                    selectedFaction = factions[idx];
+                    UpdateSegmentSelection("faction", idx);
+                    UpdateFactionInfo();
+                });
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 150;
+                btnLE.preferredHeight = 36;
+                buttons.Add(btn);
+            }
+
+            segmentGroups["faction"] = buttons;
+            segmentSelections["faction"] = 0;
+            UpdateSegmentColors("faction");
+
+            // Faction info card below the buttons
+            var infoCard = UIHelper.CreateLedgerCard(parent, "FactionInfoCard");
+            var infoCardLE = infoCard.gameObject.AddComponent<LayoutElement>();
+            infoCardLE.minHeight = 100;
+
+            // Bonus header
+            var bonusHeader = UIHelper.CreateLabel(infoCard.transform, "Faction Bonuses",
+                UIConstants.FontSmall, UIHelper.InkHeaderText, TextAnchor.MiddleLeft, true);
+            bonusHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 22;
+
+            // Bonus list
+            factionBonusLabel = UIHelper.CreateLabel(infoCard.transform, "",
+                UIConstants.FontCaption, UIHelper.InkBodyText, TextAnchor.UpperLeft);
+            var bonusLE = factionBonusLabel.gameObject.AddComponent<LayoutElement>();
+            bonusLE.preferredHeight = 72;
+
+            // Divider
+            UIHelper.CreateDivider(infoCard.transform, SporefrontColors.InkFaded);
+
+            // Description
+            factionDescriptionLabel = UIHelper.CreateLabel(infoCard.transform, "",
+                UIConstants.FontCaption, UIHelper.InkSubText, TextAnchor.UpperLeft);
+            var descLE = factionDescriptionLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 48;
+
+            // ── AI Faction ───────────────────────────────────────────
+            var aiLabel = UIHelper.CreateLabel(parent, "AI Faction",
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
+                TextAnchor.MiddleLeft, true);
+            var aiLabelLE = aiLabel.gameObject.AddComponent<LayoutElement>();
+            aiLabelLE.preferredHeight = 28;
+
+            var aiRow = UIHelper.CreateHorizontalRow(parent, 36f, UIConstants.SpaceXS);
+            var aiButtons = new List<Button>();
+
+            for (int i = 0; i < factions.Length; i++)
+            {
+                int idx = i;
+                var faction = factions[i];
+                var btn = UIHelper.CreateButton(aiRow.transform, faction.DisplayName(),
+                    null, null, UIConstants.FontCaption, () =>
+                {
+                    selectedAIFaction = factions[idx];
+                    UpdateSegmentSelection("aiFaction", idx);
+                    UpdateFactionInfo();
+                });
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 150;
+                btnLE.preferredHeight = 36;
+                aiButtons.Add(btn);
+            }
+
+            segmentGroups["aiFaction"] = aiButtons;
+            segmentSelections["aiFaction"] = 1; // default Muscaria (index 1)
+            UpdateSegmentColors("aiFaction");
+
+            // AI faction summary label
+            aiFactionLabel = UIHelper.CreateLabel(parent, "",
+                UIConstants.FontCaption, UIHelper.InkSubText, TextAnchor.UpperLeft);
+            var aiFactionLE = aiFactionLabel.gameObject.AddComponent<LayoutElement>();
+            aiFactionLE.preferredHeight = 20;
+
+            // Populate initial faction info
+            UpdateFactionInfo();
+        }
+
+        private void UpdateFactionInfo()
+        {
+            if (factionBonusLabel != null)
+                factionBonusLabel.text = FormatBonusBullets(selectedFaction.StartingBonusDescription());
+            if (factionDescriptionLabel != null)
+                factionDescriptionLabel.text = selectedFaction.Description();
+            if (aiFactionLabel != null)
+                aiFactionLabel.text = selectedAIFaction.DisplayName() + " — " +
+                    selectedAIFaction.StartingBonusDescription();
+        }
+
+        private string FormatBonusBullets(string bonusDescription)
+        {
+            var parts = bonusDescription.Split(',');
+            var sb = new System.Text.StringBuilder();
+            foreach (var part in parts)
+            {
+                if (sb.Length > 0) sb.AppendLine();
+                sb.Append("  \u2022 " + part.Trim());
+            }
+            return sb.ToString();
+        }
+
+        // ================================================================
         // Map Size
         // ================================================================
 
@@ -1001,6 +1143,11 @@ namespace Sporefront.Visual
             container.transform.SetParent(parent, false);
             var containerLE = container.AddComponent<LayoutElement>();
             containerLE.preferredHeight = 50;
+            var containerVLG = container.AddComponent<VerticalLayoutGroup>();
+            containerVLG.childForceExpandWidth = true;
+            containerVLG.childForceExpandHeight = true;
+            containerVLG.childControlWidth = true;
+            containerVLG.childControlHeight = true;
 
             CreateSetupMenuItem(container.transform, "Start Game", SporefrontColors.InkDark, () =>
             {
@@ -1010,7 +1157,9 @@ namespace Sporefront.Visual
                     mapSize = selectedMapSize,
                     resourceDensity = selectedDensity,
                     startingResources = selectedStartingResources,
-                    visibilityMode = selectedVisibility
+                    visibilityMode = selectedVisibility,
+                    playerFaction = selectedFaction,
+                    aiFaction = selectedAIFaction
                 };
                 OnStartGame?.Invoke(config);
             });

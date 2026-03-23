@@ -154,28 +154,55 @@ namespace Sporefront.AI
         private HexCoordinate? FindDefenseBuildLocation(HexCoordinate center, int maxDistance, GameState gameState, Guid playerID, BuildingType buildingType)
         {
             var rng = new System.Random();
+            var faction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
+
             for (int distance = 2; distance <= maxDistance; distance++)
             {
                 var ring = center.CoordinatesInRing(distance);
-                var shuffled = ring.OrderBy(_ => rng.Next()).ToList();
+                var valid = new List<(HexCoordinate coord, double score)>();
 
-                foreach (var coord in shuffled)
+                foreach (var coord in ring)
                 {
                     int hexSize = buildingType.HexSize();
+                    bool canBuild;
                     if (hexSize == 1)
                     {
-                        if (gameState.CanBuildAt(coord, playerID))
-                            return coord;
+                        canBuild = gameState.CanBuildAt(coord, playerID);
                     }
                     else
                     {
-                        if (gameState.CanBuildAt(coord, playerID))
+                        canBuild = gameState.CanBuildAt(coord, playerID);
+                        if (canBuild)
                         {
                             var neighbors = coord.Neighbors().Take(hexSize - 1);
-                            bool allBuildable = neighbors.All(n => gameState.CanBuildAt(n, playerID));
-                            if (allBuildable) return coord;
+                            canBuild = neighbors.All(n => gameState.CanBuildAt(n, playerID));
                         }
                     }
+                    if (!canBuild) continue;
+
+                    double score = rng.NextDouble(); // Base randomness
+
+                    // Faction terrain preferences for defensive buildings
+                    if (faction == FactionType.Muscaria)
+                    {
+                        var terrain = gameState.mapData.GetTerrain(coord);
+                        if (terrain == TerrainType.Mountain) score += 2.0;
+                        else if (terrain == TerrainType.Hill) score += 1.5;
+                    }
+                    else if (faction == FactionType.Morel)
+                    {
+                        var rp = gameState.GetResourcePoint(coord);
+                        if (rp != null && rp.resourceType == ResourcePointType.Trees)
+                            score += 1.5; // Towers near forests support camouflaged armies
+                    }
+
+                    valid.Add((coord, score));
+                }
+
+                if (valid.Count > 0)
+                {
+                    valid.Sort((a, b) => b.score.CompareTo(a.score));
+                    return valid[0].coord;
                 }
             }
             return null;
@@ -261,11 +288,32 @@ namespace Sporefront.AI
             if (entrenchedCount >= maxEntrenched) return new List<IEngineCommand>();
 
             // Find idle armies near city center that could entrench
+            // Faction-aware: prefer terrain that synergizes with faction bonuses
             var commands = new List<IEngineCommand>();
+            var faction = player.faction;
             var candidates = armies
                 .Where(a => !a.isInCombat && a.currentPath == null && !a.isRetreating &&
                             !a.isEntrenched && !a.isEntrenching)
-                .OrderBy(a => a.coordinate.Distance(cityCenter.coordinate))
+                .Select(a => {
+                    double score = -a.coordinate.Distance(cityCenter.coordinate); // Closer = higher
+                    if (faction == FactionType.Morel)
+                    {
+                        // Prefer forest tiles (camouflage + entrenchment = strong defense)
+                        var rp = gameState.GetResourcePoint(a.coordinate);
+                        if (rp != null && rp.resourceType == ResourcePointType.Trees)
+                            score += 3.0;
+                    }
+                    else if (faction == FactionType.Muscaria)
+                    {
+                        // Prefer mountain/hill (defense bonus + speed bonus for counterattack)
+                        var terrain = gameState.mapData.GetTerrain(a.coordinate);
+                        if (terrain == TerrainType.Mountain) score += 3.0;
+                        else if (terrain == TerrainType.Hill) score += 2.0;
+                    }
+                    return (army: a, score: score);
+                })
+                .OrderByDescending(x => x.score)
+                .Select(x => x.army)
                 .ToList();
 
             foreach (var army in candidates)
