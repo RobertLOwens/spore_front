@@ -244,10 +244,15 @@ namespace Sporefront.Visual
                 if (building.state == BuildingState.Planning) continue;
 
                 // Fog filter: own buildings always shown; enemy buildings hidden on Unexplored
-                if (localPlayer != null && (!building.ownerID.HasValue || building.ownerID.Value != fogLocalPlayerID))
+                bool isEnemy = localPlayer != null && (!building.ownerID.HasValue || building.ownerID.Value != fogLocalPlayerID);
+                if (isEnemy)
                 {
                     var level = localPlayer.GetVisibilityLevel(building.coordinate);
                     if (level == VisibilityLevel.Unexplored) continue;
+
+                    // False Morel: only show on Visible tiles (like armies), not Explored
+                    if (building.buildingType == BuildingType.FalseMorel &&
+                        level != VisibilityLevel.Visible) continue;
                 }
 
                 var coord = building.coordinate;
@@ -255,6 +260,40 @@ namespace Sporefront.Visual
                     entitiesPerTile[coord] = new List<EntityPlacement>();
 
                 Color color = GetOwnerColor(building.ownerID, gameState);
+
+                // False Morel disguise: appears as army to enemies until adjacent
+                if (building.buildingType == BuildingType.FalseMorel && isEnemy && building.IsOperational)
+                {
+                    bool isRevealed = false;
+                    foreach (var army in gameState.GetArmiesForPlayer(fogLocalPlayerID))
+                    {
+                        if (army.coordinate.Distance(building.coordinate) <= 1)
+                        { isRevealed = true; break; }
+                    }
+                    if (!isRevealed)
+                    {
+                        foreach (var vg in gameState.GetVillagerGroupsForPlayer(fogLocalPlayerID))
+                        {
+                            if (vg.coordinate.Distance(building.coordinate) <= 1)
+                            { isRevealed = true; break; }
+                        }
+                    }
+
+                    if (!isRevealed)
+                    {
+                        // Render as army (decoy)
+                        entitiesPerTile[coord].Add(new EntityPlacement
+                        {
+                            id = building.id,
+                            type = EntityVisualType.Army,
+                            color = color,
+                            label = null
+                        });
+                        continue;
+                    }
+                    // If revealed, fall through to normal building rendering
+                }
+
                 string label = GetBuildingLabel(building.buildingType);
 
                 entitiesPerTile[coord].Add(new EntityPlacement
@@ -1042,6 +1081,7 @@ namespace Sporefront.Visual
                 case BuildingType.WoodenFort:    return "Wf";
                 case BuildingType.Wall:          return "Wa";
                 case BuildingType.Gate:          return "G";
+                case BuildingType.FalseMorel:    return "Fm";
                 default:                         return "?";
             }
         }

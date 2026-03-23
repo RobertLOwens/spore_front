@@ -204,7 +204,9 @@ namespace Sporefront.Visual
 
             // 2. Create players
             var human = new PlayerState("Player 1", "3A5E8B", false);
+            human.faction = config.playerFaction;
             var ai = new PlayerState("AI Opponent", "8B3A3A", true);
+            ai.faction = config.aiFaction;
             gameState.players[human.id] = human;
             gameState.players[ai.id] = ai;
             gameState.localPlayerID = human.id;

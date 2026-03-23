@@ -602,7 +602,8 @@ namespace Sporefront.Visual
             var state = GetNodeState(researchType, player, gameState);
             bool isLocked = state == NodeState.LockedPrereq
                          || state == NodeState.LockedBuilding
-                         || state == NodeState.LockedCCLevel;
+                         || state == NodeState.LockedCCLevel
+                         || state == NodeState.LockedFaction;
 
             // ── Per-state palette ──────────────────────────────────────
             Color nodeBg, titleColor, borderColor;
@@ -663,7 +664,6 @@ namespace Sporefront.Visual
 
             var cg = nodePanel.AddComponent<CanvasGroup>();
             cg.alpha = nodeAlpha;
-            if (isLocked) { cg.blocksRaycasts = false; cg.interactable = false; }
 
             if (state == NodeState.Available)
             {
@@ -706,6 +706,42 @@ namespace Sporefront.Visual
             titleLbl.fontStyle = FontStyle.Bold;
             titleLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
+            // ── Lock reason label pinned to bottom of node card ────
+            if (isLocked)
+            {
+                string lockReason = "";
+                switch (state)
+                {
+                    case NodeState.LockedPrereq:
+                        lockReason = GetPrereqLockText(researchType, player);
+                        break;
+                    case NodeState.LockedBuilding:
+                        lockReason = GetBuildingLockText(researchType);
+                        break;
+                    case NodeState.LockedCCLevel:
+                        lockReason = $"Need: City Center Lv.{researchType.CityCenterLevelRequirement()}";
+                        break;
+                    case NodeState.LockedFaction:
+                        lockReason = "Faction Blocked";
+                        break;
+                }
+                if (!string.IsNullOrEmpty(lockReason))
+                {
+                    var lockLbl = UIHelper.CreateLabel(nodePanel.transform,
+                        "\u26D4 " + lockReason, UIConstants.FontCaption,
+                        SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+                    lockLbl.raycastTarget = false;
+                    var lockLE = lockLbl.gameObject.AddComponent<LayoutElement>();
+                    lockLE.ignoreLayout = true;
+                    var lockRT = lockLbl.GetComponent<RectTransform>();
+                    lockRT.anchorMin = new Vector2(0, 0);
+                    lockRT.anchorMax = new Vector2(1, 0);
+                    lockRT.pivot = new Vector2(0.5f, 0);
+                    lockRT.offsetMin = new Vector2(4, 2);
+                    lockRT.offsetMax = new Vector2(-4, 18);
+                }
+            }
+
             // ── Progress bar — In Progress, pinned to card bottom ─────
             if (state == NodeState.Researching)
             {
@@ -737,8 +773,7 @@ namespace Sporefront.Visual
             var nodeRT = nodePanel.GetComponent<RectTransform>();
             nodePositions[researchType] = nodeRT;
 
-            // ── Click + hover (non-locked only) ───────────────────────
-            if (!isLocked)
+            // ── Click handler (all nodes) ────────────────────────────
             {
                 var capturedType = researchType;
                 var clickBtn = nodePanel.AddComponent<Button>();
@@ -1001,6 +1036,13 @@ namespace Sporefront.Visual
                         UIConstants.FontBody, SporefrontColors.SporeAmber, TextAnchor.MiddleCenter);
                     ccLockLabel.gameObject.AddComponent<LayoutElement>().preferredHeight = 32;
                     break;
+
+                case NodeState.LockedFaction:
+                    var factionLockLabel = UIHelper.CreateLabel(nodeDetailContentRT,
+                        "Blocked by faction restrictions",
+                        UIConstants.FontBody, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+                    factionLockLabel.gameObject.AddComponent<LayoutElement>().preferredHeight = 32;
+                    break;
             }
         }
 
@@ -1021,7 +1063,7 @@ namespace Sporefront.Visual
         // Enhanced Node State
         // ================================================================
 
-        private enum NodeState { LockedPrereq, LockedBuilding, LockedCCLevel, Available, Researching, Completed }
+        private enum NodeState { LockedPrereq, LockedBuilding, LockedCCLevel, LockedFaction, Available, Researching, Completed }
 
         private NodeState GetNodeState(ResearchType researchType, PlayerState player, GameState gameState)
         {
@@ -1034,6 +1076,16 @@ namespace Sporefront.Visual
             // Currently researching
             if (player.activeResearchType == researchType.ToString())
                 return NodeState.Researching;
+
+            // Check faction restrictions
+            var blockedResearch = player.faction.BlockedResearch();
+            if (blockedResearch.Contains(researchType))
+                return NodeState.LockedFaction;
+
+            // Check faction-exclusive research
+            var exclusiveFaction = researchType.ExclusiveFaction();
+            if (exclusiveFaction != FactionType.None && exclusiveFaction != player.faction)
+                return NodeState.LockedFaction;
 
             // Check prerequisites
             var prereqs = researchType.Prerequisites();
@@ -1070,6 +1122,10 @@ namespace Sporefront.Visual
                 if (ccLevel < ccReq) return NodeState.LockedCCLevel;
             }
 
+            // Check player has a research building (Library or University)
+            var researchBldg = gameState.FindResearchBuilding(localPlayerID);
+            if (researchBldg == null) return NodeState.LockedBuilding;
+
             return NodeState.Available;
         }
 
@@ -1093,7 +1149,7 @@ namespace Sporefront.Visual
             var req = researchType.BuildingRequirement();
             if (req.HasValue)
                 return $"Need: {req.Value.buildingType.DisplayName()}";
-            return "Need: Building";
+            return "Need: Library";
         }
 
         // ================================================================

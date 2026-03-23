@@ -330,6 +330,21 @@ namespace Sporefront.AI
                 urgency[resourceType] = Math.Max(0.0, Math.Min(2.0, score));
             }
 
+            // Faction resource urgency bias
+            var faction = player.faction;
+            if (faction == FactionType.Morel)
+            {
+                if (urgency.ContainsKey(ResourceType.Wood))
+                    urgency[ResourceType.Wood] = Math.Min(2.0, urgency[ResourceType.Wood] * 1.10);
+            }
+            else if (faction == FactionType.Muscaria)
+            {
+                if (urgency.ContainsKey(ResourceType.Stone))
+                    urgency[ResourceType.Stone] = Math.Min(2.0, urgency[ResourceType.Stone] * 1.10);
+                if (urgency.ContainsKey(ResourceType.Ore))
+                    urgency[ResourceType.Ore] = Math.Min(2.0, urgency[ResourceType.Ore] * 1.10);
+            }
+
             return urgency;
         }
 
@@ -406,6 +421,39 @@ namespace Sporefront.AI
         }
 
         // ================================================================
+        // Faction-Aware Build Location
+        // ================================================================
+
+        private HexCoordinate? FindFactionPreferredBuildLocation(HexCoordinate center, int maxDistance, GameState gameState, Guid playerID)
+        {
+            var faction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
+            if (faction != FactionType.Muscaria)
+                return gameState.FindBuildLocation(center, maxDistance, playerID);
+
+            // Muscaria: prefer mountain/hill tiles for -15% build cost reduction
+            var rng = new System.Random();
+            HexCoordinate? fallback = null;
+            for (int distance = 1; distance <= maxDistance; distance++)
+            {
+                var ring = center.CoordinatesInRing(distance);
+                var highland = new List<HexCoordinate>();
+                var other = new List<HexCoordinate>();
+                foreach (var coord in ring)
+                {
+                    if (!gameState.CanBuildAt(coord, playerID)) continue;
+                    var terrain = gameState.mapData.GetTerrain(coord);
+                    if (terrain == TerrainType.Mountain || terrain == TerrainType.Hill)
+                        highland.Add(coord);
+                    else
+                        other.Add(coord);
+                }
+                if (highland.Count > 0) return highland[rng.Next(highland.Count)];
+                if (fallback == null && other.Count > 0) fallback = other[rng.Next(other.Count)];
+            }
+            return fallback ?? gameState.FindBuildLocation(center, maxDistance, playerID);
+        }
+
+        // ================================================================
         // Building Construction
         // ================================================================
 
@@ -422,7 +470,7 @@ namespace Sporefront.AI
                 if (!player.HasResource(kvp.Key, kvp.Value)) return null;
             }
 
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 4, playerID);
+            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 4, gameState, playerID);
             if (!location.HasValue) return null;
 
             return new AIBuildCommand(playerID, BuildingType.Farm, location.Value, 0);
@@ -441,7 +489,7 @@ namespace Sporefront.AI
                 if (!player.HasResource(kvp.Key, kvp.Value)) return null;
             }
 
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
+            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 5, gameState, playerID);
             if (!location.HasValue) return null;
 
             return new AIBuildCommand(playerID, BuildingType.Neighborhood, location.Value, 0);
@@ -466,7 +514,7 @@ namespace Sporefront.AI
                 if (!player.HasResource(kvp.Key, kvp.Value)) return null;
             }
 
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
+            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 5, gameState, playerID);
             if (!location.HasValue) return null;
 
             return new AIBuildCommand(playerID, BuildingType.Warehouse, location.Value, 0);
@@ -490,7 +538,7 @@ namespace Sporefront.AI
                 if (!player.HasResource(kvp.Key, kvp.Value)) return null;
             }
 
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 4, playerID);
+            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 4, gameState, playerID);
             if (!location.HasValue) return null;
 
             return new AIBuildCommand(playerID, BuildingType.Library, location.Value, 0);
@@ -584,14 +632,44 @@ namespace Sporefront.AI
             int ccLevel = cityCenter.level;
             var buildings = gameState.GetBuildingsForPlayer(playerID);
 
-            var priorities = new[]
+            // Faction-specific military building priorities
+            var faction = player.faction;
+            (BuildingType type, int minCount, int maxCount)[] priorities;
+            if (faction == FactionType.Morel)
             {
-                (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
-                (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
-                (type: BuildingType.Stable, minCount: 0, maxCount: 1),
-                (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
-                (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
-            };
+                // Morel: infantry focus — second barracks earlier, deprioritize siege
+                priorities = new[]
+                {
+                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
+                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
+                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
+                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
+                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
+                };
+            }
+            else if (faction == FactionType.Muscaria)
+            {
+                // Muscaria: ranged/siege focus — siege workshop earlier
+                priorities = new[]
+                {
+                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
+                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
+                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
+                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
+                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
+                };
+            }
+            else
+            {
+                priorities = new[]
+                {
+                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
+                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
+                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
+                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
+                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
+                };
+            }
 
             foreach (var priority in priorities)
             {

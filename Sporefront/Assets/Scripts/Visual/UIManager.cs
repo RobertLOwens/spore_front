@@ -49,6 +49,7 @@ namespace Sporefront.Visual
         private SelectionBoxRenderer selectionBoxRenderer;
         private SelectedEntitiesPanel selectedEntitiesPanel;
         private MiniMapPanel miniMap;
+        private FactionBannerPanel factionBanner;
 
         // ================================================================
         // Navigation & Flow Panels
@@ -102,6 +103,7 @@ namespace Sporefront.Visual
         private SettingsPanel settings;
         private NotificationInboxPanel notificationInbox;
         private SaveLoadPanel saveLoad;
+        private InGameMenuPanel inGameMenu;
 
         // ================================================================
         // Auth & Account
@@ -227,6 +229,9 @@ namespace Sporefront.Visual
             resourceBar = CreatePanelComponent<ResourceBarPanel>("ResourceBar");
             InitPanel("ResourceBar", () => resourceBar.Initialize(ct));
 
+            factionBanner = CreatePanelComponent<FactionBannerPanel>("FactionBanner");
+            InitPanel("FactionBanner", () => factionBanner.Initialize(ct, localPlayerID, gameState));
+
             tendrilWheelHUD = CreatePanelComponent<TendrilWheelHUD>("TendrilWheelHUD");
             InitPanel("TendrilWheelHUD", () => tendrilWheelHUD.Initialize(ct));
 
@@ -311,6 +316,9 @@ namespace Sporefront.Visual
 
             settings = CreatePanelComponent<SettingsPanel>("Settings");
             InitPanel("Settings", () => settings.Initialize(ct, localPlayerID));
+
+            inGameMenu = CreatePanelComponent<InGameMenuPanel>("InGameMenu");
+            InitPanel("InGameMenu", () => inGameMenu.Initialize(ct, localPlayerID));
 
             notificationInbox = CreatePanelComponent<NotificationInboxPanel>("NotificationInbox");
             InitPanel("NotificationInbox", () => notificationInbox.Initialize(ct, localPlayerID));
@@ -655,6 +663,24 @@ namespace Sporefront.Visual
             resourceBar.OnSettingsClicked += () => settings.Show();
             resourceBar.OnMainMenuClicked += () =>
             {
+                inGameMenu.Show();
+            };
+
+            // ---- InGameMenuPanel ----
+            inGameMenu.OnSaveGame += () =>
+            {
+                saveLoad.ShowSave();
+            };
+            inGameMenu.OnLoadGame += () =>
+            {
+                saveLoad.ShowLoad();
+            };
+            inGameMenu.OnSettings += () =>
+            {
+                settings.Show();
+            };
+            inGameMenu.OnQuitToMainMenu += () =>
+            {
                 resourceBar.Hide();
                 tendrilWheelHUD.Hide();
                 mainMenu.Show();
@@ -743,7 +769,7 @@ namespace Sporefront.Visual
                 }
                 else
                 {
-                    ShowCommandFailure("No research building available.");
+                    ShowCommandFailure("Build a Library to begin researching.");
                 }
             };
 
@@ -1071,6 +1097,7 @@ namespace Sporefront.Visual
             gameOver.Hide();
             about.Hide();
             settings.Hide();
+            inGameMenu.Hide();
             saveLoad.Hide();
             authPanel.Hide();
             displayNamePanel.Hide();
@@ -1109,6 +1136,12 @@ namespace Sporefront.Visual
             resourceBar.Refresh(state, localPlayerID);
             tendrilWheelHUD.Show();
 
+            // Show faction banner with actual player faction
+            var player = state.GetPlayer(localPlayerID);
+            if (player != null)
+                factionBanner.UpdateFaction(player.faction);
+            factionBanner.ShowBanner();
+
             // 3. Propagate localPlayerID to all panels that cached it during Initialize
             tileInfoPopup.UpdateLocalPlayerID(localPlayerID);
             buildingDetail.UpdateLocalPlayerID(localPlayerID);
@@ -1130,6 +1163,7 @@ namespace Sporefront.Visual
             buildVillagerSelect.UpdateLocalPlayerID(localPlayerID);
             upgradeVillagerSelect.UpdateLocalPlayerID(localPlayerID);
             settings.UpdateLocalPlayerID(localPlayerID);
+            inGameMenu.UpdateLocalPlayerID(localPlayerID);
             notificationInbox.UpdateLocalPlayerID(localPlayerID);
             selectedEntitiesPanel.UpdateLocalPlayerID(localPlayerID);
             miniMap.UpdateLocalPlayerID(localPlayerID);

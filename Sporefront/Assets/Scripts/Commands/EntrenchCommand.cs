@@ -44,6 +44,10 @@ namespace Sporefront.Commands
             if (army.isEntrenching)
                 return EngineCommandResult.Failure("Army is already entrenching.");
 
+            // Check army has troops
+            if (army.IsEmpty())
+                return EngineCommandResult.Failure("Army has no troops — assign units before entrenching.");
+
             // Check army has a commander
             if (!army.commanderID.HasValue)
                 return EngineCommandResult.Failure("Army requires a commander to entrench.");

@@ -32,7 +32,26 @@ namespace Sporefront.AI.Commands
         {
             var occupiedCoords = buildingType.GetOccupiedCoordinates(coordinate, rotation);
             bool hasMountain = occupiedCoords.Any(c => state.mapData.GetTerrain(c) == TerrainType.Mountain);
-            return hasMountain ? GameConfig.Terrain.MountainBuildingCostMultiplier : 1.0;
+            bool hasHighland = hasMountain || occupiedCoords.Any(c =>
+            {
+                var t = state.mapData.GetTerrain(c);
+                return t == TerrainType.Hill;
+            });
+            double multiplier = hasMountain ? GameConfig.Terrain.MountainBuildingCostMultiplier : 1.0;
+
+            // Apply faction mountain building cost reduction on highland terrain
+            if (hasHighland)
+            {
+                var player = state.GetPlayer(PlayerID);
+                if (player != null)
+                {
+                    double reduction = player.faction.MountainBuildCostReduction();
+                    if (reduction > 0)
+                        multiplier *= (1.0 - reduction);
+                }
+            }
+
+            return multiplier;
         }
 
         public override EngineCommandResult Validate(GameState state)
@@ -40,6 +59,10 @@ namespace Sporefront.AI.Commands
             var player = state.GetPlayer(PlayerID);
             if (player == null)
                 return EngineCommandResult.Failure("Player not found");
+
+            // Check faction-exclusive building restrictions
+            if (buildingType.IsFactionExclusive() && buildingType.ExclusiveFaction() != player.faction)
+                return EngineCommandResult.Failure("This building is exclusive to another faction.");
 
             double costMultiplier = GetTerrainCostMultiplier(state);
             var buildCost = buildingType.BuildCost();

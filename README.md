@@ -53,6 +53,50 @@ Buildings unlock progressively based on City Center level, creating meaningful t
 - Mountain tiles apply a +25% cost multiplier to construction and upgrades
 - Cost adjustments are shown in the build/upgrade UI and properly refunded on cancellation
 
+### Factions
+
+Choose your faction at game setup — each brings unique passive bonuses, exclusive research, and strategic trade-offs through Tier III research restrictions.
+
+#### The Morels
+*An infantry and woodland stealth faction.* The Morels thrive in forested terrain, using superior vision and camouflage to control the map and strike from ambush.
+
+| Bonus | Effect |
+|-------|--------|
+| Extended Vision | +1 army sight range |
+| Woodland Camouflage | Armies hidden in forest tiles |
+| Wood Gathering | +5% wood collection rate |
+| Extended Lumberyards | Lumber Camps reach resources 2 tiles away (instead of 1) |
+
+**Exclusive Building:** False Morel — a decoy trap that appears as an army to enemies. When attacked, it is instantly destroyed and poisons the attacker (3 DPS for 10 seconds, 30 total damage). Enemies must get adjacent to reveal the disguise.
+
+**Exclusive Research:** Toxic Spores → Lethal Spores (boosts False Morel poison)
+
+| Research | Effect | Requires |
+|----------|--------|----------|
+| Toxic Spores | +50% False Morel poison DPS (3 → 4.5) | Library L1 |
+| Lethal Spores | 2x DPS, +50% duration (6 DPS for 15s = 90 total) | Library L2 + Toxic Spores |
+
+**Other Exclusive Research:** Burn Areas (demolishing buildings returns food)
+
+**Tier III Research Restrictions:** Blocked from Tier III Ranged, Cavalry, Stone, and Siege research — forcing a commitment to infantry and woodland strategies.
+
+#### Amanita Muscaria
+*An aggressive poison and mountain faction.* The Amanita Muscaria thrive in highland terrain, using toxic strikes and mountain mastery to dominate through attrition.
+
+| Bonus | Effect |
+|-------|--------|
+| Toxic Strikes | Poison damage-over-time after combat (3 DPS for 5 seconds) |
+| Mountain Builders | -15% build cost on mountain and hill tiles |
+| Highland Movement | +20% movement speed on mountain and hill terrain |
+| Stone & Ore Gathering | +5% stone and ore collection rates |
+
+**Exclusive Research:** Increased Poison Damage, Toxin Accumulation, Spore Burst (Muscaria-only poison research chain)
+
+**Tier III Research Restrictions:** Blocked from Tier III Infantry, Cavalry, Wood, and Food research — pushing toward ranged/siege compositions and highland map control.
+
+#### Faction Design Philosophy
+Both factions share a cavalry Tier III block, ensuring no faction dominates with late-game cavalry. Each faction's blocked research forces meaningful strategic choices: Morels lean into infantry and forest control, while Muscaria leverages poison attrition and mountain dominance. AI opponents can be assigned a different faction from the player in game setup.
+
 ### Military Units & Commanders
 - **Entity-based system** — Armies and Villager Groups instead of individual unit micromanagement
 - **Commander system** — Leaders with 5 stats, 10 specialties, 6 ranks, and leveling progression
@@ -507,6 +551,7 @@ Sporefront/
 - Army home base capacity system (Castle/Fort with per-level scaling)
 - Next-level benefits preview in building upgrade UI
 - AI evolution system with genome-based simulation
+- Faction system (Morels and Muscaria) with unique bonuses, exclusive research, and Tier III restrictions
 
 **In Development**
 - Balance tuning and playtesting

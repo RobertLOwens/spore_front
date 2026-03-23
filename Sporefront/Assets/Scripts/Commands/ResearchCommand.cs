@@ -38,6 +38,16 @@ namespace Sporefront.Commands
             if (player.HasCompletedResearch(researchTypeRawValue))
                 return EngineCommandResult.Failure("Research already completed.");
 
+            // Check faction research restrictions
+            var blockedResearch = player.faction.BlockedResearch();
+            if (blockedResearch.Contains(researchType))
+                return EngineCommandResult.Failure("Your faction cannot research this technology.");
+
+            // Check faction-exclusive research
+            var exclusiveFaction = researchType.ExclusiveFaction();
+            if (exclusiveFaction != FactionType.None && exclusiveFaction != player.faction)
+                return EngineCommandResult.Failure("This research is exclusive to " + exclusiveFaction.DisplayName() + ".");
+
             // Check prerequisites are met
             var prerequisites = researchType.Prerequisites();
             foreach (var prereq in prerequisites)
