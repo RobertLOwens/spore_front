@@ -20,6 +20,15 @@ namespace Sporefront.Commands
             this.count = count;
         }
 
+        // Reconstruction constructor for online deserialization
+        public JoinVillagerGroupCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, Guid targetVillagerGroupID, int count)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.targetVillagerGroupID = targetVillagerGroupID;
+            this.count = count;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Building exists and is owned by player

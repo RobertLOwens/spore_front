@@ -20,6 +20,15 @@ namespace Sporefront.Commands
             this.quantity = quantity;
         }
 
+        // Reconstruction constructor for online deserialization
+        public TrainMilitaryCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, MilitaryUnitType unitType, int quantity)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.unitType = unitType;
+            this.quantity = quantity;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             if (quantity <= 0)
@@ -106,6 +115,14 @@ namespace Sporefront.Commands
 
         public TrainVillagerCommand(Guid playerID, Guid buildingID, int quantity)
             : base(playerID)
+        {
+            this.buildingID = buildingID;
+            this.quantity = quantity;
+        }
+
+        // Reconstruction constructor for online deserialization
+        public TrainVillagerCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, int quantity)
+            : base(id, playerID, timestamp)
         {
             this.buildingID = buildingID;
             this.quantity = quantity;

@@ -19,6 +19,14 @@ namespace Sporefront.Commands
             this.assignedVillagerGroupID = villagerGroupID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public UpgradeCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, Guid? assignedVillagerGroupID)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.assignedVillagerGroupID = assignedVillagerGroupID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var building = state.GetBuilding(buildingID);
@@ -174,6 +182,13 @@ namespace Sporefront.Commands
 
         public CancelUpgradeCommand(Guid playerID, Guid buildingID)
             : base(playerID)
+        {
+            this.buildingID = buildingID;
+        }
+
+        // Reconstruction constructor for online deserialization
+        public CancelUpgradeCommand(Guid id, Guid playerID, double timestamp, Guid buildingID)
+            : base(id, playerID, timestamp)
         {
             this.buildingID = buildingID;
         }

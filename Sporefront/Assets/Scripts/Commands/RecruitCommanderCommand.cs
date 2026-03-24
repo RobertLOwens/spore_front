@@ -23,6 +23,13 @@ namespace Sporefront.Commands
             this.specialty = specialty;
         }
 
+        // Reconstruction constructor for online deserialization
+        public RecruitCommanderCommand(Guid id, Guid playerID, double timestamp, CommanderSpecialty specialty)
+            : base(id, playerID, timestamp)
+        {
+            this.specialty = specialty;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var player = state.GetPlayer(PlayerID);

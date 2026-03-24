@@ -40,6 +40,22 @@ namespace Sporefront.Engine
         public GameState gameState { get; private set; }
 
         // ================================================================
+        // Online Mode State
+        // ================================================================
+
+        /// <summary>Whether the engine is running in online (command-streaming) mode.</summary>
+        public bool IsOnlineMode { get; private set; }
+
+        /// <summary>Monotonically increasing command sequence counter for online ordering.</summary>
+        private int commandSequence;
+
+        /// <summary>Command IDs that originated locally — used to filter self-echo from Firestore.</summary>
+        private HashSet<Guid> localCommandIDs = new HashSet<Guid>();
+
+        /// <summary>Whether this client is the host (runs AI, assigns sequences).</summary>
+        private bool isHost;
+
+        // ================================================================
         // Subsystem Engines
         // ================================================================
 
@@ -144,6 +160,44 @@ namespace Sporefront.Engine
         }
 
         /// <summary>
+        /// Initialize the engine in online mode. Sets up the game state and
+        /// enables command streaming to Firestore. The host runs AI locally
+        /// and streams AI commands; non-host receives them as remote commands.
+        /// </summary>
+        public void SetupOnline(GameState gameState, int startSequence, bool isHost)
+        {
+            Setup(gameState);
+            IsOnlineMode = true;
+            commandSequence = startSequence;
+            this.isHost = isHost;
+            localCommandIDs = new HashSet<Guid>();
+
+            DebugLog.Log($"GameEngine online mode: host={isHost}, startSequence={startSequence}");
+        }
+
+        /// <summary>
+        /// Execute a command received from the Firestore command listener.
+        /// Skips commands that originated locally (self-echo filtering).
+        /// </summary>
+        public void ExecuteRemoteCommand(OnlineCommand onlineCmd)
+        {
+            // Skip if we originated this command (self-echo from Firestore listener)
+            Guid cmdId;
+            if (Guid.TryParse(onlineCmd.commandID, out cmdId) && localCommandIDs.Contains(cmdId))
+                return;
+
+            var cmd = onlineCmd.ToEngineCommand();
+            if (cmd != null)
+            {
+                ExecuteCommand(cmd);
+            }
+            else
+            {
+                DebugLog.Log($"Failed to deserialize remote command: {onlineCmd.commandType} (seq {onlineCmd.sequence})");
+            }
+        }
+
+        /// <summary>
         /// Reset the engine, clearing all state and timing.
         /// </summary>
         public void Reset()
@@ -159,6 +213,12 @@ namespace Sporefront.Engine
             lastAIUpdate = 0;
             lastEntrenchmentUpdate = 0;
             lastResearchCheck = 0;
+
+            // Reset online mode state
+            IsOnlineMode = false;
+            commandSequence = 0;
+            localCommandIDs.Clear();
+            isHost = false;
 
             aiController?.Reset();
         }
@@ -286,7 +346,9 @@ namespace Sporefront.Engine
             }
 
             // AI updates (2x per second)
-            if (adjustedTime - lastAIUpdate >= aiUpdateInterval)
+            // In online mode, only the host runs AI locally — non-host receives
+            // AI commands as remote commands from the Firestore command stream.
+            if ((!IsOnlineMode || isHost) && adjustedTime - lastAIUpdate >= aiUpdateInterval)
             {
                 // Process hunt arrivals (villagers reaching animals)
                 aiController.ProcessHuntArrivals(gameState);
@@ -524,10 +586,86 @@ namespace Sporefront.Engine
 
             OnCommandCompleted?.Invoke(command.Id, EngineCommandResult.Success(batch.changes));
 
-            // Online session streaming skipped (not implemented)
+            // Online command streaming — submit locally-executed commands to Firestore
+            // so the remote client can replay them. Remote commands (received from
+            // Firestore) are already in localCommandIDs and are skipped.
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (IsOnlineMode && !localCommandIDs.Contains(command.Id))
+            {
+                StreamCommandToFirestore(command);
+            }
+#endif
+            // Track all locally-executed commands for self-echo filtering
+            if (IsOnlineMode)
+                localCommandIDs.Add(command.Id);
 
             return EngineCommandResult.Success(batch.changes);
         }
+
+        // ================================================================
+        // Online Command Streaming
+        // ================================================================
+
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+        /// <summary>
+        /// Serialize a locally-executed command and submit it to Firestore
+        /// so the remote client can replay it. Also checks whether a snapshot
+        /// should be created based on command count or elapsed time.
+        /// </summary>
+        private void StreamCommandToFirestore(IEngineCommand command)
+        {
+            commandSequence++;
+
+            // Determine if this is an AI command — AI commands use the
+            // AICommandEnvelope serialization path for type safety
+            bool isAI = command.GetType().Namespace == "Sporefront.AI.Commands";
+
+            Data.OnlineCommand onlineCmd;
+            if (isAI)
+            {
+                var envelope = Data.AICommandEnvelope.From((BaseEngineCommand)command);
+                if (envelope != null)
+                    onlineCmd = Data.OnlineCommand.CreateFromAIEnvelope(commandSequence, envelope);
+                else
+                    onlineCmd = Data.OnlineCommand.CreateFromCommand(commandSequence, command, true);
+            }
+            else
+            {
+                onlineCmd = Data.OnlineCommand.CreateFromCommand(commandSequence, command);
+            }
+
+            var session = GameSessionService.Instance.CurrentSession;
+            if (session == null) return;
+
+            GameSessionService.Instance.SubmitCommand(
+                session.gameID,
+                onlineCmd,
+                (success, error) =>
+                {
+                    if (!success)
+                        DebugLog.Log($"Failed to submit online command: {error}");
+                }
+            );
+
+            // Check if we should create a periodic snapshot for crash recovery
+            if (GameSessionService.Instance.ShouldCreateSnapshot())
+            {
+                var snapshot = Data.GameSnapshot.Create(gameState, commandSequence);
+                if (snapshot != null)
+                {
+                    GameSessionService.Instance.SaveSnapshot(
+                        session.gameID,
+                        snapshot,
+                        (success, error) =>
+                        {
+                            if (!success)
+                                DebugLog.Log($"Failed to save snapshot: {error}");
+                        }
+                    );
+                }
+            }
+        }
+#endif
 
         // ================================================================
         // Convenience Methods

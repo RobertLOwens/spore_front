@@ -1240,6 +1240,9 @@ namespace Sporefront.Data
         public List<CommanderData> commanders;
         public Guid? localPlayerID;
 
+        // Default constructor for deserialization
+        public GameStateSnapshot() { }
+
         public GameStateSnapshot(GameState gameState)
         {
             this.timestamp = gameState.currentTime;
@@ -1269,6 +1272,18 @@ namespace Sporefront.Data
                 // so stale isInCombat flags would permanently block the army
                 army.isInCombat = false;
                 army.combatTargetID = null;
+
+                // Rebuild entrenchment coverage tiles (HashSet can't be serialized)
+                if (army.isEntrenched)
+                    army.entrenchedCoveredTiles = new HashSet<HexCoordinate>(
+                        army.coordinate.CoordinatesWithinRange(1));
+                else
+                    army.entrenchedCoveredTiles = new HashSet<HexCoordinate>();
+
+                // Clear expired poison (may have timed out between save and load)
+                if (army.activePoisonState != null && army.activePoisonState.remainingDuration <= 0)
+                    army.activePoisonState = null;
+
                 gameState.AddArmy(army);
             }
             foreach (var group in villagerGroups) gameState.AddVillagerGroup(group);

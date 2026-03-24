@@ -16,6 +16,13 @@ namespace Sporefront.Commands
             this.buildingID = buildingID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public DemolishCommand(Guid id, Guid playerID, double timestamp, Guid buildingID)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Check building exists
@@ -66,6 +73,13 @@ namespace Sporefront.Commands
 
         public CancelDemolishCommand(Guid playerID, Guid buildingID)
             : base(playerID)
+        {
+            this.buildingID = buildingID;
+        }
+
+        // Reconstruction constructor for online deserialization
+        public CancelDemolishCommand(Guid id, Guid playerID, double timestamp, Guid buildingID)
+            : base(id, playerID, timestamp)
         {
             this.buildingID = buildingID;
         }

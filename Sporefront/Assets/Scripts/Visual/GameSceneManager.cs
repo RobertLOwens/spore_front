@@ -6,6 +6,7 @@
 // ============================================================================
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -62,6 +63,12 @@ namespace Sporefront.Visual
 
         // Auto-save state
         private const double AutoSaveIntervalGameTime = 300.0; // 5 minutes game time
+
+        // Online game state
+        private bool isOnlineGame;
+        private string onlineGameID;
+        private float heartbeatTimer;
+        private const float HeartbeatInterval = 30f;
         private double lastAutoSaveGameTime;
 
         // ================================================================
@@ -103,6 +110,7 @@ namespace Sporefront.Visual
                 AuthService.Instance.Initialize();
                 UserStatsService.Instance.Initialize();
                 GameSessionService.Instance.Initialize();
+                MatchmakingService.Instance.Initialize();
             }
 
             BootstrapMainMenu();
@@ -113,8 +121,9 @@ namespace Sporefront.Visual
         {
             if (!firebaseAvailable)
             {
-                // Offline mode — go directly to main menu
-                uiManager.ShowMainMenu();
+                // Firebase required — show auth panel which will display an error
+                Debug.LogWarning("[GameSceneManager] Firebase not available — showing auth screen");
+                uiManager.ShowAuth();
                 return;
             }
 
@@ -128,6 +137,7 @@ namespace Sporefront.Visual
                     uiManager.ShowDisplayName();
                     break;
                 case AuthState.SignedOut:
+                case AuthState.Unknown:
                 default:
                     uiManager.ShowAuth();
                     break;
@@ -145,12 +155,27 @@ namespace Sporefront.Visual
                 HandleTileInteraction();
                 HandleRightClick();
 
-                // Auto-save check
-                if (gameState != null && !gameState.isPaused &&
+                // Auto-save check (offline only — online uses cloud snapshots)
+                if (!isOnlineGame && gameState != null && !gameState.isPaused &&
                     gameState.currentTime - lastAutoSaveGameTime >= AutoSaveIntervalGameTime)
                 {
                     lastAutoSaveGameTime = gameState.currentTime;
                     SaveManager.AutoSave(gameState);
+                }
+            }
+
+            // Online heartbeat — periodic keepalive to detect disconnects
+            if (isOnlineGame)
+            {
+                heartbeatTimer += Time.deltaTime;
+                if (heartbeatTimer >= HeartbeatInterval)
+                {
+                    heartbeatTimer = 0;
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+                    var hbUid = Engine.AuthService.Instance.CurrentUID;
+                    if (hbUid != null && onlineGameID != null)
+                        Engine.GameSessionService.Instance.UpdateHeartbeat(onlineGameID, hbUid);
+#endif
                 }
             }
 
@@ -176,6 +201,7 @@ namespace Sporefront.Visual
 
             // 3. Listen for new game request from main menu
             uiManager.OnStartNewGame += StartNewGame;
+            uiManager.OnStartOnlineGame += StartOnlineGame;
             uiManager.OnPlayArenaGame += StartArenaGame;
             uiManager.OnLoadGame += LoadGame;
 
@@ -316,6 +342,455 @@ namespace Sporefront.Visual
                 case MapSize.Huge:   return (GameConfig.MapDimensions.Huge, GameConfig.MapDimensions.Huge);
                 default:             return (GameConfig.MapDimensions.Medium, GameConfig.MapDimensions.Medium);
             }
+        }
+
+        // ================================================================
+        // Phase 2a: Start Online Game — create session, stream commands
+        // ================================================================
+
+        private void StartOnlineGame(GameSetupConfig config)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            // Route to host or joiner path based on matchmaking result
+            if (!string.IsNullOrEmpty(config.matchGameID))
+            {
+                if (config.matchIsHost)
+                    StartOnlineGameAsHost(config);
+                else
+                    JoinOnlineGame(config);
+                return;
+            }
+
+            // Legacy path: solo online game (host + AI, no matchmaking)
+            StartOnlineGameLegacy(config);
+#else
+            Debug.LogWarning("[GameSceneManager] Online games require Firebase. Starting offline instead.");
+            StartNewGame(config);
+#endif
+        }
+
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+        // ================================================================
+        // Matchmaking Host Path
+        // ================================================================
+
+        private void StartOnlineGameAsHost(GameSetupConfig config)
+        {
+            var auth = Engine.AuthService.Instance;
+            var uid = auth.CurrentUID;
+            if (string.IsNullOrEmpty(uid))
+            {
+                Debug.LogWarning("[GameSceneManager] Cannot start online game — not signed in");
+                return;
+            }
+
+            var displayName = auth.CurrentDisplayName ?? "Player 1";
+
+            // 1. Create game state (Arabia 35x35)
+            int width = 35, height = 35;
+            gameState = new GameState(width, height);
+
+            // 2. Create two human players with pre-determined IDs from matchmaking
+            var localPlayer = new PlayerState(displayName, "3A5E8B", false);
+            if (!string.IsNullOrEmpty(config.matchLocalPlayerID))
+                localPlayer.id = Guid.Parse(config.matchLocalPlayerID);
+            localPlayer.faction = config.playerFaction;
+
+            var opponent = new PlayerState(config.matchOpponentDisplayName ?? "Opponent", "8B3A3A", false);
+            if (!string.IsNullOrEmpty(config.matchOpponentPlayerID))
+                opponent.id = Guid.Parse(config.matchOpponentPlayerID);
+            opponent.faction = config.matchOpponentFaction;
+
+            gameState.AddPlayer(localPlayer);
+            gameState.AddPlayer(opponent);
+            gameState.localPlayerID = localPlayer.id;
+
+            // 3. Generate Arabia map
+            ulong seed = (ulong)DateTime.UtcNow.Ticks;
+            var arabiaConfig = new ArabiaMapConfig();
+            var generator = new ArabiaMapGenerator(width, height, seed, arabiaConfig);
+            var terrain = generator.GenerateTerrain();
+
+            foreach (var kvp in terrain)
+            {
+                gameState.mapData.SetTile(new TileData(
+                    kvp.Key, kvp.Value.terrain, kvp.Value.elevation));
+            }
+
+            // 4. Place starting entities for both players
+            var startPositions = generator.GetStartingPositions();
+            PlaceStartingEntities(startPositions, localPlayer, opponent, generator, config.startingResources);
+
+            var startCoords = new List<HexCoordinate>();
+            foreach (var pos in startPositions)
+                startCoords.Add(pos.coordinate);
+            var neutralResources = generator.GenerateNeutralResources(10, startCoords);
+            foreach (var placement in neutralResources)
+            {
+                var rp = new ResourcePointData(placement.coordinate, placement.resourceType);
+                gameState.resourcePoints[rp.id] = rp;
+                gameState.mapData.resourcePointIDs.Add(rp.id);
+                gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
+            }
+
+            // 5. Create online session with both human players
+            var sessionMapConfig = new Data.MapGenerationConfig("arabia", seed, width, height);
+            var aiPlayersList = new List<(string displayName, Guid playerID, string colorHex)>();
+            var session = Data.GameSession.CreateForMatchmaking(
+                config.matchGameID,
+                uid, displayName, localPlayer.id, "3A5E8B",
+                config.matchOpponentUID, config.matchOpponentDisplayName ?? "Opponent",
+                opponent.id, "8B3A3A",
+                sessionMapConfig, aiPlayersList);
+
+            Engine.GameSessionService.Instance.CreateGame(session, (success, error) =>
+            {
+                if (!success)
+                {
+                    Debug.LogError(string.Format("[GameSceneManager] Failed to create matchmaking game: {0}", error));
+                    return;
+                }
+
+                onlineGameID = config.matchGameID;
+                isOnlineGame = true;
+
+                // 6. Initialize engine (host — no AI in PvP)
+                gameState.visibilityMode = config.visibilityMode;
+                GameEngine.Instance.SetupOnline(gameState, 0, isHost: true);
+                GameEngine.Instance.visionEngine.Update(0);
+
+                // 7. Save initial snapshot — joiner will load this
+                var snapshot = Data.GameSnapshot.Create(gameState, 0);
+                if (snapshot != null)
+                {
+                    Engine.GameSessionService.Instance.SaveSnapshot(
+                        onlineGameID, snapshot, null);
+                }
+
+                // 8. Start listeners
+                Engine.GameSessionService.Instance.StartCommandListener(onlineGameID, 0);
+                Engine.GameSessionService.Instance.StartSessionListener(onlineGameID);
+                Engine.GameSessionService.Instance.OnCommandReceived += HandleRemoteCommand;
+                Engine.GameSessionService.Instance.OnSessionUpdated += HandleSessionUpdate;
+
+                // 9. Build visual
+                gridRenderer.BuildGrid(gameState.mapData);
+                cameraController.SetMapBounds(width, height);
+                if (startPositions.Count > 0)
+                    cameraController.FocusOn(startPositions[0].coordinate, 8f, false);
+
+                GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
+                uiManager.OnGameStarted(gameState);
+                gameStarted = true;
+
+                Debug.Log(string.Format("[GameSceneManager] Online game started as HOST — ID: {0}", onlineGameID));
+            });
+        }
+
+        // ================================================================
+        // Matchmaking Joiner Path
+        // ================================================================
+
+        private void JoinOnlineGame(GameSetupConfig config)
+        {
+            var auth = Engine.AuthService.Instance;
+            var uid = auth.CurrentUID;
+            if (string.IsNullOrEmpty(uid))
+            {
+                Debug.LogWarning("[GameSceneManager] Cannot join online game — not signed in");
+                return;
+            }
+
+            onlineGameID = config.matchGameID;
+            isOnlineGame = true;
+
+            Debug.Log(string.Format("[GameSceneManager] Joining game as JOINER — ID: {0}", onlineGameID));
+
+            // Load the initial snapshot created by the host
+            Engine.GameSessionService.Instance.LoadLatestSnapshot(onlineGameID, (snapshot, pendingCommands, error) =>
+            {
+                if (snapshot == null)
+                {
+                    Debug.LogError(string.Format("[GameSceneManager] Failed to load snapshot for join: {0}", error ?? "no snapshot"));
+                    // Retry after a short delay — host may still be saving
+                    StartCoroutine(RetryJoinAfterDelay(config, 2.0f));
+                    return;
+                }
+
+                // Reconstruct game state from snapshot
+                try
+                {
+                    gameState = snapshot.ToGameState();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(string.Format("[GameSceneManager] Failed to restore game state: {0}", e.Message));
+                    return;
+                }
+
+                // Set local player ID
+                if (!string.IsNullOrEmpty(config.matchLocalPlayerID))
+                    gameState.localPlayerID = Guid.Parse(config.matchLocalPlayerID);
+
+                gameState.visibilityMode = config.visibilityMode;
+
+                // Initialize engine as non-host (no AI control)
+                GameEngine.Instance.SetupOnline(gameState, snapshot.commandSequence, isHost: false);
+                GameEngine.Instance.visionEngine.Update(0);
+
+                // Replay any commands that arrived after the snapshot
+                if (pendingCommands != null)
+                {
+                    foreach (var cmd in pendingCommands)
+                    {
+                        GameEngine.Instance.ExecuteRemoteCommand(cmd);
+                    }
+                }
+
+                // Start listeners from current sequence
+                Engine.GameSessionService.Instance.StartCommandListener(onlineGameID, snapshot.commandSequence);
+                Engine.GameSessionService.Instance.StartSessionListener(onlineGameID);
+                Engine.GameSessionService.Instance.OnCommandReceived += HandleRemoteCommand;
+                Engine.GameSessionService.Instance.OnSessionUpdated += HandleSessionUpdate;
+
+                // Build visual
+                gridRenderer.BuildGrid(gameState.mapData);
+                int width = gameState.mapData.width;
+                int height = gameState.mapData.height;
+                cameraController.SetMapBounds(width, height);
+
+                // Focus on local player's city center
+                var localPlayerID = gameState.localPlayerID;
+                if (localPlayerID.HasValue)
+                {
+                    var buildings = gameState.GetBuildingsForPlayer(localPlayerID.Value);
+                    if (buildings != null)
+                    {
+                        foreach (var b in buildings)
+                        {
+                            if (b.buildingType == BuildingType.CityCenter)
+                            {
+                                cameraController.FocusOn(b.coordinate, 8f, false);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
+                uiManager.OnGameStarted(gameState);
+                gameStarted = true;
+
+                Debug.Log(string.Format("[GameSceneManager] Online game joined — ID: {0}", onlineGameID));
+            });
+        }
+
+        private System.Collections.IEnumerator RetryJoinAfterDelay(GameSetupConfig config, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            Debug.Log("[GameSceneManager] Retrying join...");
+            JoinOnlineGame(config);
+        }
+
+        // ================================================================
+        // Legacy Online Path (solo host + AI, no matchmaking)
+        // ================================================================
+
+        private void StartOnlineGameLegacy(GameSetupConfig config)
+        {
+            var auth = Engine.AuthService.Instance;
+            var uid = auth.CurrentUID;
+            if (string.IsNullOrEmpty(uid))
+            {
+                Debug.LogWarning("[GameSceneManager] Cannot start online game — not signed in");
+                return;
+            }
+
+            // 1. Create game state with configured dimensions
+            var (width, height) = GetMapDimensions(config.mapSize);
+            gameState = new GameState(width, height);
+
+            // 2. Create players
+            var displayName = auth.CurrentDisplayName ?? "Player 1";
+            var human = new PlayerState(displayName, "3A5E8B", false);
+            human.faction = config.playerFaction;
+            var ai = new PlayerState("AI Opponent", "8B3A3A", true);
+            ai.faction = config.aiFaction;
+            gameState.players[human.id] = human;
+            gameState.players[ai.id] = ai;
+            gameState.localPlayerID = human.id;
+
+            // 3. Generate deterministic map from seed
+            ulong seed = (ulong)DateTime.UtcNow.Ticks;
+            float areaRatio = (float)(width * height) / (35f * 35f);
+
+            MapGeneratorBase generator;
+            var resolvedMapType = config.mapType;
+            if (resolvedMapType == MapType.Random)
+                resolvedMapType = (seed % 2 == 0) ? MapType.MountainValley : MapType.Arabia;
+
+            switch (resolvedMapType)
+            {
+                case MapType.MountainValley:
+                    var mvConfig = new MountainValleyMapConfig
+                    {
+                        slopeTreePocketCount = Mathf.RoundToInt(10 * areaRatio),
+                        slopeMineralCount = Mathf.RoundToInt(6 * areaRatio),
+                        valleyTreePocketCount = Mathf.RoundToInt(8 * areaRatio),
+                        valleyAnimalCount = Mathf.RoundToInt(10 * areaRatio),
+                        ridgeTreePocketCount = Mathf.RoundToInt(2 * areaRatio),
+                        ridgeAnimalCount = Mathf.RoundToInt(3 * areaRatio),
+                    };
+                    generator = new MountainValleyMapGenerator(width, height, seed, mvConfig);
+                    break;
+                case MapType.Arabia:
+                default:
+                    var mapConfig = new ArabiaMapConfig
+                    {
+                        treePocketCount = Mathf.RoundToInt(25 * areaRatio),
+                        mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
+                    };
+                    generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
+                    break;
+            }
+            var terrain = generator.GenerateTerrain();
+
+            // 4. Apply terrain to map data
+            foreach (var kvp in terrain)
+            {
+                gameState.mapData.SetTile(new TileData(
+                    kvp.Key,
+                    kvp.Value.terrain,
+                    kvp.Value.elevation
+                ));
+            }
+
+            // 5. Place starting resources and city centers
+            var startPositions = generator.GetStartingPositions();
+            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources);
+
+            var startCoords = new List<HexCoordinate>();
+            foreach (var pos in startPositions)
+                startCoords.Add(pos.coordinate);
+            var neutralResources = generator.GenerateNeutralResources(10, startCoords);
+            foreach (var placement in neutralResources)
+            {
+                var rp = new ResourcePointData(placement.coordinate, placement.resourceType);
+                gameState.resourcePoints[rp.id] = rp;
+                gameState.mapData.resourcePointIDs.Add(rp.id);
+                gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
+            }
+
+            // 6. Create online session
+            var sessionMapConfig = new Data.MapGenerationConfig(
+                resolvedMapType.ToString().ToLower(), seed, width, height);
+            var aiPlayersList = new List<(string displayName, Guid playerID, string colorHex)>
+            {
+                ("AI Opponent", ai.id, "8B3A3A")
+            };
+            var session = Data.GameSession.Create(uid, displayName, human.id, "3A5E8B", sessionMapConfig, aiPlayersList);
+
+            Engine.GameSessionService.Instance.CreateGame(session, (success, error) =>
+            {
+                if (!success)
+                {
+                    Debug.LogError(string.Format("[GameSceneManager] Failed to create online game: {0}", error));
+                    return;
+                }
+
+                onlineGameID = session.gameID;
+                isOnlineGame = true;
+
+                // 7. Initialize engine in online mode (host runs AI)
+                gameState.visibilityMode = config.visibilityMode;
+                GameEngine.Instance.SetupOnline(gameState, 0, isHost: true);
+                GameEngine.Instance.visionEngine.Update(0);
+
+                // 8. Create initial snapshot for recovery
+                var snapshot = Data.GameSnapshot.Create(gameState, 0);
+                if (snapshot != null)
+                {
+                    Engine.GameSessionService.Instance.SaveSnapshot(
+                        onlineGameID, snapshot, null);
+                }
+
+                // 9. Start listening for remote commands
+                Engine.GameSessionService.Instance.StartCommandListener(onlineGameID, 0);
+                Engine.GameSessionService.Instance.StartSessionListener(onlineGameID);
+                Engine.GameSessionService.Instance.OnCommandReceived += HandleRemoteCommand;
+                Engine.GameSessionService.Instance.OnSessionUpdated += HandleSessionUpdate;
+
+                // 10. Build visual grid
+                gridRenderer.BuildGrid(gameState.mapData);
+
+                // 11. Set camera
+                cameraController.SetMapBounds(width, height);
+                if (startPositions.Count > 0)
+                    cameraController.FocusOn(startPositions[0].coordinate, 8f, false);
+
+                // 12. Subscribe to state changes and start game
+                GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
+                uiManager.OnGameStarted(gameState);
+                gameStarted = true;
+
+                Debug.Log(string.Format("[GameSceneManager] Online game started — ID: {0}, seed: {1}", onlineGameID, seed));
+            });
+        }
+#endif
+
+        // ================================================================
+        // Online Event Handlers
+        // ================================================================
+
+        private void HandleRemoteCommand(Data.OnlineCommand onlineCmd)
+        {
+            GameEngine.Instance.ExecuteRemoteCommand(onlineCmd);
+        }
+
+        private void HandleSessionUpdate(Data.GameSession session)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (session.status == Data.GameSessionStatus.Paused && !gameState.isPaused)
+            {
+                gameState.isPaused = true;
+            }
+            else if (session.status == Data.GameSessionStatus.Playing && gameState.isPaused)
+            {
+                gameState.isPaused = false;
+            }
+            else if (session.status == Data.GameSessionStatus.Finished)
+            {
+                Debug.Log("[GameSceneManager] Online game finished");
+            }
+
+            // Check for opponent disconnect
+            foreach (var kvp in session.players)
+            {
+                if (kvp.Value.status == Data.PlayerSessionStatus.Disconnected && !kvp.Value.isAI)
+                {
+                    Debug.Log($"[GameSceneManager] Player {kvp.Value.displayName} disconnected");
+                }
+            }
+#endif
+        }
+
+        private void CleanupOnlineGame()
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (isOnlineGame && onlineGameID != null)
+            {
+                Engine.GameSessionService.Instance.OnCommandReceived -= HandleRemoteCommand;
+                Engine.GameSessionService.Instance.OnSessionUpdated -= HandleSessionUpdate;
+                Engine.GameSessionService.Instance.StopCommandListener();
+
+                var cleanupUid = Engine.AuthService.Instance.CurrentUID;
+                if (cleanupUid != null)
+                    Engine.GameSessionService.Instance.LeaveSession(onlineGameID, cleanupUid);
+
+                isOnlineGame = false;
+                onlineGameID = null;
+            }
+#endif
         }
 
         // ================================================================
@@ -1254,8 +1729,25 @@ namespace Sporefront.Visual
 
         private void OnDestroy()
         {
+            CleanupOnlineGame();
+            Engine.MatchmakingService.Instance.Cleanup();
+
             if (GameEngine.Instance != null)
                 GameEngine.Instance.OnStateChangesProduced -= HandleStateChanges;
+        }
+
+        private void OnApplicationQuit()
+        {
+            Engine.MatchmakingService.Instance.Cleanup();
+            CleanupOnlineGame();
+        }
+
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused && Engine.MatchmakingService.Instance.IsInQueue)
+            {
+                Engine.MatchmakingService.Instance.LeaveQueue(null);
+            }
         }
     }
 }

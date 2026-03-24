@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.buildingID = buildingID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public GarrisonArmyCommand(Guid id, Guid playerID, double timestamp, Guid armyID, Guid buildingID)
+            : base(id, playerID, timestamp)
+        {
+            this.armyID = armyID;
+            this.buildingID = buildingID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var army = state.GetArmy(armyID);

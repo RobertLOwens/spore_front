@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.resourcePointID = resourcePointID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public GatherCommand(Guid id, Guid playerID, double timestamp, Guid villagerGroupID, Guid resourcePointID)
+            : base(id, playerID, timestamp)
+        {
+            this.villagerGroupID = villagerGroupID;
+            this.resourcePointID = resourcePointID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Villager group must exist
@@ -108,6 +116,13 @@ namespace Sporefront.Commands
 
         public StopGatheringCommand(Guid playerID, Guid villagerGroupID)
             : base(playerID)
+        {
+            this.villagerGroupID = villagerGroupID;
+        }
+
+        // Reconstruction constructor for online deserialization
+        public StopGatheringCommand(Guid id, Guid playerID, double timestamp, Guid villagerGroupID)
+            : base(id, playerID, timestamp)
         {
             this.villagerGroupID = villagerGroupID;
         }

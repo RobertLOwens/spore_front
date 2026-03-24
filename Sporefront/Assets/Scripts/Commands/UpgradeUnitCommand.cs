@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.buildingID = buildingID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public UpgradeUnitCommand(Guid id, Guid playerID, double timestamp, string upgradeTypeRawValue, Guid buildingID)
+            : base(id, playerID, timestamp)
+        {
+            this.upgradeTypeRawValue = upgradeTypeRawValue;
+            this.buildingID = buildingID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Parse upgrade type

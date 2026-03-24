@@ -314,6 +314,77 @@ namespace Sporefront.Data
             );
         }
 
+        public static GameSession CreateForMatchmaking(
+            string gameID,
+            string hostUID,
+            string hostDisplayName,
+            Guid hostPlayerID,
+            string hostColorHex,
+            string joinerUID,
+            string joinerDisplayName,
+            Guid joinerPlayerID,
+            string joinerColorHex,
+            MapGenerationConfig mapConfig,
+            List<(string displayName, Guid playerID, string colorHex)> aiPlayers)
+        {
+            var players = new Dictionary<string, GameSessionPlayer>();
+
+            // Host player
+            players[hostUID] = new GameSessionPlayer(
+                uid: hostUID,
+                displayName: hostDisplayName,
+                playerID: hostPlayerID.ToString(),
+                colorHex: hostColorHex,
+                isAI: false,
+                isHost: true,
+                status: PlayerSessionStatus.Active,
+                lastHeartbeat: DateTime.UtcNow
+            );
+
+            // Joiner player
+            players[joinerUID] = new GameSessionPlayer(
+                uid: joinerUID,
+                displayName: joinerDisplayName,
+                playerID: joinerPlayerID.ToString(),
+                colorHex: joinerColorHex,
+                isAI: false,
+                isHost: false,
+                status: PlayerSessionStatus.Active,
+                lastHeartbeat: DateTime.UtcNow
+            );
+
+            // AI players
+            for (int i = 0; i < aiPlayers.Count; i++)
+            {
+                var ai = aiPlayers[i];
+                string aiKey = string.Format("ai_{0}", i);
+                players[aiKey] = new GameSessionPlayer(
+                    uid: aiKey,
+                    displayName: ai.displayName,
+                    playerID: ai.playerID.ToString(),
+                    colorHex: ai.colorHex,
+                    isAI: true,
+                    isHost: false,
+                    status: PlayerSessionStatus.Active,
+                    lastHeartbeat: DateTime.UtcNow
+                );
+            }
+
+            return new GameSession(
+                gameID: gameID,
+                hostUID: hostUID,
+                mapConfig: mapConfig,
+                players: players,
+                status: GameSessionStatus.Lobby,
+                currentCommandSequence: 0,
+                latestSnapshotID: null,
+                currentGameTime: 0.0,
+                gameSpeed: 1.0,
+                gameVersion: "1.0.0",
+                createdAt: DateTime.UtcNow
+            );
+        }
+
         public Dictionary<string, object> ToDictionary()
         {
             var playersData = new Dictionary<string, object>();

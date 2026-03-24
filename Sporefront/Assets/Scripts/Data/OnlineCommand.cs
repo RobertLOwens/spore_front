@@ -63,9 +63,9 @@ namespace Sporefront.Data
         {
             try
             {
-                // Serialize the command via JsonUtility on a wrapper or directly
-                // Note: JsonUtility requires [Serializable] on the command class
-                string json = JsonUtility.ToJson(command);
+                // Serialize via PlayerCommandRegistry to handle Dictionary and
+                // nullable Guid fields that JsonUtility silently drops
+                string json = PlayerCommandRegistry.Serialize(command);
                 string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
 
                 return new OnlineCommand
@@ -116,23 +116,34 @@ namespace Sporefront.Data
         }
 
         // ================================================================
-        // Decode to IEngineCommand (stub)
+        // Decode to IEngineCommand
         // ================================================================
 
         /// <summary>
         /// Decode the payload back to an IEngineCommand.
-        /// This is a stub -- full deserialization requires a command type registry
-        /// since C# IEngineCommand implementations are not polymorphically
-        /// serializable via JsonUtility. In practice, the online system uses
-        /// AICommandEnvelope for AI commands and can be extended for player
-        /// commands later with a registered type map.
+        /// Routes AI commands through AICommandEnvelope and player commands
+        /// through PlayerCommandRegistry for type-safe deserialization.
         /// </summary>
         public IEngineCommand ToEngineCommand()
         {
-            DebugLog.Log(string.Format(
-                "OnlineCommand.ToEngineCommand() stub called for type: {0}",
-                commandType));
-            return null;
+            try
+            {
+                if (isAICommand)
+                {
+                    var envelope = ToAICommandEnvelope();
+                    return envelope?.ToEngineCommand();
+                }
+
+                string json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+                return PlayerCommandRegistry.Deserialize(commandType, json, commandID, playerID, timestamp);
+            }
+            catch (Exception e)
+            {
+                DebugLog.Log(string.Format(
+                    "OnlineCommand.ToEngineCommand() failed for type {0}: {1}",
+                    commandType, e.Message));
+                return null;
+            }
         }
 
         // ================================================================

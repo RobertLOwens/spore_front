@@ -20,6 +20,15 @@ namespace Sporefront.Commands
             this.units = units;
         }
 
+        // Reconstruction constructor for online deserialization
+        public ReinforceArmyCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, Guid armyID, Dictionary<MilitaryUnitType, int> units)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.armyID = armyID;
+            this.units = units;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Building exists and is owned by player

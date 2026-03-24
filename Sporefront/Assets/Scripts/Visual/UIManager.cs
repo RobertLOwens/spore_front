@@ -25,6 +25,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         public event Action<GameSetupConfig> OnStartNewGame;
+        public event Action<GameSetupConfig> OnStartOnlineGame;
         public event Action<ArenaConfig> OnPlayArenaGame;
         public event Action<string> OnLoadGame;
         public event Action<Guid, bool> OnEntityFocused; // (entityID, isArmy)
@@ -57,6 +58,7 @@ namespace Sporefront.Visual
 
         private MainMenuPanel mainMenu;
         private GameSetupPanel gameSetup;
+        private MatchmakingPanel matchmaking;
         private GameOverPanel gameOver;
         private AboutPanel about;
         private MenuTransitionController menuTransition;
@@ -349,6 +351,9 @@ namespace Sporefront.Visual
 
             gameSetup = CreatePanelComponent<GameSetupPanel>("GameSetup");
             InitPanel("GameSetup", () => gameSetup.Initialize(ct));
+
+            matchmaking = CreatePanelComponent<MatchmakingPanel>("Matchmaking");
+            InitPanel("Matchmaking", () => matchmaking.Initialize(ct));
 
             // Menu transition controller (sliding container + bridge tendril)
             var transGO = new GameObject("MenuTransitionController");
@@ -706,7 +711,10 @@ namespace Sporefront.Visual
             {
                 gameSetup.Hide();
                 if (menuTransition != null) menuTransition.ResetToMainMenu();
-                OnStartNewGame?.Invoke(config);
+                if (config.isOnlineMode)
+                    OnStartOnlineGame?.Invoke(config);
+                else
+                    OnStartNewGame?.Invoke(config);
             };
             gameSetup.OnPlayArena += (arenaConfig) =>
             {
@@ -723,6 +731,53 @@ namespace Sporefront.Visual
                     // RunBatch callback comes from a background thread — dispatch to main thread
                     mainThreadActions.Enqueue(() => arenaResults.ShowBatch(results, arenaConfig.scenarioConfig));
                 });
+            };
+            gameSetup.OnStartMatchmaking += () =>
+            {
+                gameSetup.Hide();
+                if (menuTransition != null) menuTransition.ResetToMainMenu();
+                matchmaking.Show();
+            };
+
+            // ---- MatchmakingPanel ----
+            matchmaking.OnBack += () =>
+            {
+                matchmaking.Hide();
+                gameSetup.Show();
+            };
+            matchmaking.OnGameReady += (matchResult) =>
+            {
+                matchmaking.Hide();
+
+                // Parse opponent faction
+                FactionType oppFaction = FactionType.Morel;
+                if (!string.IsNullOrEmpty(matchResult.opponentFaction))
+                    Enum.TryParse<FactionType>(matchResult.opponentFaction, true, out oppFaction);
+
+                FactionType localFaction = FactionType.Morel;
+                if (!string.IsNullOrEmpty(matchResult.localFaction))
+                    Enum.TryParse<FactionType>(matchResult.localFaction, true, out localFaction);
+
+                var config = new GameSetupConfig
+                {
+                    mapType = MapType.Arabia,
+                    mapSize = MapSize.Medium,
+                    resourceDensity = ResourceDensity.Normal,
+                    startingResources = StartingResources.Medium,
+                    visibilityMode = VisibilityMode.Normal,
+                    playerFaction = localFaction,
+                    aiFaction = FactionType.Muscaria, // AI faction default
+                    isOnlineMode = true,
+                    matchGameID = matchResult.gameID,
+                    matchIsHost = matchResult.isHost,
+                    matchOpponentUID = matchResult.opponentUID,
+                    matchLocalPlayerID = matchResult.localPlayerID,
+                    matchOpponentPlayerID = matchResult.opponentPlayerID,
+                    matchOpponentDisplayName = matchResult.opponentDisplayName,
+                    matchOpponentFaction = oppFaction
+                };
+
+                OnStartOnlineGame?.Invoke(config);
             };
 
             // ---- GameOverPanel ----
