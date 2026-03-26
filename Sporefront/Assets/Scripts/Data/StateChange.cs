@@ -357,7 +357,17 @@ namespace Sporefront.Data
 
     // Game State Changes
     public class GameTickChange : StateChange { public double currentTime; }
-    public class GameOverChange : StateChange { public string reason; public Guid? winnerID; }
+    public class StarvationWarningChange : StateChange
+    {
+        public Guid playerID;
+        public double secondsRemaining;
+    }
+    public class GameOverChange : StateChange
+    {
+        public string reason;
+        public Guid? winnerID;
+        public Models.GameOverReason reasonType;
+    }
 
     // Supporting Types
 

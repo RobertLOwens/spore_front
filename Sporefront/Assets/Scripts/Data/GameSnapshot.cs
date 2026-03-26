@@ -28,6 +28,7 @@ namespace Sporefront.Data
         public int commandSequence;
         public string stateJSON; // base64-encoded GameState JSON
         public int sizeBytes;
+        public string gameVersion; // Game version that created this snapshot
 
         // Shared serializer settings (matches SaveManager)
         private static JsonSerializerSettings _settings;
@@ -73,7 +74,8 @@ namespace Sporefront.Data
                     gameTime = gameState.currentTime,
                     commandSequence = sequence,
                     stateJSON = Convert.ToBase64String(jsonBytes),
-                    sizeBytes = jsonBytes.Length
+                    sizeBytes = jsonBytes.Length,
+                    gameVersion = Application.version
                 };
             }
             catch (Exception e)
@@ -126,7 +128,7 @@ namespace Sporefront.Data
 
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var dict = new Dictionary<string, object>
             {
                 { "snapshotID", snapshotID },
                 { "createdAt", createdAt },
@@ -135,6 +137,9 @@ namespace Sporefront.Data
                 { "stateJSON", stateJSON },
                 { "sizeBytes", sizeBytes }
             };
+            if (!string.IsNullOrEmpty(gameVersion))
+                dict["gameVersion"] = gameVersion;
+            return dict;
         }
 
         public static GameSnapshot FromDictionary(Dictionary<string, object> data)
@@ -167,6 +172,10 @@ namespace Sporefront.Data
                 created = (string)val;
             }
 
+            string version = null;
+            if (data.TryGetValue("gameVersion", out val) && val is string v)
+                version = v;
+
             return new GameSnapshot
             {
                 snapshotID = id,
@@ -174,7 +183,8 @@ namespace Sporefront.Data
                 gameTime = time,
                 commandSequence = sequence,
                 stateJSON = state,
-                sizeBytes = size
+                sizeBytes = size,
+                gameVersion = version
             };
         }
     }

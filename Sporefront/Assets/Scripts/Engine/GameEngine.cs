@@ -75,6 +75,8 @@ namespace Sporefront.Engine
         public event Action<StateChangeBatch> OnStateChangesProduced;
         public event Action<Guid, EngineCommandResult> OnCommandCompleted;
         public event Action<double> OnEngineTick;
+        /// <summary>Fired when a remote command's state hash doesn't match local state (desync detected).</summary>
+        public event Action<int, long, long> OnDesyncDetected; // (sequence, remoteHash, localHash)
 
         // ================================================================
         // Tick Timing
@@ -96,6 +98,10 @@ namespace Sporefront.Engine
         private double lastAIUpdate;
         private double lastEntrenchmentUpdate;
         private double lastResearchCheck;
+        private double lastWinConditionCheck;
+
+        // Starvation tracking: per-player accumulated time with zero food
+        private Dictionary<Guid, double> starvationTimers = new Dictionary<Guid, double>();
 
         private readonly double visionUpdateInterval = GameConfig.EngineIntervals.VisionUpdate;
         private readonly double buildingUpdateInterval = GameConfig.EngineIntervals.BuildingUpdate;
@@ -106,6 +112,8 @@ namespace Sporefront.Engine
         private readonly double aiUpdateInterval = GameConfig.EngineIntervals.AIUpdate;
         private readonly double entrenchmentCheckInterval = GameConfig.Entrenchment.CheckInterval;
         private readonly double researchCheckInterval = 1.0;
+        private readonly double winConditionCheckInterval = GameConfig.Online.WinConditionCheckInterval;
+        private readonly double starvationThreshold = GameConfig.Online.StarvationThresholdSeconds;
 
         // Reusable list to avoid per-frame allocation
         private readonly List<StateChange> allChanges = new List<StateChange>();
@@ -186,10 +194,59 @@ namespace Sporefront.Engine
             if (Guid.TryParse(onlineCmd.commandID, out cmdId) && localCommandIDs.Contains(cmdId))
                 return;
 
+            // Validate sender UID matches the expected player for this command.
+            // AI commands are sent by the host, so validate host UID instead.
+            var currentSession = GameSessionService.Instance?.CurrentSession;
+            if (currentSession != null)
+            {
+                // Reject commands with no sender UID — all legitimate commands must have one
+                if (string.IsNullOrEmpty(onlineCmd.senderUID))
+                {
+                    DebugLog.Log($"Rejected command with no senderUID (seq {onlineCmd.sequence})");
+                    return;
+                }
+
+                if (onlineCmd.isAICommand)
+                {
+                    // AI commands must come from the host
+                    if (onlineCmd.senderUID != currentSession.hostUID)
+                    {
+                        DebugLog.Log($"Rejected AI command from non-host sender {onlineCmd.senderUID} (seq {onlineCmd.sequence})");
+                        return;
+                    }
+                }
+                else if (currentSession.players.TryGetValue(onlineCmd.senderUID, out var senderPlayer))
+                {
+                    // Player commands: senderUID's playerID must match the command's playerID
+                    if (onlineCmd.playerID != senderPlayer.playerID)
+                    {
+                        DebugLog.Log($"Rejected command: sender {onlineCmd.senderUID} tried to act as player {onlineCmd.playerID} (seq {onlineCmd.sequence})");
+                        return;
+                    }
+                }
+                else
+                {
+                    // senderUID not found in session players — reject
+                    DebugLog.Log($"Rejected command from unknown sender {onlineCmd.senderUID} (seq {onlineCmd.sequence})");
+                    return;
+                }
+            }
+
             var cmd = onlineCmd.ToEngineCommand();
             if (cmd != null)
             {
                 ExecuteCommand(cmd);
+
+                // Desync detection: if the remote command includes a state hash, compare it
+                if (onlineCmd.stateHash != 0 && gameState != null)
+                {
+                    long localHash = gameState.ComputeStateHash();
+                    if (localHash != onlineCmd.stateHash)
+                    {
+                        DebugLog.Log($"DESYNC DETECTED at seq {onlineCmd.sequence}: remote={onlineCmd.stateHash}, local={localHash}");
+                        OnDesyncDetected?.Invoke(onlineCmd.sequence, onlineCmd.stateHash, localHash);
+                    }
+                }
             }
             else
             {
@@ -213,6 +270,8 @@ namespace Sporefront.Engine
             lastAIUpdate = 0;
             lastEntrenchmentUpdate = 0;
             lastResearchCheck = 0;
+            lastWinConditionCheck = 0;
+            starvationTimers.Clear();
 
             // Reset online mode state
             IsOnlineMode = false;
@@ -229,10 +288,15 @@ namespace Sporefront.Engine
 
         /// <summary>
         /// Main update function - call this every frame.
+        /// In online mode, subsystem engines run independently on both clients using
+        /// their local Time.timeAsDouble. Minor timing differences between machines
+        /// are tolerated because: (1) game speed is locked to 1.0, (2) state mutations
+        /// come from deterministic commands, not subsystem timing, and (3) desync
+        /// detection (OnDesyncDetected) catches any actual divergence.
         /// </summary>
         public void Update(double currentTime)
         {
-            if (gameState == null || gameState.isPaused) return;
+            if (gameState == null || gameState.isPaused || gameState.isGameOver) return;
 
             double adjustedTime = currentTime * gameState.gameSpeed;
             gameState.currentTime = adjustedTime;
@@ -381,6 +445,14 @@ namespace Sporefront.Engine
                 allChanges.AddRange(unitUpgradeChanges);
 
                 lastResearchCheck = adjustedTime;
+            }
+
+            // Win condition checks (1x per second)
+            if (!gameState.isGameOver && adjustedTime - lastWinConditionCheck >= winConditionCheckInterval)
+            {
+                var winChanges = CheckWinConditions(adjustedTime);
+                allChanges.AddRange(winChanges);
+                lastWinConditionCheck = adjustedTime;
             }
 
             // Notify listeners if there are changes
@@ -548,6 +620,118 @@ namespace Sporefront.Engine
         }
 
         // ================================================================
+        // Win Condition Checks
+        // ================================================================
+
+        /// <summary>
+        /// Check for game-ending conditions: city center destroyed or starvation.
+        /// Modeled on GameSimulator win condition logic.
+        /// </summary>
+        private List<StateChange> CheckWinConditions(double currentTime)
+        {
+            if (gameState == null || gameState.isGameOver) return StateChange.EmptyChanges;
+
+            // Don't check win conditions in the early game grace period
+            double elapsed = currentTime - gameState.gameStartTime;
+            if (elapsed < GameConfig.Online.WinConditionGracePeriod) return StateChange.EmptyChanges;
+
+            var allPlayers = gameState.players.Values.ToList();
+
+            // Need at least 2 players for win conditions
+            if (allPlayers.Count < 2) return StateChange.EmptyChanges;
+
+            // --- City Center Destroyed ---
+            foreach (var player in allPlayers)
+            {
+                var cityCenter = gameState.GetCityCenter(player.id);
+                if (cityCenter == null)
+                {
+                    // This player's city center is destroyed — find the opponent
+                    var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
+                    if (opponent != null)
+                    {
+                        gameState.isGameOver = true;
+                        return new List<StateChange>
+                        {
+                            new GameOverChange
+                            {
+                                reason = GameOverReason.CityCenterDestroyed.DisplayMessage(),
+                                winnerID = opponent.id,
+                                reasonType = GameOverReason.CityCenterDestroyed
+                            }
+                        };
+                    }
+                }
+            }
+
+            // --- Starvation (zero food for starvationThreshold seconds) ---
+            double checkInterval = winConditionCheckInterval;
+            foreach (var player in allPlayers)
+            {
+                if (player.GetResource(Models.ResourceType.Food) <= 0)
+                {
+                    if (!starvationTimers.ContainsKey(player.id))
+                        starvationTimers[player.id] = 0;
+                    starvationTimers[player.id] += checkInterval;
+                }
+                else
+                {
+                    starvationTimers[player.id] = 0;
+                }
+            }
+
+            // Emit starvation warnings for players approaching the threshold
+            var warnings = new List<StateChange>();
+            foreach (var player in allPlayers)
+            {
+                double timer;
+                if (starvationTimers.TryGetValue(player.id, out timer) && timer > 0 && timer < starvationThreshold)
+                {
+                    double remaining = starvationThreshold - timer;
+                    // Warn at 45s, 30s, 15s, 10s, 5s marks (every check interval)
+                    if (remaining <= 45)
+                    {
+                        warnings.Add(new StarvationWarningChange
+                        {
+                            playerID = player.id,
+                            secondsRemaining = remaining
+                        });
+                    }
+                }
+            }
+
+            foreach (var player in allPlayers)
+            {
+                double timer;
+                if (starvationTimers.TryGetValue(player.id, out timer) && timer >= starvationThreshold)
+                {
+                    // Check that the opponent is NOT also starving past threshold
+                    var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
+                    if (opponent != null)
+                    {
+                        double opponentTimer;
+                        starvationTimers.TryGetValue(opponent.id, out opponentTimer);
+                        if (opponentTimer < starvationThreshold)
+                        {
+                            gameState.isGameOver = true;
+                            return new List<StateChange>
+                            {
+                                new GameOverChange
+                                {
+                                    reason = GameOverReason.Starvation.DisplayMessage(),
+                                    winnerID = opponent.id,
+                                    reasonType = GameOverReason.Starvation
+                                }
+                            };
+                        }
+                    }
+                }
+            }
+
+            return warnings.Count > 0 ? warnings : StateChange.EmptyChanges;
+        }
+
+        // ================================================================
         // Command Execution
         // ================================================================
 
@@ -587,17 +771,22 @@ namespace Sporefront.Engine
             OnCommandCompleted?.Invoke(command.Id, EngineCommandResult.Success(batch.changes));
 
             // Online command streaming — submit locally-executed commands to Firestore
-            // so the remote client can replay them. Remote commands (received from
-            // Firestore) are already in localCommandIDs and are skipped.
+            // so the remote client can replay them. Add to localCommandIDs BEFORE
+            // streaming to prevent self-echo race condition (listener firing before add).
 #if FIREBASE_AUTH && FIREBASE_FIRESTORE
-            if (IsOnlineMode && !localCommandIDs.Contains(command.Id))
+            if (IsOnlineMode)
             {
-                StreamCommandToFirestore(command);
+                bool isLocalOrigin = !localCommandIDs.Contains(command.Id);
+                localCommandIDs.Add(command.Id);
+                if (isLocalOrigin)
+                {
+                    StreamCommandToFirestore(command);
+                }
             }
-#endif
-            // Track all locally-executed commands for self-echo filtering
+#else
             if (IsOnlineMode)
                 localCommandIDs.Add(command.Id);
+#endif
 
             return EngineCommandResult.Success(batch.changes);
         }
@@ -637,6 +826,15 @@ namespace Sporefront.Engine
             var session = GameSessionService.Instance.CurrentSession;
             if (session == null) return;
 
+            // Tag with sender UID for server-side validation
+            onlineCmd.senderUID = AuthService.Instance?.CurrentUID;
+
+            // Attach state hash periodically for desync detection
+            if (commandSequence % GameConfig.Online.DesyncCheckInterval == 0 && gameState != null)
+            {
+                onlineCmd.stateHash = gameState.ComputeStateHash();
+            }
+
             GameSessionService.Instance.SubmitCommand(
                 session.gameID,
                 onlineCmd,
@@ -662,6 +860,11 @@ namespace Sporefront.Engine
                                 DebugLog.Log($"Failed to save snapshot: {error}");
                         }
                     );
+
+                    // Prune localCommandIDs to prevent unbounded growth.
+                    // After a snapshot, old IDs are no longer needed for self-echo filtering
+                    // since reconnecting clients will replay from the snapshot.
+                    localCommandIDs.Clear();
                 }
             }
         }
@@ -705,29 +908,36 @@ namespace Sporefront.Engine
 
         /// <summary>
         /// Pause the game.
+        /// In online mode, only the disconnect system can pause (via isPaused directly).
+        /// Player-initiated pause is blocked to prevent desync.
         /// </summary>
         public void Pause()
         {
-            if (gameState != null)
-                gameState.isPaused = true;
+            if (gameState == null) return;
+            if (IsOnlineMode) return; // Prevent desync — online pause managed by disconnect system
+            gameState.isPaused = true;
         }
 
         /// <summary>
         /// Resume the game.
+        /// In online mode, only the disconnect system can resume (via isPaused directly).
         /// </summary>
         public void Resume()
         {
-            if (gameState != null)
-                gameState.isPaused = false;
+            if (gameState == null) return;
+            if (IsOnlineMode) return; // Prevent desync — online resume managed by disconnect system
+            gameState.isPaused = false;
         }
 
         /// <summary>
         /// Set game speed (clamped to 0.1 - 10.0).
+        /// Locked to 1.0 in online mode to prevent desync.
         /// </summary>
         public void SetGameSpeed(double speed)
         {
-            if (gameState != null)
-                gameState.gameSpeed = Math.Max(0.1, Math.Min(speed, 10.0));
+            if (gameState == null) return;
+            if (IsOnlineMode) return; // Prevent desync — speed must be synchronized
+            gameState.gameSpeed = Math.Max(0.1, Math.Min(speed, 10.0));
         }
 
         // ================================================================

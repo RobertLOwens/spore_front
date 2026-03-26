@@ -282,5 +282,45 @@ namespace Sporefront.Engine
                 public const double EarlyGameThreshold = 300.0;
             }
         }
+
+        public static class Online
+        {
+            // Heartbeat
+            public const float HeartbeatIntervalSeconds = 30f;
+
+            // Disconnect detection
+            public const double DisconnectTimeoutSeconds = 60.0;
+            public const double AbandonTimeoutSeconds = 180.0;
+
+            // Command submission
+            public const int MaxCommandRetries = 3;
+            public const double RetryBaseDelaySeconds = 1.0;
+
+            // Snapshots
+            public const int SnapshotCommandInterval = 100;
+            public const double SnapshotTimeIntervalSeconds = 300.0;
+            public const int MaxSnapshots = 3;
+
+            // Matchmaking
+            public const float QueueTimeoutSeconds = 120f;
+            public const float ReadyTimeoutSeconds = 30f;
+            public const float PollIntervalSeconds = 3f;
+            public const float StaleEntryAgeSeconds = 120f;
+
+            // Win conditions
+            public const double WinConditionCheckInterval = 1.0;
+            public const double StarvationThresholdSeconds = 60.0;
+            public const double WinConditionGracePeriod = 30.0;
+
+            // Reconnection
+            public const int MaxJoinRetries = 5;
+            public const float JoinRetryDelaySeconds = 2f;
+
+            // Desync detection — include state hash every N commands
+            public const int DesyncCheckInterval = 10;
+
+            // Snapshot loading timeout (seconds)
+            public const float SnapshotLoadTimeoutSeconds = 15f;
+        }
     }
 }

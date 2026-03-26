@@ -65,10 +65,10 @@ namespace Sporefront.Engine
         private string queuedPlayerID;
         private float pollTimer;
         private float queueTimer;
-        private const float PollInterval = 3.0f;
-        private const float QueueTimeout = 120.0f;     // 2 minutes
-        private const float ReadyTimeout = 30.0f;
-        private const float StaleEntryAge = 120.0f;    // 2 minutes
+        private float PollInterval => GameConfig.Online.PollIntervalSeconds;
+        private float QueueTimeout => GameConfig.Online.QueueTimeoutSeconds;
+        private float ReadyTimeout => GameConfig.Online.ReadyTimeoutSeconds;
+        private float StaleEntryAge => GameConfig.Online.StaleEntryAgeSeconds;
 
 #if FIREBASE_AUTH && FIREBASE_FIRESTORE
         private FirebaseFirestore db;

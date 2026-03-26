@@ -163,6 +163,8 @@ namespace Sporefront.Data
         public string armyID;
     }
 
+    // SurrenderCommand has no fields beyond playerID
+
     [Serializable]
     public class TrainMilitaryParams
     {
@@ -405,6 +407,11 @@ namespace Sporefront.Data
                     armyID = stopMove.armyID.ToString()
                 });
             }
+            if (command is SurrenderCommand)
+            {
+                // No fields beyond playerID
+                return "{}";
+            }
             if (command is TrainMilitaryCommand trainMil)
             {
                 return JsonUtility.ToJson(new TrainMilitaryParams
@@ -454,6 +461,23 @@ namespace Sporefront.Data
         }
 
         // ================================================================
+        // Safe FromJson — returns null instead of throwing on malformed input
+        // ================================================================
+
+        private static T SafeFromJson<T>(string json) where T : class
+        {
+            try
+            {
+                var result = JsonUtility.FromJson<T>(json);
+                return result;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // ================================================================
         // Deserialize — JSON + metadata → IEngineCommand
         // ================================================================
 
@@ -471,7 +495,8 @@ namespace Sporefront.Data
             {
                 case "AttackCommand":
                 {
-                    var p = JsonUtility.FromJson<AttackParams>(json);
+                    var p = SafeFromJson<AttackParams>(json);
+                    if (p == null) return null;
                     Guid armyID;
                     if (!Guid.TryParse(p.armyID, out armyID)) return null;
                     var target = new HexCoordinate(p.targetQ, p.targetR);
@@ -480,7 +505,8 @@ namespace Sporefront.Data
 
                 case "BuildCommand":
                 {
-                    var p = JsonUtility.FromJson<BuildParams>(json);
+                    var p = SafeFromJson<BuildParams>(json);
+                    if (p == null) return null;
                     BuildingType bt;
                     if (!Enum.TryParse<BuildingType>(p.buildingType, out bt)) return null;
                     var coord = new HexCoordinate(p.coordinateQ, p.coordinateR);
@@ -494,7 +520,8 @@ namespace Sporefront.Data
 
                 case "CancelReinforcementCommand":
                 {
-                    var p = JsonUtility.FromJson<CancelReinforcementParams>(json);
+                    var p = SafeFromJson<CancelReinforcementParams>(json);
+                    if (p == null) return null;
                     Guid rID;
                     if (!Guid.TryParse(p.reinforcementID, out rID)) return null;
                     return new CancelReinforcementCommand(cmdId, pid, timestamp, rID);
@@ -502,7 +529,8 @@ namespace Sporefront.Data
 
                 case "DemolishCommand":
                 {
-                    var p = JsonUtility.FromJson<DemolishParams>(json);
+                    var p = SafeFromJson<DemolishParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new DemolishCommand(cmdId, pid, timestamp, bID);
@@ -510,7 +538,8 @@ namespace Sporefront.Data
 
                 case "CancelDemolishCommand":
                 {
-                    var p = JsonUtility.FromJson<DemolishParams>(json);
+                    var p = SafeFromJson<DemolishParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new CancelDemolishCommand(cmdId, pid, timestamp, bID);
@@ -518,11 +547,13 @@ namespace Sporefront.Data
 
                 case "DeployArmyCommand":
                 {
-                    var p = JsonUtility.FromJson<DeployArmyParams>(json);
+                    var p = SafeFromJson<DeployArmyParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     var composition = new Dictionary<MilitaryUnitType, int>();
-                    if (p.compositionKeys != null)
+                    if (p.compositionKeys != null && p.compositionValues != null
+                        && p.compositionKeys.Length == p.compositionValues.Length)
                     {
                         for (int i = 0; i < p.compositionKeys.Length; i++)
                         {
@@ -536,7 +567,8 @@ namespace Sporefront.Data
 
                 case "DeployVillagersCommand":
                 {
-                    var p = JsonUtility.FromJson<DeployVillagersParams>(json);
+                    var p = SafeFromJson<DeployVillagersParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new DeployVillagersCommand(cmdId, pid, timestamp, bID, p.count);
@@ -544,7 +576,8 @@ namespace Sporefront.Data
 
                 case "EntrenchCommand":
                 {
-                    var p = JsonUtility.FromJson<EntrenchParams>(json);
+                    var p = SafeFromJson<EntrenchParams>(json);
+                    if (p == null) return null;
                     Guid aID;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     return new EntrenchCommand(cmdId, pid, timestamp, aID);
@@ -552,7 +585,8 @@ namespace Sporefront.Data
 
                 case "GarrisonArmyCommand":
                 {
-                    var p = JsonUtility.FromJson<GarrisonArmyParams>(json);
+                    var p = SafeFromJson<GarrisonArmyParams>(json);
+                    if (p == null) return null;
                     Guid aID, bID;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
@@ -561,7 +595,8 @@ namespace Sporefront.Data
 
                 case "GatherCommand":
                 {
-                    var p = JsonUtility.FromJson<GatherParams>(json);
+                    var p = SafeFromJson<GatherParams>(json);
+                    if (p == null) return null;
                     Guid vgID, rpID;
                     if (!Guid.TryParse(p.villagerGroupID, out vgID)) return null;
                     if (!Guid.TryParse(p.resourcePointID, out rpID)) return null;
@@ -570,7 +605,8 @@ namespace Sporefront.Data
 
                 case "StopGatheringCommand":
                 {
-                    var p = JsonUtility.FromJson<StopGatheringParams>(json);
+                    var p = SafeFromJson<StopGatheringParams>(json);
+                    if (p == null) return null;
                     Guid vgID;
                     if (!Guid.TryParse(p.villagerGroupID, out vgID)) return null;
                     return new StopGatheringCommand(cmdId, pid, timestamp, vgID);
@@ -578,7 +614,8 @@ namespace Sporefront.Data
 
                 case "HuntCommand":
                 {
-                    var p = JsonUtility.FromJson<HuntParams>(json);
+                    var p = SafeFromJson<HuntParams>(json);
+                    if (p == null) return null;
                     Guid vgID, rpID;
                     if (!Guid.TryParse(p.villagerGroupID, out vgID)) return null;
                     if (!Guid.TryParse(p.resourcePointID, out rpID)) return null;
@@ -587,7 +624,8 @@ namespace Sporefront.Data
 
                 case "JoinVillagerGroupCommand":
                 {
-                    var p = JsonUtility.FromJson<JoinVillagerGroupParams>(json);
+                    var p = SafeFromJson<JoinVillagerGroupParams>(json);
+                    if (p == null) return null;
                     Guid bID, tID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     if (!Guid.TryParse(p.targetVillagerGroupID, out tID)) return null;
@@ -596,13 +634,15 @@ namespace Sporefront.Data
 
                 case "MarketTradeCommand":
                 {
-                    var p = JsonUtility.FromJson<MarketTradeParams>(json);
+                    var p = SafeFromJson<MarketTradeParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     ResourceType outType;
                     if (!Enum.TryParse<ResourceType>(p.outputType, out outType)) return null;
                     var inputResources = new Dictionary<ResourceType, int>();
-                    if (p.inputResourceKeys != null)
+                    if (p.inputResourceKeys != null && p.inputResourceValues != null
+                        && p.inputResourceKeys.Length == p.inputResourceValues.Length)
                     {
                         for (int i = 0; i < p.inputResourceKeys.Length; i++)
                         {
@@ -616,7 +656,8 @@ namespace Sporefront.Data
 
                 case "MoveCommand":
                 {
-                    var p = JsonUtility.FromJson<MoveParams>(json);
+                    var p = SafeFromJson<MoveParams>(json);
+                    if (p == null) return null;
                     Guid eID;
                     if (!Guid.TryParse(p.entityID, out eID)) return null;
                     var dest = new HexCoordinate(p.destinationQ, p.destinationR);
@@ -625,7 +666,8 @@ namespace Sporefront.Data
 
                 case "RecruitCommanderCommand":
                 {
-                    var p = JsonUtility.FromJson<RecruitCommanderParams>(json);
+                    var p = SafeFromJson<RecruitCommanderParams>(json);
+                    if (p == null) return null;
                     CommanderSpecialty spec;
                     if (!Enum.TryParse<CommanderSpecialty>(p.specialty, out spec)) return null;
                     return new RecruitCommanderCommand(cmdId, pid, timestamp, spec);
@@ -633,12 +675,14 @@ namespace Sporefront.Data
 
                 case "ReinforceArmyCommand":
                 {
-                    var p = JsonUtility.FromJson<ReinforceArmyParams>(json);
+                    var p = SafeFromJson<ReinforceArmyParams>(json);
+                    if (p == null) return null;
                     Guid bID, aID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     var units = new Dictionary<MilitaryUnitType, int>();
-                    if (p.unitKeys != null)
+                    if (p.unitKeys != null && p.unitValues != null
+                        && p.unitKeys.Length == p.unitValues.Length)
                     {
                         for (int i = 0; i < p.unitKeys.Length; i++)
                         {
@@ -652,7 +696,8 @@ namespace Sporefront.Data
 
                 case "ResearchCommand":
                 {
-                    var p = JsonUtility.FromJson<ResearchParams>(json);
+                    var p = SafeFromJson<ResearchParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new ResearchCommand(cmdId, pid, timestamp, p.researchTypeRawValue, bID);
@@ -665,7 +710,8 @@ namespace Sporefront.Data
 
                 case "RetreatCommand":
                 {
-                    var p = JsonUtility.FromJson<RetreatParams>(json);
+                    var p = SafeFromJson<RetreatParams>(json);
+                    if (p == null) return null;
                     Guid aID;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     return new RetreatCommand(cmdId, pid, timestamp, aID);
@@ -673,15 +719,22 @@ namespace Sporefront.Data
 
                 case "StopMovementCommand":
                 {
-                    var p = JsonUtility.FromJson<StopMovementParams>(json);
+                    var p = SafeFromJson<StopMovementParams>(json);
+                    if (p == null) return null;
                     Guid aID;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     return new StopMovementCommand(cmdId, pid, timestamp, aID);
                 }
 
+                case "SurrenderCommand":
+                {
+                    return new SurrenderCommand(cmdId, pid, timestamp);
+                }
+
                 case "TrainMilitaryCommand":
                 {
-                    var p = JsonUtility.FromJson<TrainMilitaryParams>(json);
+                    var p = SafeFromJson<TrainMilitaryParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     MilitaryUnitType ut;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
@@ -691,7 +744,8 @@ namespace Sporefront.Data
 
                 case "TrainVillagerCommand":
                 {
-                    var p = JsonUtility.FromJson<TrainVillagerParams>(json);
+                    var p = SafeFromJson<TrainVillagerParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new TrainVillagerCommand(cmdId, pid, timestamp, bID, p.quantity);
@@ -699,7 +753,8 @@ namespace Sporefront.Data
 
                 case "UpgradeCommand":
                 {
-                    var p = JsonUtility.FromJson<UpgradeParams>(json);
+                    var p = SafeFromJson<UpgradeParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     Guid? vgID = null;
@@ -712,7 +767,8 @@ namespace Sporefront.Data
 
                 case "CancelUpgradeCommand":
                 {
-                    var p = JsonUtility.FromJson<DemolishParams>(json);
+                    var p = SafeFromJson<DemolishParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new CancelUpgradeCommand(cmdId, pid, timestamp, bID);
@@ -720,7 +776,8 @@ namespace Sporefront.Data
 
                 case "UpgradeUnitCommand":
                 {
-                    var p = JsonUtility.FromJson<UpgradeUnitParams>(json);
+                    var p = SafeFromJson<UpgradeUnitParams>(json);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new UpgradeUnitCommand(cmdId, pid, timestamp, p.upgradeTypeRawValue, bID);

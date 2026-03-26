@@ -42,6 +42,10 @@ namespace Sporefront.Data
         public double gameSpeed = 1.0;
         public VisibilityMode visibilityMode = VisibilityMode.Normal;
 
+        // Game Over
+        [System.NonSerialized]
+        public bool isGameOver;
+
         // Transient State (not saved)
         [System.NonSerialized]
         public Dictionary<Guid, HashSet<HexCoordinate>> activeReinforcementPositions =
@@ -65,6 +69,51 @@ namespace Sporefront.Data
         public GameState(int mapWidth, int mapHeight)
         {
             this.mapData = new MapData(mapWidth, mapHeight);
+        }
+
+        /// <summary>
+        /// Compute a lightweight hash of critical game state for desync detection.
+        /// Both clients should produce the same hash at the same command sequence
+        /// if their simulations are in sync.
+        /// </summary>
+        public long ComputeStateHash()
+        {
+            unchecked
+            {
+                long hash = 17;
+
+                // Player resources and entity counts
+                foreach (var kvp in players)
+                {
+                    var p = kvp.Value;
+                    hash = hash * 31 + p.id.GetHashCode();
+                    foreach (var res in p.resources)
+                    {
+                        hash = hash * 31 + (int)res.Key;
+                        hash = hash * 31 + res.Value;
+                    }
+                }
+
+                // Building count and total health
+                hash = hash * 31 + buildings.Count;
+                foreach (var kvp in buildings)
+                {
+                    hash = hash * 31 + kvp.Value.coordinate.GetHashCode();
+                    hash = hash * 31 + ((int)kvp.Value.health).GetHashCode();
+                }
+
+                // Army count and positions
+                hash = hash * 31 + armies.Count;
+                foreach (var kvp in armies)
+                {
+                    hash = hash * 31 + kvp.Value.coordinate.GetHashCode();
+                }
+
+                // Villager count
+                hash = hash * 31 + villagerGroups.Count;
+
+                return hash;
+            }
         }
 
         // ================================================================

@@ -23,6 +23,7 @@ namespace Sporefront.Visual
         public event Action OnLoadGame;
         public event Action OnSettings;
         public event Action OnQuitToMainMenu;
+        public event Action OnSurrender;
 
         // ================================================================
         // State
@@ -33,6 +34,11 @@ namespace Sporefront.Visual
         private GameObject panel;
         private Coroutine fadeCoroutine;
         private Guid localPlayerID;
+        private bool isOnlineGame;
+        private GameObject surrenderButton;
+        private GameObject surrenderConfirmGroup;
+        private GameObject saveButton;
+        private GameObject loadButton;
 
         // ================================================================
         // Initialization
@@ -82,6 +88,17 @@ namespace Sporefront.Visual
             localPlayerID = playerID;
         }
 
+        public void SetOnlineMode(bool online)
+        {
+            isOnlineGame = online;
+            if (surrenderButton != null)
+                surrenderButton.SetActive(online);
+            if (saveButton != null)
+                saveButton.SetActive(!online);
+            if (loadButton != null)
+                loadButton.SetActive(!online);
+        }
+
         // ================================================================
         // Public API
         // ================================================================
@@ -89,6 +106,13 @@ namespace Sporefront.Visual
         public void Show()
         {
             if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
+
+            // Reset surrender confirmation state on each open
+            if (surrenderConfirmGroup != null)
+                surrenderConfirmGroup.SetActive(false);
+            if (surrenderButton != null && isOnlineGame)
+                surrenderButton.SetActive(true);
+
             backdrop.SetActive(true);
             backdrop.transform.SetAsLastSibling(); // render above minimap & all HUD
             fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
@@ -156,23 +180,23 @@ namespace Sporefront.Visual
                 SporefrontColors.SporeGreen, UIHelper.HudTextColor,
                 () => Close());
 
-            // Save Game
-            CreateMenuButton(buttonsArea.transform, "Save Game",
+            // Save Game (hidden in online games)
+            saveButton = CreateMenuButton(buttonsArea.transform, "Save Game",
                 SporefrontColors.ParchmentDeep, UIHelper.InkBodyText,
                 () =>
                 {
                     Hide();
                     OnSaveGame?.Invoke();
-                });
+                }).gameObject;
 
-            // Load Game
-            CreateMenuButton(buttonsArea.transform, "Load Game",
+            // Load Game (hidden in online games)
+            loadButton = CreateMenuButton(buttonsArea.transform, "Load Game",
                 SporefrontColors.ParchmentDeep, UIHelper.InkBodyText,
                 () =>
                 {
                     Hide();
                     OnLoadGame?.Invoke();
-                });
+                }).gameObject;
 
             // Settings
             CreateMenuButton(buttonsArea.transform, "Settings",
@@ -181,6 +205,46 @@ namespace Sporefront.Visual
                 {
                     OnSettings?.Invoke();
                 });
+
+            // Surrender (online games only)
+            surrenderButton = CreateMenuButton(buttonsArea.transform, "Surrender",
+                new Color(0.7f, 0.2f, 0.15f), SporefrontColors.ParchmentLight,
+                () => ShowSurrenderConfirmation(buttonsArea.transform)).gameObject;
+            surrenderButton.SetActive(isOnlineGame);
+
+            // Surrender confirmation row (hidden initially)
+            surrenderConfirmGroup = new GameObject("SurrenderConfirm", typeof(RectTransform));
+            surrenderConfirmGroup.transform.SetParent(buttonsArea.transform, false);
+            var confirmHlg = surrenderConfirmGroup.AddComponent<HorizontalLayoutGroup>();
+            confirmHlg.spacing = UIConstants.SpaceSM;
+            confirmHlg.childForceExpandWidth = true;
+            confirmHlg.childForceExpandHeight = true;
+            confirmHlg.childControlWidth = true;
+            confirmHlg.childControlHeight = true;
+            var confirmLE = surrenderConfirmGroup.AddComponent<LayoutElement>();
+            confirmLE.preferredHeight = 48;
+
+            var confirmLabel = UIHelper.CreateLabel(surrenderConfirmGroup.transform,
+                "Are you sure?", UIConstants.FontBody,
+                SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+            confirmLabel.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+            UIHelper.CreateButton(surrenderConfirmGroup.transform, "Yes",
+                SporefrontColors.SporeRed, SporefrontColors.ParchmentLight,
+                UIConstants.FontBody, () =>
+                {
+                    surrenderConfirmGroup.SetActive(false);
+                    Hide();
+                    OnSurrender?.Invoke();
+                });
+            UIHelper.CreateButton(surrenderConfirmGroup.transform, "No",
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText,
+                UIConstants.FontBody, () =>
+                {
+                    surrenderConfirmGroup.SetActive(false);
+                    surrenderButton.SetActive(true);
+                });
+            surrenderConfirmGroup.SetActive(false);
 
             // Spacer
             var spacer = new GameObject("Spacer", typeof(RectTransform));
@@ -207,13 +271,20 @@ namespace Sporefront.Visual
         // Helpers
         // ================================================================
 
-        private void CreateMenuButton(Transform parent, string text,
+        private void ShowSurrenderConfirmation(Transform parent)
+        {
+            surrenderButton.SetActive(false);
+            surrenderConfirmGroup.SetActive(true);
+        }
+
+        private Button CreateMenuButton(Transform parent, string text,
             Color bgColor, Color textColor, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
                 bgColor, textColor, UIConstants.FontSubheader, () => onClick?.Invoke());
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 48;
+            return btn;
         }
     }
 }

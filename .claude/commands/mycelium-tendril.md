@@ -1,3 +1,7 @@
+---
+description: Mycelium Tendril Creator
+---
+
 # Mycelium Tendril Creator
 
 Create an animated mycelium tendril tree effect for a Unity UI panel. The system uses two components: a **renderer** (`UITendrilRenderer`) and an **animator** that defines the tree structure and drives growth animation.

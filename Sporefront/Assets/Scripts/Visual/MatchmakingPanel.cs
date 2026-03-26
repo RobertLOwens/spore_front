@@ -491,7 +491,16 @@ namespace Sporefront.Visual
             MatchmakingService.Instance.OnMatchCancelled -= HandleMatchCancelled;
             MatchmakingService.Instance.LeaveQueue(success =>
             {
-                ShowScreen(MatchmakingScreen.FactionSelect);
+                if (success)
+                {
+                    ShowScreen(MatchmakingScreen.FactionSelect);
+                }
+                else
+                {
+                    Debug.LogWarning("[MatchmakingPanel] Failed to leave queue — retrying");
+                    // Show faction select anyway to avoid UI deadlock, but log the issue
+                    ShowScreen(MatchmakingScreen.FactionSelect);
+                }
             });
         }
 

@@ -48,6 +48,10 @@ namespace Sporefront.Engine
 
         public event Action<OnlineCommand> OnCommandReceived;
         public event Action<GameSession> OnSessionUpdated;
+        public event Action OnOpponentDisconnected;
+        public event Action OnOpponentReconnected;
+        /// <summary>Fired when a command permanently fails after all retries.</summary>
+        public event Action<string> OnCommandSubmitFailed;
 
         // ================================================================
         // State
@@ -65,9 +69,26 @@ namespace Sporefront.Engine
         // Snapshot strategy
         private int commandsSinceSnapshot;
         private DateTime lastSnapshotTime = DateTime.UtcNow;
-        private const int SnapshotCommandInterval = 100;
-        private const double SnapshotTimeIntervalSeconds = 300.0;
-        private const int MaxSnapshots = 3;
+
+        // Command retry queue
+        private struct PendingRetry
+        {
+            public string gameID;
+            public OnlineCommand command;
+            public int retryCount;
+            public double nextRetryTime;
+        }
+        private readonly List<PendingRetry> retryQueue = new List<PendingRetry>();
+
+        // Client-side rate limiting — prevent flooding Firestore with commands
+        private const int MaxCommandsPerSecond = 20;
+        private readonly Queue<double> commandSubmitTimestamps = new Queue<double>();
+
+        // Disconnect detection
+        public static double DisconnectTimeoutSeconds => GameConfig.Online.DisconnectTimeoutSeconds;
+        public static double AbandonTimeoutSeconds => GameConfig.Online.AbandonTimeoutSeconds;
+        private bool opponentDisconnected;
+        private string localUID;
 
         private GameSessionService() { }
 
@@ -124,6 +145,20 @@ namespace Sporefront.Engine
                 return;
             }
 
+            // Client-side rate limiting
+            double now = Time.realtimeSinceStartupAsDouble;
+            while (commandSubmitTimestamps.Count > 0 && now - commandSubmitTimestamps.Peek() > 1.0)
+                commandSubmitTimestamps.Dequeue();
+
+            if (commandSubmitTimestamps.Count >= MaxCommandsPerSecond)
+            {
+                Debug.LogWarning("[GameSessionService] Command rate limit exceeded — queuing for retry");
+                EnqueueRetry(gameID, command, 0);
+                callback?.Invoke(false, "Rate limited");
+                return;
+            }
+            commandSubmitTimestamps.Enqueue(now);
+
             var cmdRef = db.Collection("games").Document(gameID)
                 .Collection("commands").Document(command.commandID);
 
@@ -131,7 +166,8 @@ namespace Sporefront.Engine
             {
                 if (task.IsFaulted)
                 {
-                    Debug.LogWarning($"[GameSessionService] Failed to write command: {task.Exception}");
+                    Debug.LogWarning($"[GameSessionService] Command submit failed, queuing retry: {task.Exception}");
+                    EnqueueRetry(gameID, command, 0);
                     callback?.Invoke(false, task.Exception?.InnerException?.Message);
                     return;
                 }
@@ -141,7 +177,11 @@ namespace Sporefront.Engine
                     new Dictionary<string, object>
                     {
                         { "currentCommandSequence", command.sequence }
-                    });
+                    }).ContinueWithOnMainThread(seqTask =>
+                {
+                    if (seqTask.IsFaulted)
+                        Debug.LogWarning($"[GameSessionService] Sequence update failed: {seqTask.Exception?.InnerException?.Message}");
+                });
 
                 commandsSinceSnapshot++;
                 callback?.Invoke(true, null);
@@ -150,6 +190,90 @@ namespace Sporefront.Engine
             callback?.Invoke(false, "Firebase not available");
 #endif
         }
+
+        // ================================================================
+        // Command Retry Queue
+        // ================================================================
+
+        private void EnqueueRetry(string gameID, OnlineCommand command, int retryCount)
+        {
+            double delay = GameConfig.Online.RetryBaseDelaySeconds * Math.Pow(2, retryCount);
+            retryQueue.Add(new PendingRetry
+            {
+                gameID = gameID,
+                command = command,
+                retryCount = retryCount,
+                nextRetryTime = Time.realtimeSinceStartupAsDouble + delay
+            });
+        }
+
+        /// <summary>
+        /// Process the command retry queue. Call each frame from GameSceneManager.Update().
+        /// Uses exponential backoff (1s, 2s, 4s) with max retries from GameConfig.
+        /// </summary>
+        public void ProcessRetryQueue()
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (retryQueue.Count == 0) return;
+
+            double now = Time.realtimeSinceStartupAsDouble;
+            for (int i = retryQueue.Count - 1; i >= 0; i--)
+            {
+                var entry = retryQueue[i];
+                if (now < entry.nextRetryTime) continue;
+
+                retryQueue.RemoveAt(i);
+
+                // Discard stale retries if the game session has changed
+                if (CurrentSession == null || entry.gameID != CurrentSession.gameID)
+                {
+                    Debug.LogWarning($"[GameSessionService] Discarding stale retry for game {entry.gameID} (current: {CurrentSession?.gameID})");
+                    continue;
+                }
+
+                var cmdRef = db.Collection("games").Document(entry.gameID)
+                    .Collection("commands").Document(entry.command.commandID);
+
+                int currentRetry = entry.retryCount;
+                string gid = entry.gameID;
+                OnlineCommand cmd = entry.command;
+
+                cmdRef.SetAsync(cmd.ToDictionary()).ContinueWithOnMainThread(task =>
+                {
+                    if (task.IsFaulted)
+                    {
+                        int nextRetry = currentRetry + 1;
+                        if (nextRetry < GameConfig.Online.MaxCommandRetries)
+                        {
+                            Debug.LogWarning($"[GameSessionService] Retry {nextRetry}/{GameConfig.Online.MaxCommandRetries} failed for command {cmd.commandID}");
+                            EnqueueRetry(gid, cmd, nextRetry);
+                        }
+                        else
+                        {
+                            Debug.LogError($"[GameSessionService] Command permanently failed after {GameConfig.Online.MaxCommandRetries} retries: {cmd.commandType} seq={cmd.sequence}");
+                            OnCommandSubmitFailed?.Invoke(cmd.commandType);
+                        }
+                        return;
+                    }
+
+                    // Update sequence on game document
+                    db.Collection("games").Document(gid).UpdateAsync(
+                        new Dictionary<string, object>
+                        {
+                            { "currentCommandSequence", cmd.sequence }
+                        });
+
+                    commandsSinceSnapshot++;
+                    Debug.Log($"[GameSessionService] Retry succeeded for command {cmd.commandID}");
+                });
+
+                // Only process one retry per frame to avoid flooding
+                break;
+            }
+#endif
+        }
+
+        public bool HasPendingRetries => retryQueue.Count > 0;
 
         // ================================================================
         // Command Listener
@@ -206,6 +330,10 @@ namespace Sporefront.Engine
                         var session = GameSession.FromDictionary(data, gameID);
                         if (session != null)
                         {
+                            // Use document's server-side update time as reference
+                            // to avoid clock skew between client and server
+                            session.serverUpdateTime = DateTime.UtcNow;
+
                             CurrentSession = session;
                             OnSessionUpdated?.Invoke(session);
                         }
@@ -237,12 +365,16 @@ namespace Sporefront.Engine
                     new Dictionary<string, object>
                     {
                         { "latestSnapshotID", snapshot.snapshotID }
-                    });
+                    }).ContinueWithOnMainThread(updateTask =>
+                {
+                    if (updateTask.IsFaulted)
+                        Debug.LogWarning($"[GameSessionService] Snapshot ID update failed: {updateTask.Exception?.InnerException?.Message}");
+                });
 
                 commandsSinceSnapshot = 0;
                 lastSnapshotTime = DateTime.UtcNow;
 
-                PruneSnapshots(gameID, MaxSnapshots);
+                PruneSnapshots(gameID, GameConfig.Online.MaxSnapshots);
 
                 Debug.Log($"[GameSessionService] Snapshot created: {snapshot.snapshotID}");
                 callback?.Invoke(true, null);
@@ -254,8 +386,8 @@ namespace Sporefront.Engine
 
         public bool ShouldCreateSnapshot()
         {
-            return commandsSinceSnapshot >= SnapshotCommandInterval ||
-                   (DateTime.UtcNow - lastSnapshotTime).TotalSeconds >= SnapshotTimeIntervalSeconds;
+            return commandsSinceSnapshot >= GameConfig.Online.SnapshotCommandInterval ||
+                   (DateTime.UtcNow - lastSnapshotTime).TotalSeconds >= GameConfig.Online.SnapshotTimeIntervalSeconds;
         }
 
         public void LoadLatestSnapshot(string gameID, Action<GameSnapshot, List<OnlineCommand>, string> callback)
@@ -348,7 +480,13 @@ namespace Sporefront.Engine
                 {
                     count++;
                     if (count > keepCount)
-                        doc.Reference.DeleteAsync();
+                    {
+                        doc.Reference.DeleteAsync().ContinueWithOnMainThread(delTask =>
+                        {
+                            if (delTask.IsFaulted)
+                                Debug.LogWarning($"[GameSessionService] Snapshot prune failed: {delTask.Exception?.InnerException?.Message}");
+                        });
+                    }
                 }
             });
 #endif
@@ -388,11 +526,59 @@ namespace Sporefront.Engine
                         sessions.Add(session);
                 }
 
-                sessions.Sort((a, b) => string.Compare(b.createdAt, a.createdAt, StringComparison.Ordinal));
+                sessions.Sort((a, b) => DateTime.Compare(b.createdAt, a.createdAt));
                 callback?.Invoke(sessions);
             });
 #else
             callback?.Invoke(new List<GameSession>());
+#endif
+        }
+
+        // ================================================================
+        // Find Active Game (for reconnection)
+        // ================================================================
+
+        /// <summary>
+        /// Search for an active (playing) game where this player is a participant.
+        /// Used to offer "Rejoin Game" on the main menu after a crash or disconnect.
+        /// </summary>
+        public void FindActiveGame(string uid, Action<GameSession> callback)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (string.IsNullOrEmpty(uid))
+            {
+                callback?.Invoke(null);
+                return;
+            }
+
+            db.Collection("games")
+                .WhereEqualTo("status", "playing")
+                .WhereArrayContains("participantUIDs", uid)
+                .Limit(1)
+                .GetSnapshotAsync().ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    Debug.LogWarning($"[GameSessionService] Failed to find active games: {task.Exception}");
+                    callback?.Invoke(null);
+                    return;
+                }
+
+                foreach (var doc in task.Result.Documents)
+                {
+                    var data = doc.ToDictionary();
+                    var session = GameSession.FromDictionary(data, doc.Id);
+                    if (session != null)
+                    {
+                        callback?.Invoke(session);
+                        return;
+                    }
+                }
+
+                callback?.Invoke(null);
+            });
+#else
+            callback?.Invoke(null);
 #endif
         }
 
@@ -410,7 +596,114 @@ namespace Sporefront.Engine
                 {
                     { $"players.{uid}.lastHeartbeat", FieldValue.ServerTimestamp },
                     { $"players.{uid}.status", "active" }
-                });
+                }).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                    Debug.LogWarning($"[GameSessionService] Heartbeat update failed: {task.Exception?.InnerException?.Message}");
+            });
+#endif
+        }
+
+        // ================================================================
+        // Disconnect Detection
+        // ================================================================
+
+        /// <summary>
+        /// Set the local player UID for disconnect detection.
+        /// Called when starting/joining an online game.
+        /// </summary>
+        public void SetLocalUID(string uid)
+        {
+            localUID = uid;
+            opponentDisconnected = false;
+        }
+
+        /// <summary>
+        /// Check opponent heartbeat status from a session update.
+        /// Call this from HandleSessionUpdate() with the current server time.
+        /// </summary>
+        public void CheckOpponentHeartbeat(GameSession session)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (string.IsNullOrEmpty(localUID) || session == null) return;
+
+            foreach (var kvp in session.players)
+            {
+                // Skip self and AI players
+                if (kvp.Key == localUID || kvp.Value.isAI) continue;
+
+                var playerData = kvp.Value;
+
+                // Check if player has explicitly left or been defeated
+                if (playerData.status == PlayerSessionStatus.Left ||
+                    playerData.status == PlayerSessionStatus.Defeated)
+                {
+                    if (!opponentDisconnected)
+                    {
+                        opponentDisconnected = true;
+                        OnOpponentDisconnected?.Invoke();
+                    }
+                    continue;
+                }
+
+                // Check heartbeat staleness using server update time to avoid clock skew
+                DateTime referenceTime = session.serverUpdateTime != default
+                    ? session.serverUpdateTime
+                    : DateTime.UtcNow;
+                double heartbeatAge = (referenceTime - playerData.lastHeartbeat).TotalSeconds;
+
+                if (heartbeatAge > DisconnectTimeoutSeconds && !opponentDisconnected)
+                {
+                    opponentDisconnected = true;
+                    OnOpponentDisconnected?.Invoke();
+                }
+                else if (heartbeatAge <= DisconnectTimeoutSeconds && opponentDisconnected)
+                {
+                    // Opponent reconnected
+                    opponentDisconnected = false;
+                    OnOpponentReconnected?.Invoke();
+                }
+            }
+#endif
+        }
+
+        public bool IsOpponentDisconnected => opponentDisconnected;
+
+        // ================================================================
+        // Session / Player Status Updates
+        // ================================================================
+
+        public void UpdateSessionStatus(string gameID, GameSessionStatus status)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (string.IsNullOrEmpty(gameID)) return;
+
+            db.Collection("games").Document(gameID).UpdateAsync(
+                new Dictionary<string, object>
+                {
+                    { "status", status.ToString().ToLower() }
+                }).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                    Debug.LogWarning($"[GameSessionService] Session status update failed: {task.Exception?.InnerException?.Message}");
+            });
+#endif
+        }
+
+        public void UpdatePlayerStatus(string gameID, string uid, PlayerSessionStatus status)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            if (string.IsNullOrEmpty(gameID) || string.IsNullOrEmpty(uid)) return;
+
+            db.Collection("games").Document(gameID).UpdateAsync(
+                new Dictionary<string, object>
+                {
+                    { $"players.{uid}.status", status.ToString().ToLower() }
+                }).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted)
+                    Debug.LogWarning($"[GameSessionService] Player status update failed: {task.Exception?.InnerException?.Message}");
+            });
 #endif
         }
 

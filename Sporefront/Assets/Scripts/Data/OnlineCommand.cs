@@ -54,6 +54,8 @@ namespace Sporefront.Data
         public string payload; // base64-encoded JSON
         public string createdAt; // ISO 8601 string (JsonUtility cannot serialize DateTime)
         public bool isAICommand;
+        public string senderUID; // Firebase Auth UID of the submitting client
+        public long stateHash;   // Periodic state hash for desync detection (0 = not included)
 
         // ================================================================
         // Create from IEngineCommand (player commands)
@@ -181,7 +183,7 @@ namespace Sporefront.Data
 
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var dict = new Dictionary<string, object>
             {
                 { "sequence", sequence },
                 { "commandID", commandID },
@@ -192,6 +194,11 @@ namespace Sporefront.Data
                 { "createdAt", createdAt },
                 { "isAICommand", isAICommand }
             };
+            if (!string.IsNullOrEmpty(senderUID))
+                dict["senderUID"] = senderUID;
+            if (stateHash != 0)
+                dict["stateHash"] = stateHash;
+            return dict;
         }
 
         public static OnlineCommand FromDictionary(Dictionary<string, object> data)
@@ -225,6 +232,15 @@ namespace Sporefront.Data
 
             cmd.isAICommand = data.ContainsKey("isAICommand")
                 && data["isAICommand"] is bool b && b;
+
+            cmd.senderUID = data.ContainsKey("senderUID")
+                ? data["senderUID"] as string : null;
+
+            if (data.ContainsKey("stateHash"))
+            {
+                try { cmd.stateHash = Convert.ToInt64(data["stateHash"]); }
+                catch { cmd.stateHash = 0; }
+            }
 
             return cmd;
         }

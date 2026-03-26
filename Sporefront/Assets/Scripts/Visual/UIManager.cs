@@ -29,6 +29,8 @@ namespace Sporefront.Visual
         public event Action<ArenaConfig> OnPlayArenaGame;
         public event Action<string> OnLoadGame;
         public event Action<Guid, bool> OnEntityFocused; // (entityID, isArmy)
+        public event Action OnSurrenderRequested;
+        public event Action OnRejoinGame;
 
         // ================================================================
         // Core HUD Panels
@@ -661,6 +663,11 @@ namespace Sporefront.Visual
             mainMenu.OnAbout += () => { about.Show(); };
             mainMenu.OnEvolveAI += () => { mainMenu.Hide(); evolution.Show(); };
             mainMenu.OnSpectateAI += () => { mainMenu.Hide(); genomeSelection.Show(); };
+            mainMenu.OnRejoinGame += () =>
+            {
+                mainMenu.Hide();
+                OnRejoinGame?.Invoke();
+            };
 
             // ---- ResourceBarPanel (top-right buttons) ----
             resourceBar.OnNotificationClicked += () => notificationInbox.Show();
@@ -689,6 +696,10 @@ namespace Sporefront.Visual
                 resourceBar.Hide();
                 tendrilWheelHUD.Hide();
                 mainMenu.Show();
+            };
+            inGameMenu.OnSurrender += () =>
+            {
+                OnSurrenderRequested?.Invoke();
             };
 
             // ---- TendrilWheelHUD (bottom corner wheels) ----
@@ -743,7 +754,7 @@ namespace Sporefront.Visual
             matchmaking.OnBack += () =>
             {
                 matchmaking.Hide();
-                gameSetup.Show();
+                mainMenu.Show();
             };
             matchmaking.OnGameReady += (matchResult) =>
             {
@@ -1244,6 +1255,21 @@ namespace Sporefront.Visual
             entityRenderer.UpdateEntities(state);
             entrenchmentRenderer?.UpdateEntrenchment(state, localPlayerID);
             entityTendrilRenderer?.UpdateTendrils(state, localPlayerID);
+        }
+
+        public void SetOnlineMode(bool online)
+        {
+            inGameMenu.SetOnlineMode(online);
+        }
+
+        public void SetRejoinVisible(bool visible)
+        {
+            mainMenu.SetRejoinVisible(visible);
+        }
+
+        public void SetMainMenuStatus(string text, Color? color = null)
+        {
+            mainMenu.SetStatusText(text, color);
         }
 
         public void ShowMainMenu() => mainMenu.Show();

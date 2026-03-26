@@ -1,3 +1,7 @@
+---
+description: New Faction Implementation Guide
+---
+
 # New Faction Implementation Guide
 
 This skill walks through every file and method that needs updating when adding a new faction to Sporefront. Follow each phase in order — later phases depend on earlier ones compiling.

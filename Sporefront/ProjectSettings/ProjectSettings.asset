@@ -583,7 +583,12 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: FIREBASE_AUTH;FIREBASE_FIRESTORE
+    Standalone: FIREBASE_AUTH;FIREBASE_FIRESTORE
+    WebGL: FIREBASE_AUTH;FIREBASE_FIRESTORE
+    iPhone: FIREBASE_AUTH;FIREBASE_FIRESTORE
+    Server: FIREBASE_AUTH;FIREBASE_FIRESTORE
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:
