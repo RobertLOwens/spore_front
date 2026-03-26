@@ -1,11 +1,13 @@
 // ============================================================================
 // FILE: Visual/AuthPanel.cs
 // PURPOSE: Full-screen sign in / register panel with email + password fields.
-//          Two modes toggled by a link-style button.
+//          Parchment-themed UI matching GameSetupPanel style with tendrils,
+//          warm input fields, and elegant layout.
 // ============================================================================
 
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Sporefront.Engine;
 
@@ -24,12 +26,11 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
 
         private InputField emailInput;
         private InputField passwordInput;
         private InputField confirmPasswordInput;
-        private GameObject confirmPasswordRow;
+        private GameObject confirmPasswordGroup;
         private Text statusLabel;
         private Button submitButton;
         private Text submitButtonLabel;
@@ -37,6 +38,7 @@ namespace Sporefront.Visual
         private Text toggleLabel;
         private Button forgotPasswordButton;
         private GameObject forgotPasswordRow;
+        private Button googleButton;
 
         private bool isRegisterMode;
         private bool isProcessing;
@@ -47,10 +49,17 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            panel = UIHelper.CreatePanel(canvasTransform, "AuthPanel", SporefrontColors.ParchmentDeep);
+            // Full-screen parchment panel (same base as GameSetupPanel)
+            panel = UIHelper.CreatePanel(canvasTransform, "AuthPanel",
+                SporefrontColors.ParchmentMid, cornerRadius: 0);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
-            PopupTendrilDecorator.Attach(panelRT);
+
+            // Mycelium corner tendrils (same decorator used on modals)
+            PopupTendrilDecorator.Attach(panelRT, seed: 77);
+
+            // Parchment overlay on top of tendrils, below content
+            UIHelper.AddParchmentOverlay(panel.transform, 0.25f);
 
             BuildContent();
             panel.SetActive(false);
@@ -82,119 +91,244 @@ namespace Sporefront.Visual
 
         private void BuildContent()
         {
-            // Center column
-            var centerColumn = UIHelper.CreatePanel(panel.transform, "CenterColumn", Color.clear);
+            // Center column — same pattern as GameSetupPanel mode select
+            var centerColumn = new GameObject("CenterColumn", typeof(RectTransform));
+            centerColumn.transform.SetParent(panel.transform, false);
             var columnRT = centerColumn.GetComponent<RectTransform>();
             columnRT.anchorMin = new Vector2(0.5f, 0f);
             columnRT.anchorMax = new Vector2(0.5f, 1f);
             columnRT.pivot = new Vector2(0.5f, 0.5f);
-            float columnWidth = 340f;
+            float columnWidth = 420f;
             columnRT.sizeDelta = new Vector2(columnWidth, 0f);
             columnRT.offsetMin = new Vector2(-columnWidth / 2f, 0f);
             columnRT.offsetMax = new Vector2(columnWidth / 2f, 0f);
 
             var vlg = centerColumn.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 10f;
+            vlg.spacing = 4f;
             vlg.childAlignment = TextAnchor.UpperCenter;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
-            vlg.padding = new RectOffset(20, 20, 0, 0);
+            vlg.childControlHeight = true;
+            vlg.padding = new RectOffset(30, 30, 0, 0);
 
-            // Top spacer
+            // Top flexible spacer
             AddSpacer(centerColumn.transform, 0f, true);
 
-            // Title
-            var title = UIHelper.CreateLabel(centerColumn.transform, "SPOREFRONT",
-                32, SporefrontColors.ParchmentLight, TextAnchor.MiddleCenter, true);
+            // ── Title ──
+            var title = UIHelper.CreateLabel(centerColumn.transform, "S P O R E F R O N T",
+                48, SporefrontColors.InkDark, TextAnchor.MiddleCenter, true);
+            title.horizontalOverflow = HorizontalWrapMode.Overflow;
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
-            titleLE.preferredHeight = 60f;
+            titleLE.preferredHeight = 70f;
 
             // Subtitle
             var subtitle = UIHelper.CreateLabel(centerColumn.transform, "Sign in to play",
-                16, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
+                UIConstants.FontSubheader, SporefrontColors.InkMid, TextAnchor.MiddleCenter);
             var subtitleLE = subtitle.gameObject.AddComponent<LayoutElement>();
-            subtitleLE.preferredHeight = 28f;
+            subtitleLE.preferredHeight = 30f;
 
-            AddSpacer(centerColumn.transform, 20f);
+            AddSpacer(centerColumn.transform, 16f);
 
-            // Email field
-            UIHelper.CreateLabel(centerColumn.transform, "Email",
-                UIConstants.FontSmall, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
-            emailInput = CreateInputField(centerColumn.transform, "Enter email...");
+            // ── Form card with semi-transparent backdrop ──
+            var cardGO = UIHelper.CreatePanel(centerColumn.transform, "FormCard",
+                new Color(SporefrontColors.ParchmentDark.r,
+                          SporefrontColors.ParchmentDark.g,
+                          SporefrontColors.ParchmentDark.b, 0.50f), cornerRadius: 0);
+            var cardOutline = cardGO.GetComponent<Outline>();
+            if (cardOutline != null) UnityEngine.Object.Destroy(cardOutline);
+
+            var cardVLG = cardGO.AddComponent<VerticalLayoutGroup>();
+            cardVLG.spacing = 4f;
+            cardVLG.childAlignment = TextAnchor.UpperCenter;
+            cardVLG.childForceExpandWidth = true;
+            cardVLG.childForceExpandHeight = false;
+            cardVLG.childControlWidth = true;
+            cardVLG.childControlHeight = true;
+            cardVLG.padding = new RectOffset(24, 24, 20, 20);
+
+            var cardCSF = cardGO.AddComponent<ContentSizeFitter>();
+            cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Email label
+            var emailLabel = UIHelper.CreateLabel(cardGO.transform, "Email",
+                UIConstants.FontBody, SporefrontColors.InkDark, TextAnchor.MiddleLeft);
+            var emailLabelLE = emailLabel.gameObject.AddComponent<LayoutElement>();
+            emailLabelLE.preferredHeight = 26f;
+
+            // Email input
+            emailInput = CreateStyledInputField(cardGO.transform, "Enter email...");
             emailInput.contentType = InputField.ContentType.EmailAddress;
 
-            AddSpacer(centerColumn.transform, 4f);
+            AddSpacer(cardGO.transform, 8f);
 
-            // Password field
-            UIHelper.CreateLabel(centerColumn.transform, "Password",
-                UIConstants.FontSmall, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
-            passwordInput = CreateInputField(centerColumn.transform, "Enter password...");
+            // Password label
+            var passLabel = UIHelper.CreateLabel(cardGO.transform, "Password",
+                UIConstants.FontBody, SporefrontColors.InkDark, TextAnchor.MiddleLeft);
+            var passLabelLE = passLabel.gameObject.AddComponent<LayoutElement>();
+            passLabelLE.preferredHeight = 26f;
+
+            // Password input
+            passwordInput = CreateStyledInputField(cardGO.transform, "Enter password...");
             passwordInput.contentType = InputField.ContentType.Password;
 
-            // Confirm password (register only)
-            confirmPasswordRow = new GameObject("ConfirmPasswordRow", typeof(RectTransform));
-            confirmPasswordRow.transform.SetParent(centerColumn.transform, false);
-            var cpVLG = confirmPasswordRow.AddComponent<VerticalLayoutGroup>();
+            // ── Confirm password group (register mode only) ──
+            confirmPasswordGroup = new GameObject("ConfirmPasswordGroup", typeof(RectTransform));
+            confirmPasswordGroup.transform.SetParent(cardGO.transform, false);
+            var cpVLG = confirmPasswordGroup.AddComponent<VerticalLayoutGroup>();
             cpVLG.spacing = 4f;
             cpVLG.childForceExpandWidth = true;
             cpVLG.childForceExpandHeight = false;
             cpVLG.childControlWidth = true;
-            cpVLG.childControlHeight = false;
-            var cpLE = confirmPasswordRow.AddComponent<LayoutElement>();
-            cpLE.preferredHeight = 56f;
+            cpVLG.childControlHeight = true;
+            var cpCSF = confirmPasswordGroup.AddComponent<ContentSizeFitter>();
+            cpCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            AddSpacer(confirmPasswordRow.transform, 4f);
-            UIHelper.CreateLabel(confirmPasswordRow.transform, "Confirm Password",
-                UIConstants.FontSmall, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
-            confirmPasswordInput = CreateInputField(confirmPasswordRow.transform, "Confirm password...");
+            AddSpacer(confirmPasswordGroup.transform, 8f);
+
+            var confirmLabel = UIHelper.CreateLabel(confirmPasswordGroup.transform, "Confirm Password",
+                UIConstants.FontBody, SporefrontColors.InkDark, TextAnchor.MiddleLeft);
+            var confirmLabelLE = confirmLabel.gameObject.AddComponent<LayoutElement>();
+            confirmLabelLE.preferredHeight = 26f;
+
+            confirmPasswordInput = CreateStyledInputField(confirmPasswordGroup.transform, "Confirm password...");
             confirmPasswordInput.contentType = InputField.ContentType.Password;
 
-            AddSpacer(centerColumn.transform, 6f);
+            AddSpacer(cardGO.transform, 6f);
 
-            // Status label
-            statusLabel = UIHelper.CreateLabel(centerColumn.transform, "",
-                UIConstants.FontCaption, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+            // ── Status label ──
+            statusLabel = UIHelper.CreateLabel(cardGO.transform, "",
+                UIConstants.FontSmall, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
-            statusLE.preferredHeight = 20f;
+            statusLE.preferredHeight = 22f;
 
-            AddSpacer(centerColumn.transform, 6f);
+            AddSpacer(cardGO.transform, 4f);
 
-            // Submit button
-            submitButton = UIHelper.CreateButton(centerColumn.transform, "Sign In",
-                SporefrontColors.SporeGreen, UIHelper.HudTextColor,
-                UIHelper.DefaultBodyFontSize + 2, OnSubmitClicked);
+            // ── Submit button ──
+            submitButton = UIHelper.CreateButton(cardGO.transform, "Sign In",
+                SporefrontColors.InkDark, SporefrontColors.ParchmentLight,
+                UIConstants.FontBody + 2, OnSubmitClicked);
             var submitLE = submitButton.gameObject.AddComponent<LayoutElement>();
-            submitLE.preferredHeight = 44f;
+            submitLE.preferredHeight = 48f;
             submitButtonLabel = submitButton.GetComponentInChildren<Text>();
 
-            AddSpacer(centerColumn.transform, 4f);
-
-            // Forgot password (sign in only)
+            // ── Forgot password (sign in only) ──
             forgotPasswordRow = new GameObject("ForgotPasswordRow", typeof(RectTransform));
-            forgotPasswordRow.transform.SetParent(centerColumn.transform, false);
+            forgotPasswordRow.transform.SetParent(cardGO.transform, false);
             var fpLE = forgotPasswordRow.AddComponent<LayoutElement>();
-            fpLE.preferredHeight = 24f;
+            fpLE.preferredHeight = 36f;
 
             forgotPasswordButton = UIHelper.CreateButton(forgotPasswordRow.transform, "Forgot Password?",
-                Color.clear, SporefrontColors.SporeTeal, UIConstants.FontCaption, OnForgotPasswordClicked);
+                Color.clear, SporefrontColors.InkBlack, UIConstants.FontBody, OnForgotPasswordClicked);
             var fpBtnRT = forgotPasswordButton.GetComponent<RectTransform>();
             UIHelper.StretchFull(fpBtnRT);
+            // Underline-style: make text clearly clickable
+            var fpText = forgotPasswordButton.GetComponentInChildren<Text>();
+            fpText.fontStyle = FontStyle.BoldAndItalic;
+            AddTextHover(forgotPasswordButton.gameObject, fpText,
+                SporefrontColors.InkBlack, SporefrontColors.SporeRed);
 
-            AddSpacer(centerColumn.transform, 10f);
-            UIHelper.CreateDivider(centerColumn.transform, UIHelper.InkMutedText, 1f);
-            AddSpacer(centerColumn.transform, 10f);
+            // ── End of card ──
 
-            // Toggle button
-            toggleButton = UIHelper.CreateButton(centerColumn.transform, "Don't have an account? Register",
-                Color.clear, UIHelper.InkMutedText, UIConstants.FontSmall, OnToggleClicked);
+            AddSpacer(centerColumn.transform, 12f);
+
+            // ── "or" divider ──
+            BuildOrDivider(centerColumn.transform);
+
+            AddSpacer(centerColumn.transform, 12f);
+
+            // ── Google Sign-In button (mobile only) ──
+            googleButton = UIHelper.CreateButton(centerColumn.transform,
+                "Sign in with Google",
+                SporefrontColors.ParchmentDark, SporefrontColors.InkDark,
+                UIConstants.FontBody, OnGoogleSignInClicked);
+            var googleLE = googleButton.gameObject.AddComponent<LayoutElement>();
+            googleLE.preferredHeight = 48f;
+
+            // Hide on desktop/editor — Firebase federated auth requires mobile platform
+            if (Application.platform != RuntimePlatform.Android &&
+                Application.platform != RuntimePlatform.IPhonePlayer)
+            {
+                googleButton.gameObject.SetActive(false);
+            }
+
+            AddSpacer(centerColumn.transform, 12f);
+
+            // ── Divider ──
+            UIHelper.CreateDivider(centerColumn.transform,
+                new Color(SporefrontColors.InkFaded.r,
+                          SporefrontColors.InkFaded.g,
+                          SporefrontColors.InkFaded.b, 0.3f), 1f);
+
+            AddSpacer(centerColumn.transform, 8f);
+
+            // ── Toggle sign in / register ──
+            toggleButton = UIHelper.CreateButton(centerColumn.transform,
+                "Don't have an account? Register",
+                SporefrontColors.ParchmentDark, SporefrontColors.InkBlack,
+                UIConstants.FontBody + 2, OnToggleClicked);
             toggleLabel = toggleButton.GetComponentInChildren<Text>();
+            toggleLabel.fontStyle = FontStyle.Bold;
             var toggleLE = toggleButton.gameObject.AddComponent<LayoutElement>();
-            toggleLE.preferredHeight = 30f;
+            toggleLE.preferredHeight = 44f;
+            AddTextHover(toggleButton.gameObject, toggleLabel,
+                SporefrontColors.InkBlack, SporefrontColors.SporeRed);
 
-            // Bottom spacer
+            // Bottom flexible spacer
             AddSpacer(centerColumn.transform, 0f, true);
+        }
+
+        // ================================================================
+        // Styled Input Field (parchment-themed)
+        // ================================================================
+
+        private InputField CreateStyledInputField(Transform parent, string placeholder)
+        {
+            // Warm, slightly recessed input field — parchment tones instead of dark HUD
+            var bgColor = new Color(
+                SporefrontColors.ParchmentDeep.r * 0.85f,
+                SporefrontColors.ParchmentDeep.g * 0.85f,
+                SporefrontColors.ParchmentDeep.b * 0.85f,
+                0.70f);
+
+            var inputBG = UIHelper.CreatePanel(parent, "InputBG", bgColor, UIHelper.SmallCornerRadius);
+            var inputBGLE = inputBG.AddComponent<LayoutElement>();
+            inputBGLE.preferredHeight = 44f;
+
+            // Tweak the outline to a warm subtle border
+            var outline = inputBG.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.25f);
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+
+            var input = inputBG.AddComponent<InputField>();
+
+            // Placeholder text
+            var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
+                UIConstants.FontBody, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+            var placeholderRT = placeholderText.GetComponent<RectTransform>();
+            UIHelper.StretchFull(placeholderRT);
+            placeholderRT.offsetMin = new Vector2(12, 0);
+            placeholderRT.offsetMax = new Vector2(-12, 0);
+
+            // Input text (dark ink on parchment)
+            var textComponent = UIHelper.CreateLabel(inputBG.transform, "",
+                UIConstants.FontBody, SporefrontColors.InkBlack, TextAnchor.MiddleLeft);
+            var textRT = textComponent.GetComponent<RectTransform>();
+            UIHelper.StretchFull(textRT);
+            textRT.offsetMin = new Vector2(12, 0);
+            textRT.offsetMax = new Vector2(-12, 0);
+            textComponent.raycastTarget = true;
+
+            input.textComponent = textComponent;
+            input.placeholder = placeholderText;
+
+            return input;
         }
 
         // ================================================================
@@ -205,14 +339,14 @@ namespace Sporefront.Visual
         {
             if (isRegisterMode)
             {
-                confirmPasswordRow.SetActive(true);
+                confirmPasswordGroup.SetActive(true);
                 forgotPasswordRow.SetActive(false);
                 submitButtonLabel.text = "Register";
                 toggleLabel.text = "Already have an account? Sign In";
             }
             else
             {
-                confirmPasswordRow.SetActive(false);
+                confirmPasswordGroup.SetActive(false);
                 forgotPasswordRow.SetActive(true);
                 submitButtonLabel.text = "Sign In";
                 toggleLabel.text = "Don't have an account? Register";
@@ -253,7 +387,7 @@ namespace Sporefront.Visual
 
                 isProcessing = true;
                 submitButton.interactable = false;
-                ShowStatus("Creating account...", UIHelper.InkMutedText);
+                ShowStatus("Creating account...", SporefrontColors.InkFaded);
 
                 AuthService.Instance.SignUp(email, password, (success, error) =>
                 {
@@ -274,7 +408,7 @@ namespace Sporefront.Visual
             {
                 isProcessing = true;
                 submitButton.interactable = false;
-                ShowStatus("Signing in...", UIHelper.InkMutedText);
+                ShowStatus("Signing in...", SporefrontColors.InkFaded);
 
                 AuthService.Instance.SignIn(email, password, (success, error) =>
                 {
@@ -302,13 +436,49 @@ namespace Sporefront.Visual
                 return;
             }
 
-            ShowStatus("Sending reset email...", UIHelper.InkMutedText);
+            ShowStatus("Sending reset email...", SporefrontColors.InkFaded);
             AuthService.Instance.SendPasswordReset(email, (success, error) =>
             {
                 if (success)
                     ShowStatus("Reset email sent! Check your inbox.", SporefrontColors.SporeGreen);
                 else
                     ShowStatus(error ?? "Failed to send reset email.", SporefrontColors.SporeRed);
+            });
+        }
+
+        private void OnGoogleSignInClicked()
+        {
+            if (isProcessing) return;
+
+            // Google Sign-In via Firebase federated auth only works on mobile (iOS/Android).
+            // On desktop/Editor, show a helpful message directing users to email/password.
+            if (Application.platform != RuntimePlatform.Android &&
+                Application.platform != RuntimePlatform.IPhonePlayer)
+            {
+                ShowStatus("Google sign-in is only available on mobile. Please use email/password.",
+                    SporefrontColors.InkFaded);
+                return;
+            }
+
+            isProcessing = true;
+            submitButton.interactable = false;
+            googleButton.interactable = false;
+            ShowStatus("Signing in with Google...", SporefrontColors.InkFaded);
+
+            AuthService.Instance.SignInWithGoogle((success, error) =>
+            {
+                isProcessing = false;
+                submitButton.interactable = true;
+                googleButton.interactable = true;
+
+                if (success)
+                {
+                    OnAuthSuccess?.Invoke();
+                }
+                else
+                {
+                    ShowStatus(error ?? "Google sign in failed.", SporefrontColors.SporeRed);
+                }
             });
         }
 
@@ -339,32 +509,6 @@ namespace Sporefront.Visual
             if (statusLabel != null) statusLabel.text = "";
         }
 
-        private InputField CreateInputField(Transform parent, string placeholder)
-        {
-            var inputBG = UIHelper.CreatePanel(parent, "InputBG", UIHelper.HudBg);
-            var inputBGLE = inputBG.AddComponent<LayoutElement>();
-            inputBGLE.preferredHeight = 36f;
-
-            var input = inputBG.AddComponent<InputField>();
-
-            var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
-                13, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
-            var placeholderRT = placeholderText.GetComponent<RectTransform>();
-            UIHelper.StretchFull(placeholderRT);
-            placeholderRT.offsetMin = new Vector2(8, 0);
-
-            var textComponent = UIHelper.CreateLabel(inputBG.transform, "",
-                13, UIHelper.HudTextColor, TextAnchor.MiddleLeft);
-            var textRT = textComponent.GetComponent<RectTransform>();
-            UIHelper.StretchFull(textRT);
-            textRT.offsetMin = new Vector2(8, 0);
-
-            input.textComponent = textComponent;
-            input.placeholder = placeholderText;
-
-            return input;
-        }
-
         private void AddSpacer(Transform parent, float height, bool flexible = false)
         {
             var spacer = new GameObject("Spacer", typeof(RectTransform), typeof(LayoutElement));
@@ -375,5 +519,50 @@ namespace Sporefront.Visual
             else
                 le.preferredHeight = height;
         }
+
+        private void BuildOrDivider(Transform parent)
+        {
+            var dividerColor = new Color(
+                SporefrontColors.InkFaded.r,
+                SporefrontColors.InkFaded.g,
+                SporefrontColors.InkFaded.b, 0.3f);
+
+            var row = new GameObject("OrDivider", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            row.transform.SetParent(parent, false);
+            var rowHLG = row.GetComponent<HorizontalLayoutGroup>();
+            rowHLG.spacing = 12f;
+            rowHLG.childAlignment = TextAnchor.MiddleCenter;
+            rowHLG.childForceExpandWidth = false;
+            rowHLG.childForceExpandHeight = false;
+            rowHLG.childControlWidth = true;
+            rowHLG.childControlHeight = true;
+            var rowLE = row.AddComponent<LayoutElement>();
+            rowLE.preferredHeight = 20f;
+
+            // Left line (CreateDivider already adds LayoutElement with flexibleWidth)
+            UIHelper.CreateDivider(row.transform, dividerColor, 1f);
+
+            // "or" label
+            var orLabel = UIHelper.CreateLabel(row.transform, "or",
+                UIConstants.FontSmall, SporefrontColors.InkFaded, TextAnchor.MiddleCenter);
+            var orLE = orLabel.gameObject.AddComponent<LayoutElement>();
+            orLE.preferredWidth = 24f;
+            orLE.preferredHeight = 20f;
+
+            // Right line
+            UIHelper.CreateDivider(row.transform, dividerColor, 1f);
+        }
+
+        private void AddTextHover(GameObject target, Text label, Color normal, Color hover)
+        {
+            var trigger = target.AddComponent<EventTrigger>();
+            var enterEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            enterEntry.callback.AddListener((_) => { if (label != null) label.color = hover; });
+            trigger.triggers.Add(enterEntry);
+            var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exitEntry.callback.AddListener((_) => { if (label != null) label.color = normal; });
+            trigger.triggers.Add(exitEntry);
+        }
+
     }
 }

@@ -21,6 +21,7 @@ namespace Sporefront.Visual
 
         public event Action OnNewGame;
         public event Action OnResumeGame;
+        public event Action OnRejoinGame;
         public event Action OnLoadGame;
         public event Action OnSettings;
         public event Action OnEvolveAI;
@@ -40,6 +41,8 @@ namespace Sporefront.Visual
         private Texture2D hoverGradientTexture;
         private GameObject mainPage;
         private GameObject morePage;
+        private GameObject rejoinButton;
+        private Text statusLabel;
 
         // Intro animation
         private RectTransform titleRT;
@@ -108,6 +111,38 @@ namespace Sporefront.Visual
         }
 
         public bool IsVisible => panel != null && panel.activeSelf;
+
+        public void SetRejoinVisible(bool visible)
+        {
+            if (rejoinButton != null)
+                rejoinButton.SetActive(visible);
+        }
+
+        /// <summary>
+        /// Show a status message at the bottom of the menu (e.g., "Joining game..." or error text).
+        /// Pass null or empty to clear.
+        /// </summary>
+        public void SetStatusText(string text, Color? color = null)
+        {
+            if (statusLabel == null && panel != null)
+            {
+                statusLabel = UIHelper.CreateLabel(panel.transform, "",
+                    UIConstants.FontCaption, SporefrontColors.ParchmentLight,
+                    TextAnchor.MiddleCenter);
+                var rt = statusLabel.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0.1f, 0.02f);
+                rt.anchorMax = new Vector2(0.9f, 0.08f);
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+            }
+
+            if (statusLabel != null)
+            {
+                statusLabel.text = text ?? "";
+                statusLabel.color = color ?? SporefrontColors.ParchmentLight;
+                statusLabel.gameObject.SetActive(!string.IsNullOrEmpty(text));
+            }
+        }
 
         public RectTransform PanelRT => panel?.GetComponent<RectTransform>();
 
@@ -266,6 +301,11 @@ namespace Sporefront.Visual
 
             CreateTextMenuItem(mainPage.transform, "Resume Game",
                 SporefrontColors.InkDark, () => OnResumeGame?.Invoke());
+
+            var rejoinBtn = CreateTextMenuItem(mainPage.transform, "Rejoin Online Game",
+                SporefrontColors.SporeGreen, () => OnRejoinGame?.Invoke());
+            rejoinButton = rejoinBtn.gameObject;
+            rejoinButton.SetActive(false); // Hidden by default, shown when active game found
 
             CreateTextMenuItem(mainPage.transform, "Load Game",
                 SporefrontColors.InkDark, () => OnLoadGame?.Invoke());

@@ -23,6 +23,16 @@ namespace Sporefront.Commands
             this.assignedVillagerGroupID = assignedVillagerGroupID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public BuildCommand(Guid id, Guid playerID, double timestamp, BuildingType buildingType, HexCoordinate coordinate, int rotation, Guid? assignedVillagerGroupID)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingType = buildingType;
+            this.coordinate = coordinate;
+            this.rotation = rotation;
+            this.assignedVillagerGroupID = assignedVillagerGroupID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Check player exists

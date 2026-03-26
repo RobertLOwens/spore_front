@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.composition = composition;
         }
 
+        // Reconstruction constructor for online deserialization
+        public DeployArmyCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, Dictionary<MilitaryUnitType, int> composition)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.composition = composition;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var building = state.GetBuilding(buildingID);
@@ -139,6 +147,14 @@ namespace Sporefront.Commands
 
         public DeployVillagersCommand(Guid playerID, Guid buildingID, int count)
             : base(playerID)
+        {
+            this.buildingID = buildingID;
+            this.count = count;
+        }
+
+        // Reconstruction constructor for online deserialization
+        public DeployVillagersCommand(Guid id, Guid playerID, double timestamp, Guid buildingID, int count)
+            : base(id, playerID, timestamp)
         {
             this.buildingID = buildingID;
             this.count = count;

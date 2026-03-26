@@ -71,13 +71,13 @@ namespace Sporefront.Data
         [System.NonSerialized] public Guid? combatTargetID;
         public HexCoordinate? pendingAttackTarget;
 
-        // Poison state (transient — applied during/after combat by Toxic Strikes)
-        [System.NonSerialized] public PoisonState activePoisonState;
+        // Poison state (persisted — Muscaria Toxic Strikes DoT survives save/load)
+        public PoisonState activePoisonState;
 
-        // Entrenchment state (transient)
-        [System.NonSerialized] public bool isEntrenching;
-        [System.NonSerialized] public bool isEntrenched;
-        [System.NonSerialized] public double? entrenchmentStartTime;
+        // Entrenchment state (bools/time persisted; coverage tiles rebuilt on load)
+        public bool isEntrenching;
+        public bool isEntrenched;
+        public double? entrenchmentStartTime;
         [System.NonSerialized] public HashSet<HexCoordinate> entrenchedCoveredTiles;
 
         // Arrival time (transient)

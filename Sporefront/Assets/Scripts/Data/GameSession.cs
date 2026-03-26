@@ -100,7 +100,7 @@ namespace Sporefront.Data
             return new Dictionary<string, object>
             {
                 { "mapType", mapType },
-                { "seed", (long)seed },  // Network layer may not support ulong directly
+                { "seed", seed.ToString() },  // Stored as string to avoid ulong→long overflow
                 { "width", width },
                 { "height", height },
                 { "treePocketCount", treePocketCount },
@@ -117,8 +117,15 @@ namespace Sporefront.Data
         public static MapGenerationConfig FromDictionary(Dictionary<string, object> data)
         {
             string mapType = data.ContainsKey("mapType") ? data["mapType"] as string ?? "arabia" : "arabia";
-            long seedInt64 = data.ContainsKey("seed") ? Convert.ToInt64(data["seed"]) : 0;
-            ulong seed = (ulong)seedInt64;
+            ulong seed = 0;
+            if (data.ContainsKey("seed"))
+            {
+                // Support both string (new format) and long (legacy) seed values
+                if (data["seed"] is string seedStr)
+                    ulong.TryParse(seedStr, out seed);
+                else
+                    seed = (ulong)Convert.ToInt64(data["seed"]);
+            }
             int width = data.ContainsKey("width") ? Convert.ToInt32(data["width"]) : 35;
             int height = data.ContainsKey("height") ? Convert.ToInt32(data["height"]) : 35;
 
@@ -146,6 +153,7 @@ namespace Sporefront.Data
         public string displayName;
         public string playerID;    // UUID string
         public string colorHex;
+        public string faction;     // FactionType name (e.g., "Morel", "Muscaria")
         public bool isAI;
         public bool isHost;
         public PlayerSessionStatus status;
@@ -156,6 +164,7 @@ namespace Sporefront.Data
             string displayName,
             string playerID,
             string colorHex,
+            string faction,
             bool isAI,
             bool isHost,
             PlayerSessionStatus status,
@@ -165,6 +174,7 @@ namespace Sporefront.Data
             this.displayName = displayName;
             this.playerID = playerID;
             this.colorHex = colorHex;
+            this.faction = faction;
             this.isAI = isAI;
             this.isHost = isHost;
             this.status = status;
@@ -173,7 +183,7 @@ namespace Sporefront.Data
 
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var dict = new Dictionary<string, object>
             {
                 { "uid", uid },
                 { "displayName", displayName },
@@ -184,6 +194,8 @@ namespace Sporefront.Data
                 { "status", status.ToString().ToLower() },
                 { "lastHeartbeat", lastHeartbeat }
             };
+            dict["faction"] = faction ?? "";
+            return dict;
         }
 
         public static GameSessionPlayer FromDictionary(Dictionary<string, object> data, string uid)
@@ -195,6 +207,7 @@ namespace Sporefront.Data
             if (displayName == null || playerID == null || colorHex == null)
                 return null;
 
+            string faction = data.ContainsKey("faction") ? data["faction"] as string : null;
             bool isAI = data.ContainsKey("isAI") && data["isAI"] is bool b1 ? b1 : false;
             bool isHost = data.ContainsKey("isHost") && data["isHost"] is bool b2 ? b2 : false;
 
@@ -209,7 +222,7 @@ namespace Sporefront.Data
             if (data.ContainsKey("lastHeartbeat") && data["lastHeartbeat"] is DateTime dt)
                 lastHeartbeat = dt;
 
-            return new GameSessionPlayer(uid, displayName, playerID, colorHex, isAI, isHost, status, lastHeartbeat);
+            return new GameSessionPlayer(uid, displayName, playerID, colorHex, faction, isAI, isHost, status, lastHeartbeat);
         }
     }
 
@@ -231,6 +244,14 @@ namespace Sporefront.Data
         public double gameSpeed;
         public string gameVersion;
         public DateTime createdAt;
+
+        /// <summary>
+        /// Server-side update time from Firestore document snapshot.
+        /// Used as clock-skew-safe reference for heartbeat age calculations.
+        /// Not serialized — set by the session listener from DocumentSnapshot.UpdateTime.
+        /// </summary>
+        [System.NonSerialized]
+        public DateTime serverUpdateTime;
 
         public GameSession(
             string gameID,
@@ -263,8 +284,9 @@ namespace Sporefront.Data
             string hostDisplayName,
             Guid hostPlayerID,
             string hostColorHex,
+            string hostFaction,
             MapGenerationConfig mapConfig,
-            List<(string displayName, Guid playerID, string colorHex)> aiPlayers)
+            List<(string displayName, Guid playerID, string colorHex, string faction)> aiPlayers)
         {
             string gameID = Guid.NewGuid().ToString();
 
@@ -276,6 +298,7 @@ namespace Sporefront.Data
                 displayName: hostDisplayName,
                 playerID: hostPlayerID.ToString(),
                 colorHex: hostColorHex,
+                faction: hostFaction,
                 isAI: false,
                 isHost: true,
                 status: PlayerSessionStatus.Active,
@@ -292,6 +315,7 @@ namespace Sporefront.Data
                     displayName: ai.displayName,
                     playerID: ai.playerID.ToString(),
                     colorHex: ai.colorHex,
+                    faction: ai.faction,
                     isAI: true,
                     isHost: false,
                     status: PlayerSessionStatus.Active,
@@ -309,7 +333,83 @@ namespace Sporefront.Data
                 latestSnapshotID: null,
                 currentGameTime: 0.0,
                 gameSpeed: 1.0,
-                gameVersion: "1.0.0",
+                gameVersion: UnityEngine.Application.version,
+                createdAt: DateTime.UtcNow
+            );
+        }
+
+        public static GameSession CreateForMatchmaking(
+            string gameID,
+            string hostUID,
+            string hostDisplayName,
+            Guid hostPlayerID,
+            string hostColorHex,
+            string hostFaction,
+            string joinerUID,
+            string joinerDisplayName,
+            Guid joinerPlayerID,
+            string joinerColorHex,
+            string joinerFaction,
+            MapGenerationConfig mapConfig,
+            List<(string displayName, Guid playerID, string colorHex, string faction)> aiPlayers)
+        {
+            var players = new Dictionary<string, GameSessionPlayer>();
+
+            // Host player
+            players[hostUID] = new GameSessionPlayer(
+                uid: hostUID,
+                displayName: hostDisplayName,
+                playerID: hostPlayerID.ToString(),
+                colorHex: hostColorHex,
+                faction: hostFaction,
+                isAI: false,
+                isHost: true,
+                status: PlayerSessionStatus.Active,
+                lastHeartbeat: DateTime.UtcNow
+            );
+
+            // Joiner player
+            players[joinerUID] = new GameSessionPlayer(
+                uid: joinerUID,
+                displayName: joinerDisplayName,
+                playerID: joinerPlayerID.ToString(),
+                colorHex: joinerColorHex,
+                faction: joinerFaction,
+                isAI: false,
+                isHost: false,
+                status: PlayerSessionStatus.Active,
+                lastHeartbeat: DateTime.UtcNow
+            );
+
+            // AI players
+            for (int i = 0; i < aiPlayers.Count; i++)
+            {
+                var ai = aiPlayers[i];
+                string aiKey = string.Format("ai_{0}", i);
+                players[aiKey] = new GameSessionPlayer(
+                    uid: aiKey,
+                    displayName: ai.displayName,
+                    playerID: ai.playerID.ToString(),
+                    colorHex: ai.colorHex,
+                    faction: ai.faction,
+                    isAI: true,
+                    isHost: false,
+                    status: PlayerSessionStatus.Active,
+                    lastHeartbeat: DateTime.UtcNow
+                );
+            }
+
+            return new GameSession(
+                gameID: gameID,
+                hostUID: hostUID,
+                mapConfig: mapConfig,
+                players: players,
+                status: GameSessionStatus.Lobby,
+                currentCommandSequence: 0,
+                latestSnapshotID: null,
+                currentGameTime: 0.0,
+                gameSpeed: 1.0,
+                gameVersion: UnityEngine.Application.version,
                 createdAt: DateTime.UtcNow
             );
         }
@@ -322,6 +422,14 @@ namespace Sporefront.Data
                 playersData[kvp.Key] = kvp.Value.ToDictionary();
             }
 
+            // Build participantUIDs array for efficient Firestore queries
+            var participantUIDs = new List<string>();
+            foreach (var kvp in players)
+            {
+                if (!kvp.Value.isAI)
+                    participantUIDs.Add(kvp.Key);
+            }
+
             return new Dictionary<string, object>
             {
                 { "hostUID", hostUID },
@@ -330,6 +438,7 @@ namespace Sporefront.Data
                 { "gameVersion", gameVersion },
                 { "mapConfig", mapConfig.ToDictionary() },
                 { "players", playersData },
+                { "participantUIDs", participantUIDs },
                 { "currentCommandSequence", currentCommandSequence },
                 { "latestSnapshotID", latestSnapshotID },
                 { "currentGameTime", currentGameTime },

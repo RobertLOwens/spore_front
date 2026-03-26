@@ -16,6 +16,13 @@ namespace Sporefront.Commands
             this.armyID = armyID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public StopMovementCommand(Guid id, Guid playerID, double timestamp, Guid armyID)
+            : base(id, playerID, timestamp)
+        {
+            this.armyID = armyID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var army = state.GetArmy(armyID);

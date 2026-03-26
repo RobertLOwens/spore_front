@@ -7,8 +7,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
 using UnityEngine;
+using Sporefront.Data.Serialization;
 using Sporefront.Engine;
+using Sporefront.Models;
 
 namespace Sporefront.Data
 {
@@ -25,6 +28,30 @@ namespace Sporefront.Data
         public int commandSequence;
         public string stateJSON; // base64-encoded GameState JSON
         public int sizeBytes;
+        public string gameVersion; // Game version that created this snapshot
+
+        // Shared serializer settings (matches SaveManager)
+        private static JsonSerializerSettings _settings;
+        private static JsonSerializerSettings Settings
+        {
+            get
+            {
+                if (_settings == null)
+                {
+                    _settings = new JsonSerializerSettings
+                    {
+                        Formatting = Formatting.None,
+                        NullValueHandling = NullValueHandling.Ignore,
+                        TypeNameHandling = TypeNameHandling.None,
+                        Converters = new List<JsonConverter>
+                        {
+                            new HexCoordinateConverter()
+                        }
+                    };
+                }
+                return _settings;
+            }
+        }
 
         // ================================================================
         // Factory: Create from GameState
@@ -34,7 +61,10 @@ namespace Sporefront.Data
         {
             try
             {
-                string json = JsonUtility.ToJson(gameState);
+                // Use FullSnapshotData + Newtonsoft to properly serialize
+                // Dictionary<Guid,T> and map tile data that JsonUtility silently drops
+                var fullData = new FullSnapshotData(gameState);
+                string json = JsonConvert.SerializeObject(fullData, Settings);
                 byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
 
                 return new GameSnapshot
@@ -44,7 +74,8 @@ namespace Sporefront.Data
                     gameTime = gameState.currentTime,
                     commandSequence = sequence,
                     stateJSON = Convert.ToBase64String(jsonBytes),
-                    sizeBytes = jsonBytes.Length
+                    sizeBytes = jsonBytes.Length,
+                    gameVersion = Application.version
                 };
             }
             catch (Exception e)
@@ -79,7 +110,10 @@ namespace Sporefront.Data
 
             try
             {
-                return JsonUtility.FromJson<GameState>(jsonString);
+                var fullData = JsonConvert.DeserializeObject<FullSnapshotData>(jsonString, Settings);
+                if (fullData == null)
+                    throw new Exception("Deserialized snapshot is null");
+                return fullData.Restore();
             }
             catch (Exception e)
             {
@@ -94,7 +128,7 @@ namespace Sporefront.Data
 
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var dict = new Dictionary<string, object>
             {
                 { "snapshotID", snapshotID },
                 { "createdAt", createdAt },
@@ -103,6 +137,9 @@ namespace Sporefront.Data
                 { "stateJSON", stateJSON },
                 { "sizeBytes", sizeBytes }
             };
+            if (!string.IsNullOrEmpty(gameVersion))
+                dict["gameVersion"] = gameVersion;
+            return dict;
         }
 
         public static GameSnapshot FromDictionary(Dictionary<string, object> data)
@@ -135,6 +172,10 @@ namespace Sporefront.Data
                 created = (string)val;
             }
 
+            string version = null;
+            if (data.TryGetValue("gameVersion", out val) && val is string v)
+                version = v;
+
             return new GameSnapshot
             {
                 snapshotID = id,
@@ -142,8 +183,81 @@ namespace Sporefront.Data
                 gameTime = time,
                 commandSequence = sequence,
                 stateJSON = state,
-                sizeBytes = size
+                sizeBytes = size,
+                gameVersion = version
             };
+        }
+    }
+
+    // ================================================================
+    // Full Snapshot Data (entities + terrain + resource positions)
+    // ================================================================
+
+    /// <summary>
+    /// Complete serializable game state including terrain tiles and resource
+    /// point positions that GameStateSnapshot alone does not include.
+    /// Used by GameSnapshot for online recovery and matchmaking state transfer.
+    /// </summary>
+    [Serializable]
+    public class FullSnapshotData
+    {
+        public GameStateSnapshot snapshot;
+        public List<SerializedTileData> tiles;
+        public List<SerializedResourcePoint> resourcePointPositions;
+        public double gameSpeed;
+        public VisibilityMode visibilityMode;
+
+        public FullSnapshotData() { }
+
+        public FullSnapshotData(GameState gameState)
+        {
+            snapshot = new GameStateSnapshot(gameState);
+            gameSpeed = gameState.gameSpeed;
+            visibilityMode = gameState.visibilityMode;
+
+            // Serialize terrain tiles
+            tiles = new List<SerializedTileData>();
+            foreach (var kvp in gameState.mapData.tiles)
+            {
+                tiles.Add(new SerializedTileData(kvp.Key, kvp.Value));
+            }
+
+            // Serialize resource point coordinates
+            resourcePointPositions = new List<SerializedResourcePoint>();
+            foreach (var kvp in gameState.mapData.resourcePointCoordinates)
+            {
+                resourcePointPositions.Add(new SerializedResourcePoint(kvp.Key, kvp.Value));
+            }
+        }
+
+        public GameState Restore()
+        {
+            var gameState = snapshot.Restore();
+            gameState.gameSpeed = gameSpeed;
+            gameState.visibilityMode = visibilityMode;
+
+            // Restore terrain tiles
+            if (tiles != null)
+            {
+                foreach (var tile in tiles)
+                {
+                    var coord = new HexCoordinate(tile.q, tile.r);
+                    gameState.mapData.SetTile(new TileData(coord, tile.terrain, tile.elevation));
+                }
+            }
+
+            // Restore resource point coordinates
+            if (resourcePointPositions != null)
+            {
+                foreach (var rpp in resourcePointPositions)
+                {
+                    var coord = new HexCoordinate(rpp.q, rpp.r);
+                    if (!gameState.mapData.resourcePointCoordinates.ContainsKey(rpp.id))
+                        gameState.mapData.resourcePointCoordinates[rpp.id] = coord;
+                }
+            }
+
+            return gameState;
         }
     }
 

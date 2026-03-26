@@ -55,6 +55,18 @@ namespace Sporefront.Engine
             Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
         }
 
+        /// <summary>
+        /// Reconstruction constructor for deserializing commands from online sessions.
+        /// Preserves the original command ID, player ID, and timestamp instead of
+        /// generating new ones, so that remote commands can be deduplicated.
+        /// </summary>
+        protected BaseEngineCommand(Guid id, Guid playerID, double timestamp)
+        {
+            Id = id;
+            PlayerID = playerID;
+            Timestamp = timestamp;
+        }
+
         public virtual EngineCommandResult Validate(GameState state)
         {
             return EngineCommandResult.Success(new List<StateChange>());

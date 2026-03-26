@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.buildingID = buildingID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public ResearchCommand(Guid id, Guid playerID, double timestamp, string researchTypeRawValue, Guid buildingID)
+            : base(id, playerID, timestamp)
+        {
+            this.researchTypeRawValue = researchTypeRawValue;
+            this.buildingID = buildingID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Parse research type
@@ -120,6 +128,9 @@ namespace Sporefront.Commands
     public class CancelResearchCommand : BaseEngineCommand
     {
         public CancelResearchCommand(Guid playerID) : base(playerID) { }
+
+        // Reconstruction constructor for online deserialization
+        public CancelResearchCommand(Guid id, Guid playerID, double timestamp) : base(id, playerID, timestamp) { }
 
         public override EngineCommandResult Validate(GameState state)
         {

@@ -18,6 +18,14 @@ namespace Sporefront.Commands
             this.resourcePointID = resourcePointID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public HuntCommand(Guid id, Guid playerID, double timestamp, Guid villagerGroupID, Guid resourcePointID)
+            : base(id, playerID, timestamp)
+        {
+            this.villagerGroupID = villagerGroupID;
+            this.resourcePointID = resourcePointID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var group = state.GetVillagerGroup(villagerGroupID);

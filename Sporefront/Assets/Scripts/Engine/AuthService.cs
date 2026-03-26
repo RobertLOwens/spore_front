@@ -184,6 +184,69 @@ namespace Sporefront.Engine
         }
 
         // ================================================================
+        // Sign In with Google
+        // ================================================================
+
+        public void SignInWithGoogle(Action<bool, string> callback)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            var providerData = new FederatedOAuthProviderData();
+            providerData.ProviderId = "google.com";
+            var provider = new FederatedOAuthProvider(providerData);
+
+            auth.SignInWithProviderAsync(provider).ContinueWithOnMainThread(task =>
+            {
+                if (task.IsFaulted || task.IsCanceled)
+                {
+                    string error = GetFirebaseErrorMessage(task.Exception);
+                    callback?.Invoke(false, error);
+                    return;
+                }
+
+                var user = auth.CurrentUser;
+                if (user == null)
+                {
+                    callback?.Invoke(false, "Sign in succeeded but no user found");
+                    return;
+                }
+
+                CurrentUID = user.UserId;
+                CurrentEmail = user.Email;
+                CurrentDisplayName = user.DisplayName;
+
+                // Check if username exists (same flow as email sign-in)
+                CheckHasUsername((hasUsername) =>
+                {
+                    SetState(hasUsername ? AuthState.SignedIn : AuthState.NeedsUsername);
+                    callback?.Invoke(true, null);
+                });
+            });
+#else
+            callback?.Invoke(false, "Firebase not available");
+#endif
+        }
+
+        // ================================================================
+        // Google User Detection
+        // ================================================================
+
+        public bool IsGoogleUser
+        {
+            get
+            {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+                var user = auth?.CurrentUser;
+                if (user == null) return false;
+                foreach (var info in user.ProviderData)
+                {
+                    if (info.ProviderId == "google.com") return true;
+                }
+#endif
+                return false;
+            }
+        }
+
+        // ================================================================
         // Sign Out
         // ================================================================
 
@@ -558,6 +621,66 @@ namespace Sporefront.Engine
         }
 
         // ================================================================
+        // Delete Account (Google / Provider-based)
+        // ================================================================
+
+        public void DeleteAccountWithProvider(Action<bool, string> callback)
+        {
+#if FIREBASE_AUTH && FIREBASE_FIRESTORE
+            var user = auth.CurrentUser;
+            if (user == null)
+            {
+                callback?.Invoke(false, "Not signed in");
+                return;
+            }
+
+            string uid = user.UserId;
+
+            var providerData = new FederatedOAuthProviderData();
+            providerData.ProviderId = "google.com";
+            var provider = new FederatedOAuthProvider(providerData);
+
+            // Step 1: Re-authenticate via Google
+            user.ReauthenticateWithProviderAsync(provider).ContinueWithOnMainThread(reauthTask =>
+            {
+                if (reauthTask.IsFaulted || reauthTask.IsCanceled)
+                {
+                    string error = GetFirebaseErrorMessage(reauthTask.Exception);
+                    callback?.Invoke(false, error);
+                    return;
+                }
+
+                // Steps 2-5: Same cleanup as password-based delete
+                ReleaseUsername(uid, () =>
+                {
+                    DeleteAllUserData(uid, () =>
+                    {
+                        user.DeleteAsync().ContinueWithOnMainThread(deleteTask =>
+                        {
+                            if (deleteTask.IsFaulted || deleteTask.IsCanceled)
+                            {
+                                string error = GetFirebaseErrorMessage(deleteTask.Exception);
+                                callback?.Invoke(false, error);
+                                return;
+                            }
+
+                            CurrentUID = null;
+                            CurrentEmail = null;
+                            CurrentDisplayName = null;
+                            PlayerPrefs.DeleteKey($"hasUsername_{uid}");
+                            PlayerPrefs.Save();
+                            SetState(AuthState.SignedOut);
+                            callback?.Invoke(true, null);
+                        });
+                    });
+                });
+            });
+#else
+            callback?.Invoke(false, "Firebase not available");
+#endif
+        }
+
+        // ================================================================
         // Private Helpers
         // ================================================================
 
@@ -567,8 +690,7 @@ namespace Sporefront.Engine
             var user = auth.CurrentUser;
             if (user == null) return;
 
-            var profile = user.UserProfile;
-            profile.DisplayName = displayName;
+            var profile = new UserProfile { DisplayName = displayName };
             user.UpdateUserProfileAsync(profile).ContinueWithOnMainThread(task =>
             {
                 if (task.IsFaulted)

@@ -24,3 +24,18 @@ Sporefront/*.slnx
 # OS
 .DS_Store
 Thumbs.db
+
+# Firebase SDK packages
+*.unitypackage
+
+# Downloaded repos / external assets
+level-up-with-firebase/
+sporefront-hud-assets/
+sporefront-resource-panel-assets/
+
+# Firebase SDK (imported via unitypackage, large binaries)
+Sporefront/Assets/Firebase/
+Sporefront/Assets/Plugins/
+Sporefront/Assets/ExternalDependencyManager/
+Sporefront/Assets/Editor Default Resources/
+Sporefront/Assets/StreamingAssets/

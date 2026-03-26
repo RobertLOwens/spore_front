@@ -167,6 +167,7 @@ namespace Sporefront.Visual
 
             BuildInfoRow("Email", auth.CurrentEmail ?? "—");
             BuildInfoRow("Display Name", auth.CurrentDisplayName ?? "—");
+            BuildInfoRow("Sign-in", auth.IsGoogleUser ? "Google" : "Email");
 
             AddSpacer(contentRT, 8f);
 
@@ -187,19 +188,22 @@ namespace Sporefront.Visual
 
             AddSpacer(contentRT, 4f);
 
-            // Change Password
-            if (isChangingPassword)
-                BuildChangePasswordInline();
-            else
+            // Change Password (email users only — Google users have no Firebase password)
+            if (!auth.IsGoogleUser)
             {
-                var changePwBtn = UIHelper.CreateButton(contentRT, "Change Password",
-                    UIHelper.ButtonBg, UIHelper.ButtonText, UIConstants.FontSmall, () =>
-                    {
-                        isChangingPassword = true;
-                        Rebuild();
-                    });
-                var cpLE = changePwBtn.gameObject.AddComponent<LayoutElement>();
-                cpLE.preferredHeight = 36f;
+                if (isChangingPassword)
+                    BuildChangePasswordInline();
+                else
+                {
+                    var changePwBtn = UIHelper.CreateButton(contentRT, "Change Password",
+                        UIHelper.ButtonBg, UIHelper.ButtonText, UIConstants.FontSmall, () =>
+                        {
+                            isChangingPassword = true;
+                            Rebuild();
+                        });
+                    var cpLE = changePwBtn.gameObject.AddComponent<LayoutElement>();
+                    cpLE.preferredHeight = 36f;
+                }
             }
 
             UIHelper.CreateDivider(contentRT, null, 2);
@@ -424,16 +428,28 @@ namespace Sporefront.Visual
         private void BuildDeleteAccountInline()
         {
             var card = UIHelper.CreateSectionCard(contentRT, "DeleteAccountCard", "Delete Account");
+            bool isGoogle = AuthService.Instance.IsGoogleUser;
 
             UIHelper.CreateLabel(card.transform, "This action is permanent and cannot be undone.",
                 UIConstants.FontCaption, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
 
             AddSpacer(card.transform, 4f);
 
-            UIHelper.CreateLabel(card.transform, "Enter your password to confirm:",
-                UIConstants.FontCaption, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
-            deletePasswordInput = CreateInputField(card.transform, "Password...");
-            deletePasswordInput.contentType = InputField.ContentType.Password;
+            if (isGoogle)
+            {
+                // Google users re-authenticate via Google OAuth (no password needed)
+                UIHelper.CreateLabel(card.transform,
+                    "You will be asked to re-authenticate with Google to confirm deletion.",
+                    UIConstants.FontCaption, UIHelper.InkBodyText, TextAnchor.MiddleCenter);
+            }
+            else
+            {
+                // Email users enter password to confirm
+                UIHelper.CreateLabel(card.transform, "Enter your password to confirm:",
+                    UIConstants.FontCaption, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
+                deletePasswordInput = CreateInputField(card.transform, "Password...");
+                deletePasswordInput.contentType = InputField.ContentType.Password;
+            }
 
             var statusLabel = UIHelper.CreateLabel(card.transform, "",
                 UIConstants.FontCaption, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
@@ -452,29 +468,53 @@ namespace Sporefront.Visual
             UIHelper.CreateButton(btnRow.transform, "Delete Forever",
                 SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontSmall, () =>
                 {
-                    string password = deletePasswordInput.text;
-                    if (string.IsNullOrEmpty(password))
+                    if (isGoogle)
                     {
-                        statusLabel.text = "Please enter your password.";
-                        return;
+                        // Google re-auth + delete
+                        statusLabel.text = "Re-authenticating with Google...";
+                        statusLabel.color = UIHelper.InkMutedText;
+
+                        AuthService.Instance.DeleteAccountWithProvider((success, error) =>
+                        {
+                            if (success)
+                            {
+                                Hide();
+                                OnAccountDeleted?.Invoke();
+                            }
+                            else
+                            {
+                                statusLabel.text = error ?? "Failed to delete account";
+                                statusLabel.color = SporefrontColors.SporeRed;
+                            }
+                        });
                     }
-
-                    statusLabel.text = "Deleting account...";
-                    statusLabel.color = UIHelper.InkMutedText;
-
-                    AuthService.Instance.DeleteAccount(password, (success, error) =>
+                    else
                     {
-                        if (success)
+                        // Password-based delete
+                        string password = deletePasswordInput.text;
+                        if (string.IsNullOrEmpty(password))
                         {
-                            Hide();
-                            OnAccountDeleted?.Invoke();
+                            statusLabel.text = "Please enter your password.";
+                            return;
                         }
-                        else
+
+                        statusLabel.text = "Deleting account...";
+                        statusLabel.color = UIHelper.InkMutedText;
+
+                        AuthService.Instance.DeleteAccount(password, (success, error) =>
                         {
-                            statusLabel.text = error ?? "Failed to delete account";
-                            statusLabel.color = SporefrontColors.SporeRed;
-                        }
-                    });
+                            if (success)
+                            {
+                                Hide();
+                                OnAccountDeleted?.Invoke();
+                            }
+                            else
+                            {
+                                statusLabel.text = error ?? "Failed to delete account";
+                                statusLabel.color = SporefrontColors.SporeRed;
+                            }
+                        });
+                    }
                 });
         }
 

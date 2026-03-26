@@ -20,6 +20,15 @@ namespace Sporefront.Commands
             this.isArmy = isArmy;
         }
 
+        // Reconstruction constructor for online deserialization
+        public MoveCommand(Guid id, Guid playerID, double timestamp, Guid entityID, HexCoordinate destination, bool isArmy)
+            : base(id, playerID, timestamp)
+        {
+            this.entityID = entityID;
+            this.destination = destination;
+            this.isArmy = isArmy;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Check destination is a valid coordinate

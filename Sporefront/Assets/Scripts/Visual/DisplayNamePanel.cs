@@ -1,11 +1,12 @@
 // ============================================================================
 // FILE: Visual/DisplayNamePanel.cs
 // PURPOSE: Full-screen panel for username claiming after sign-up.
-//          Debounced availability check, validation rules display.
+//          Parchment-themed to match AuthPanel. Debounced availability check.
 // ============================================================================
 
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Sporefront.Engine;
 
@@ -42,10 +43,17 @@ namespace Sporefront.Visual
 
         public void Initialize(Transform canvasTransform)
         {
-            panel = UIHelper.CreatePanel(canvasTransform, "DisplayNamePanel", SporefrontColors.ParchmentDeep);
+            // Full-screen parchment panel (matches AuthPanel)
+            panel = UIHelper.CreatePanel(canvasTransform, "DisplayNamePanel",
+                SporefrontColors.ParchmentMid, cornerRadius: 0);
             var panelRT = panel.GetComponent<RectTransform>();
             UIHelper.StretchFull(panelRT);
-            PopupTendrilDecorator.Attach(panelRT);
+
+            // Mycelium corner tendrils
+            PopupTendrilDecorator.Attach(panelRT, seed: 88);
+
+            // Parchment overlay
+            UIHelper.AddParchmentOverlay(panel.transform, 0.25f);
 
             BuildContent();
             panel.SetActive(false);
@@ -102,79 +110,156 @@ namespace Sporefront.Visual
 
         private void BuildContent()
         {
-            // Center column
-            var centerColumn = UIHelper.CreatePanel(panel.transform, "CenterColumn", Color.clear);
+            // Center column — matches AuthPanel layout
+            var centerColumn = new GameObject("CenterColumn", typeof(RectTransform));
+            centerColumn.transform.SetParent(panel.transform, false);
             var columnRT = centerColumn.GetComponent<RectTransform>();
             columnRT.anchorMin = new Vector2(0.5f, 0f);
             columnRT.anchorMax = new Vector2(0.5f, 1f);
             columnRT.pivot = new Vector2(0.5f, 0.5f);
-            float columnWidth = 340f;
+            float columnWidth = 420f;
             columnRT.sizeDelta = new Vector2(columnWidth, 0f);
             columnRT.offsetMin = new Vector2(-columnWidth / 2f, 0f);
             columnRT.offsetMax = new Vector2(columnWidth / 2f, 0f);
 
             var vlg = centerColumn.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 10f;
+            vlg.spacing = 4f;
             vlg.childAlignment = TextAnchor.UpperCenter;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
-            vlg.padding = new RectOffset(20, 20, 0, 0);
+            vlg.childControlHeight = true;
+            vlg.padding = new RectOffset(30, 30, 0, 0);
 
             // Top spacer
             AddSpacer(centerColumn.transform, 0f, true);
 
             // Title
             var title = UIHelper.CreateLabel(centerColumn.transform, "Choose a Display Name",
-                UIConstants.FontHeader, SporefrontColors.ParchmentLight, TextAnchor.MiddleCenter, true);
+                UIConstants.FontTitle, SporefrontColors.InkDark, TextAnchor.MiddleCenter, true);
+            title.horizontalOverflow = HorizontalWrapMode.Overflow;
             var titleLE = title.gameObject.AddComponent<LayoutElement>();
-            titleLE.preferredHeight = 50f;
+            titleLE.preferredHeight = 60f;
 
-            // Subtitle
+            // Subtitle / rules
             var subtitle = UIHelper.CreateLabel(centerColumn.transform,
                 "3-20 characters, letters, numbers, underscores",
-                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
+                UIConstants.FontBody, SporefrontColors.InkMid, TextAnchor.MiddleCenter);
             var subtitleLE = subtitle.gameObject.AddComponent<LayoutElement>();
-            subtitleLE.preferredHeight = 24f;
+            subtitleLE.preferredHeight = 28f;
 
-            AddSpacer(centerColumn.transform, 16f);
+            AddSpacer(centerColumn.transform, 24f);
 
-            // Username field
-            UIHelper.CreateLabel(centerColumn.transform, "Display Name",
-                UIConstants.FontSmall, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
-            usernameInput = CreateInputField(centerColumn.transform, "Enter display name...");
+            // ── Form card ──
+            var cardGO = UIHelper.CreatePanel(centerColumn.transform, "FormCard",
+                new Color(SporefrontColors.ParchmentDark.r,
+                          SporefrontColors.ParchmentDark.g,
+                          SporefrontColors.ParchmentDark.b, 0.50f), cornerRadius: 0);
+            var cardOutline = cardGO.GetComponent<Outline>();
+            if (cardOutline != null) UnityEngine.Object.Destroy(cardOutline);
+
+            var cardVLG = cardGO.AddComponent<VerticalLayoutGroup>();
+            cardVLG.spacing = 4f;
+            cardVLG.childAlignment = TextAnchor.UpperCenter;
+            cardVLG.childForceExpandWidth = true;
+            cardVLG.childForceExpandHeight = false;
+            cardVLG.childControlWidth = true;
+            cardVLG.childControlHeight = true;
+            cardVLG.padding = new RectOffset(24, 24, 20, 20);
+
+            var cardCSF = cardGO.AddComponent<ContentSizeFitter>();
+            cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Username label
+            var nameLabel = UIHelper.CreateLabel(cardGO.transform, "Display Name",
+                UIConstants.FontBody, SporefrontColors.InkDark, TextAnchor.MiddleLeft);
+            var nameLabelLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLabelLE.preferredHeight = 26f;
+
+            // Username input (parchment-themed)
+            usernameInput = CreateStyledInputField(cardGO.transform, "Enter display name...");
             usernameInput.characterLimit = 20;
             usernameInput.onValueChanged.AddListener((_) => { checkTimer = 0f; });
 
-            AddSpacer(centerColumn.transform, 4f);
+            AddSpacer(cardGO.transform, 4f);
 
             // Availability label
-            availabilityLabel = UIHelper.CreateLabel(centerColumn.transform, "",
-                UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
+            availabilityLabel = UIHelper.CreateLabel(cardGO.transform, "",
+                UIConstants.FontSmall, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
             var availLE = availabilityLabel.gameObject.AddComponent<LayoutElement>();
-            availLE.preferredHeight = 20f;
+            availLE.preferredHeight = 22f;
 
-            AddSpacer(centerColumn.transform, 4f);
+            AddSpacer(cardGO.transform, 4f);
 
             // Status label
-            statusLabel = UIHelper.CreateLabel(centerColumn.transform, "",
-                UIConstants.FontCaption, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
+            statusLabel = UIHelper.CreateLabel(cardGO.transform, "",
+                UIConstants.FontSmall, SporefrontColors.SporeRed, TextAnchor.MiddleCenter);
             var statusLE = statusLabel.gameObject.AddComponent<LayoutElement>();
-            statusLE.preferredHeight = 20f;
+            statusLE.preferredHeight = 22f;
 
-            AddSpacer(centerColumn.transform, 10f);
+            AddSpacer(cardGO.transform, 8f);
 
             // Claim button
-            claimButton = UIHelper.CreateButton(centerColumn.transform, "Claim Name",
-                SporefrontColors.SporeGreen, UIHelper.HudTextColor,
-                UIHelper.DefaultBodyFontSize + 2, OnClaimClicked);
+            claimButton = UIHelper.CreateButton(cardGO.transform, "Claim Name",
+                SporefrontColors.InkDark, SporefrontColors.ParchmentLight,
+                UIConstants.FontBody + 2, OnClaimClicked);
             var claimLE = claimButton.gameObject.AddComponent<LayoutElement>();
-            claimLE.preferredHeight = 44f;
+            claimLE.preferredHeight = 48f;
             claimButton.interactable = false;
+
+            // ── End card ──
 
             // Bottom spacer
             AddSpacer(centerColumn.transform, 0f, true);
+        }
+
+        // ================================================================
+        // Styled Input Field (parchment-themed, matches AuthPanel)
+        // ================================================================
+
+        private InputField CreateStyledInputField(Transform parent, string placeholder)
+        {
+            var bgColor = new Color(
+                SporefrontColors.ParchmentDeep.r * 0.85f,
+                SporefrontColors.ParchmentDeep.g * 0.85f,
+                SporefrontColors.ParchmentDeep.b * 0.85f,
+                0.70f);
+
+            var inputBG = UIHelper.CreatePanel(parent, "InputBG", bgColor, UIHelper.SmallCornerRadius);
+            var inputBGLE = inputBG.AddComponent<LayoutElement>();
+            inputBGLE.preferredHeight = 44f;
+
+            var outline = inputBG.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.effectColor = new Color(
+                    SporefrontColors.InkFaded.r,
+                    SporefrontColors.InkFaded.g,
+                    SporefrontColors.InkFaded.b, 0.25f);
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+
+            var input = inputBG.AddComponent<InputField>();
+
+            var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
+                UIConstants.FontBody, SporefrontColors.InkFaded, TextAnchor.MiddleLeft);
+            var placeholderRT = placeholderText.GetComponent<RectTransform>();
+            UIHelper.StretchFull(placeholderRT);
+            placeholderRT.offsetMin = new Vector2(12, 0);
+            placeholderRT.offsetMax = new Vector2(-12, 0);
+
+            var textComponent = UIHelper.CreateLabel(inputBG.transform, "",
+                UIConstants.FontBody, SporefrontColors.InkBlack, TextAnchor.MiddleLeft);
+            var textRT = textComponent.GetComponent<RectTransform>();
+            UIHelper.StretchFull(textRT);
+            textRT.offsetMin = new Vector2(12, 0);
+            textRT.offsetMax = new Vector2(-12, 0);
+            textComponent.raycastTarget = true;
+
+            input.textComponent = textComponent;
+            input.placeholder = placeholderText;
+
+            return input;
         }
 
         // ================================================================
@@ -204,7 +289,7 @@ namespace Sporefront.Visual
 
             isChecking = true;
             availabilityLabel.text = "Checking...";
-            availabilityLabel.color = UIHelper.InkMutedText;
+            availabilityLabel.color = SporefrontColors.InkFaded;
 
             AuthService.Instance.CheckUsernameAvailability(name, (available) =>
             {
@@ -242,7 +327,7 @@ namespace Sporefront.Visual
             isClaiming = true;
             claimButton.interactable = false;
             statusLabel.text = "Claiming name...";
-            statusLabel.color = UIHelper.InkMutedText;
+            statusLabel.color = SporefrontColors.InkFaded;
 
             AuthService.Instance.ClaimUsername(name, (success, error) =>
             {
@@ -269,32 +354,6 @@ namespace Sporefront.Visual
         {
             if (claimButton != null)
                 claimButton.interactable = isAvailable && !isClaiming;
-        }
-
-        private InputField CreateInputField(Transform parent, string placeholder)
-        {
-            var inputBG = UIHelper.CreatePanel(parent, "InputBG", UIHelper.HudBg);
-            var inputBGLE = inputBG.AddComponent<LayoutElement>();
-            inputBGLE.preferredHeight = 36f;
-
-            var input = inputBG.AddComponent<InputField>();
-
-            var placeholderText = UIHelper.CreateLabel(inputBG.transform, placeholder,
-                13, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
-            var placeholderRT = placeholderText.GetComponent<RectTransform>();
-            UIHelper.StretchFull(placeholderRT);
-            placeholderRT.offsetMin = new Vector2(8, 0);
-
-            var textComponent = UIHelper.CreateLabel(inputBG.transform, "",
-                13, UIHelper.HudTextColor, TextAnchor.MiddleLeft);
-            var textRT = textComponent.GetComponent<RectTransform>();
-            UIHelper.StretchFull(textRT);
-            textRT.offsetMin = new Vector2(8, 0);
-
-            input.textComponent = textComponent;
-            input.placeholder = placeholderText;
-
-            return input;
         }
 
         private void AddSpacer(Transform parent, float height, bool flexible = false)

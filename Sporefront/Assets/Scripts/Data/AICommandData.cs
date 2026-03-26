@@ -29,7 +29,9 @@ namespace Sporefront.Data
         AIMove,
         AIStartResearch,
         AIEntrench,
-        AIUpgradeUnit
+        AIUpgradeUnit,
+        AIHunt,
+        AIUpgradeBuilding
     }
 
     // ================================================================
@@ -108,6 +110,19 @@ namespace Sporefront.Data
     public class AIUpgradeUnitParams
     {
         public string upgradeType;
+        public string buildingID;
+    }
+
+    [Serializable]
+    public class AIHuntParams
+    {
+        public string villagerGroupID;
+        public string resourcePointID;
+    }
+
+    [Serializable]
+    public class AIUpgradeBuildingParams
+    {
         public string buildingID;
     }
 
@@ -234,6 +249,23 @@ namespace Sporefront.Data
                     buildingID = upgradeCmd.buildingID.ToString()
                 });
             }
+            else if (command is AIHuntCommand huntCmd)
+            {
+                aiType = AICommandType.AIHunt;
+                paramJson = JsonUtility.ToJson(new AIHuntParams
+                {
+                    villagerGroupID = huntCmd.villagerGroupID.ToString(),
+                    resourcePointID = huntCmd.resourcePointID.ToString()
+                });
+            }
+            else if (command is AIUpgradeBuildingCommand upgBldCmd)
+            {
+                aiType = AICommandType.AIUpgradeBuilding;
+                paramJson = JsonUtility.ToJson(new AIUpgradeBuildingParams
+                {
+                    buildingID = upgBldCmd.buildingID.ToString()
+                });
+            }
             else
             {
                 DebugLog.Log(string.Format("Unknown AI command type: {0}", command.GetType().Name));
@@ -266,6 +298,7 @@ namespace Sporefront.Data
                 case AICommandType.AIBuild:
                 {
                     var p = JsonUtility.FromJson<AIBuildParams>(parametersJson);
+                    if (p == null) return null;
                     BuildingType bt;
                     if (!Enum.TryParse<BuildingType>(p.buildingType, out bt)) return null;
                     var coord = new HexCoordinate(p.coordinateQ, p.coordinateR);
@@ -275,6 +308,7 @@ namespace Sporefront.Data
                 case AICommandType.AITrainMilitary:
                 {
                     var p = JsonUtility.FromJson<AITrainMilitaryParams>(parametersJson);
+                    if (p == null) return null;
                     Guid bID;
                     MilitaryUnitType ut;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
@@ -285,6 +319,7 @@ namespace Sporefront.Data
                 case AICommandType.AITrainVillager:
                 {
                     var p = JsonUtility.FromJson<AITrainVillagerParams>(parametersJson);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new AITrainVillagerCommand(pid, bID, p.quantity);
@@ -293,10 +328,12 @@ namespace Sporefront.Data
                 case AICommandType.AIDeployArmy:
                 {
                     var p = JsonUtility.FromJson<AIDeployArmyParams>(parametersJson);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     var composition = new Dictionary<MilitaryUnitType, int>();
-                    if (p.compositionKeys != null)
+                    if (p.compositionKeys != null && p.compositionValues != null
+                        && p.compositionKeys.Length == p.compositionValues.Length)
                     {
                         for (int i = 0; i < p.compositionKeys.Length; i++)
                         {
@@ -313,6 +350,7 @@ namespace Sporefront.Data
                 case AICommandType.AIDeployVillagers:
                 {
                     var p = JsonUtility.FromJson<AIDeployVillagersParams>(parametersJson);
+                    if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new AIDeployVillagersCommand(pid, bID, p.quantity);
@@ -321,6 +359,7 @@ namespace Sporefront.Data
                 case AICommandType.AIGather:
                 {
                     var p = JsonUtility.FromJson<AIGatherParams>(parametersJson);
+                    if (p == null) return null;
                     Guid vgID, rpID;
                     if (!Guid.TryParse(p.villagerGroupID, out vgID)) return null;
                     if (!Guid.TryParse(p.resourcePointID, out rpID)) return null;
@@ -330,6 +369,7 @@ namespace Sporefront.Data
                 case AICommandType.AIMove:
                 {
                     var p = JsonUtility.FromJson<AIMoveParams>(parametersJson);
+                    if (p == null) return null;
                     Guid eID;
                     if (!Guid.TryParse(p.entityID, out eID)) return null;
                     var dest = new HexCoordinate(p.destinationQ, p.destinationR);
@@ -339,6 +379,7 @@ namespace Sporefront.Data
                 case AICommandType.AIStartResearch:
                 {
                     var p = JsonUtility.FromJson<AIStartResearchParams>(parametersJson);
+                    if (p == null) return null;
                     ResearchType rt;
                     if (!Enum.TryParse<ResearchType>(p.researchType, out rt)) return null;
                     return new AIStartResearchCommand(pid, rt);
@@ -347,6 +388,7 @@ namespace Sporefront.Data
                 case AICommandType.AIEntrench:
                 {
                     var p = JsonUtility.FromJson<AIEntrenchParams>(parametersJson);
+                    if (p == null) return null;
                     Guid aID;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
                     return new AIEntrenchCommand(pid, aID);
@@ -355,11 +397,31 @@ namespace Sporefront.Data
                 case AICommandType.AIUpgradeUnit:
                 {
                     var p = JsonUtility.FromJson<AIUpgradeUnitParams>(parametersJson);
+                    if (p == null) return null;
                     UnitUpgradeType ut;
                     Guid bID;
                     if (!Enum.TryParse<UnitUpgradeType>(p.upgradeType, out ut)) return null;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new AIUpgradeUnitCommand(pid, ut, bID);
+                }
+
+                case AICommandType.AIHunt:
+                {
+                    var p = JsonUtility.FromJson<AIHuntParams>(parametersJson);
+                    if (p == null) return null;
+                    Guid vgID, rpID;
+                    if (!Guid.TryParse(p.villagerGroupID, out vgID)) return null;
+                    if (!Guid.TryParse(p.resourcePointID, out rpID)) return null;
+                    return new AIHuntCommand(pid, vgID, rpID);
+                }
+
+                case AICommandType.AIUpgradeBuilding:
+                {
+                    var p = JsonUtility.FromJson<AIUpgradeBuildingParams>(parametersJson);
+                    if (p == null) return null;
+                    Guid bID;
+                    if (!Guid.TryParse(p.buildingID, out bID)) return null;
+                    return new AIUpgradeBuildingCommand(pid, bID);
                 }
 
                 default:

@@ -31,7 +31,7 @@ namespace Sporefront.Data
         // Upgrade
         public double upgradeProgress;
         public double? upgradeStartTime;
-        [System.NonSerialized] public bool pendingUpgrade;
+        public bool pendingUpgrade;
 
         // Demolition
         public double demolitionProgress;

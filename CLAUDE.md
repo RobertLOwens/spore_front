@@ -90,6 +90,33 @@ Uses **Newtonsoft.Json** (`com.unity.nuget.newtonsoft-json`) for serialization. 
 - `SaveData` wraps `GameStateSnapshot` with metadata (name, timestamps, version)
 - `GameStateSnapshot` (in `GameState.cs`) converts Dictionary-based state to serializable Lists, with `Restore()` to rebuild
 
+### Online System
+
+The game supports online play via **Firebase** (Auth + Firestore). All Firebase code is behind `#if FIREBASE_AUTH && FIREBASE_FIRESTORE` — the game runs fully offline without the SDK.
+
+**Architecture**: Command-streaming model — both clients execute identical commands locally, producing deterministic state. Only player/AI commands are transmitted; engine subsystem outputs are computed independently.
+
+- **GameEngine.SetupOnline()** — initializes online mode with command sequence tracking and self-echo filtering
+- **GameEngine.ExecuteRemoteCommand()** — executes commands from Firestore, skipping self-originated commands
+- **GameEngine.StreamCommandToFirestore()** — serializes and submits locally-executed commands after `ExecuteCommand()`
+- **PlayerCommandRegistry** — serialize/deserialize all 26 player command types (handles `Dictionary<>` via parallel arrays, `Guid?` via string)
+- **AICommandEnvelope** — serialize/deserialize all 10 AI command types (same pattern)
+- **OnlineCommand** — wrapper with `sequence`, `commandType`, base64 `payload`, Firestore Dictionary serialization
+- **GameSnapshot** — periodic state checkpoints (every 100 commands or 5 minutes), keeps last 3
+- **Host runs AI** — non-host receives AI commands as remote commands from Firestore
+
+**Firestore Structure**:
+```
+games/{gameID}
+  ├── commands/ — stream of serialized commands (ordered by sequence)
+  ├── snapshots/ — periodic state checkpoints
+  └── playerData/ — heartbeats, status
+users/{uid}
+  ├── saves/ — cloud saves
+  ├── stats/lifetime — aggregate stats
+  └── gameHistory/ — per-game records
+```
+
 ### Visual Layer
 
 Unity-specific code lives in `Scripts/Visual/`. `GameSceneManager` orchestrates the scene. `HexGridRenderer`/`HexTileView`/`HexMeshUtility` handle hex rendering. UI panels (`ActionPanel`, `ArmyDetailPanel`, `BuildingDetailPanel`, etc.) are managed by `UIManager`. The visual layer subscribes to `OnStateChangesProduced` events — it never mutates game state directly.
@@ -180,5 +207,13 @@ Each player selects a `FactionType` (defined in `Scripts/Models/FactionType.cs`)
 - `Scripts/Data/CommanderTypes.cs` — `CommanderSpecialty` enum, commander generation
 - `Scripts/Data/Serialization/HexCoordinateConverter.cs` — JSON converters for hex coordinates
 - `Scripts/Engine/SaveManager.cs` — Save/load file operations
+- `Scripts/Engine/GameSessionService.cs` — Online game sessions, command streaming, snapshots (Firestore)
+- `Scripts/Engine/AuthService.cs` — Firebase Auth, username system, account management
+- `Scripts/Engine/UserStatsService.cs` — Lifetime stats tracking, game history
+- `Scripts/Data/OnlineCommand.cs` — Command serialization for online streaming
+- `Scripts/Data/PlayerCommandRegistry.cs` — Player command serialize/deserialize registry
+- `Scripts/Data/AICommandData.cs` — AI command envelope serialization
+- `Scripts/Data/GameSession.cs` — Online session model, player status, map config
+- `Scripts/Data/GameSnapshot.cs` — Periodic state snapshots for recovery
 
 All paths relative to `Sporefront/Assets/`.

@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ================================================================
+    // Users — only the owner can read/write their own data
+    // ================================================================
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /saves/{saveId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+      match /stats/{statId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+      match /gameHistory/{historyId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // ================================================================
+    // Usernames — claimed via transaction, readable by anyone authenticated
+    // ================================================================
+    match /usernames/{username} {
+      allow read: if request.auth != null;
+      // Only allow creation if no one else has claimed it
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      // Only the owner can delete their own username
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
+    // ================================================================
+    // Games — participants and host have specific permissions
+    // ================================================================
+    match /games/{gameId} {
+      // Any authenticated user can read game docs (needed for matchmaking join)
+      allow read: if request.auth != null;
+
+      // Only authenticated users can create games
+      allow create: if request.auth != null
+                    && request.resource.data.hostUID == request.auth.uid;
+
+      // Only participants can update game docs
+      allow update: if request.auth != null
+                    && request.auth.uid in resource.data.participantUIDs;
+
+      // Only the host can delete games
+      allow delete: if request.auth != null
+                    && resource.data.hostUID == request.auth.uid;
+
+      // Commands subcollection
+      match /commands/{commandId} {
+        allow read: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/games/$(gameId)).data.participantUIDs;
+
+        // Sender UID must match the authenticated user
+        allow create: if request.auth != null
+                      && request.auth.uid in get(/databases/$(database)/documents/games/$(gameId)).data.participantUIDs
+                      && request.resource.data.senderUID == request.auth.uid;
+
+        // Commands are immutable once written
+        allow update, delete: if false;
+      }
+
+      // Snapshots subcollection — only host can write, participants can read
+      match /snapshots/{snapshotId} {
+        allow read: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/games/$(gameId)).data.participantUIDs;
+
+        allow create, update: if request.auth != null
+                              && get(/databases/$(database)/documents/games/$(gameId)).data.hostUID == request.auth.uid;
+
+        allow delete: if request.auth != null
+                      && get(/databases/$(database)/documents/games/$(gameId)).data.hostUID == request.auth.uid;
+      }
+
+      // Player data subcollection
+      match /playerData/{playerId} {
+        allow read: if request.auth != null
+                    && request.auth.uid in get(/databases/$(database)/documents/games/$(gameId)).data.participantUIDs;
+
+        // Players can only write their own player data
+        allow write: if request.auth != null
+                     && request.auth.uid == playerId;
+      }
+    }
+
+    // ================================================================
+    // Matchmaking — players manage their own queue entries
+    // ================================================================
+    match /matchmaking/{entryId} {
+      allow read: if request.auth != null;
+
+      // Only the owner can create/update/delete their entry
+      // The document ID is the user's UID, and the uid field must match
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

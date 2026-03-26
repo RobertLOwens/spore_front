@@ -782,24 +782,34 @@ namespace Sporefront.Visual
             btnGO.transform.SetParent(parent, false);
 
             var img = btnGO.GetComponent<Image>();
-            img.color = Color.clear;
+            img.color = SporefrontColors.InkFaded;
             img.sprite = UIHelper.GetRoundedRectSprite(UIHelper.SmallCornerRadius);
             img.type = Image.Type.Sliced;
 
             ellipsisButton = btnGO.GetComponent<Button>();
-            ellipsisButton.colors = HoverButtonColors();
+            var menuColors = ColorBlock.defaultColorBlock;
+            menuColors.normalColor = SporefrontColors.InkFaded;
+            menuColors.highlightedColor = SporefrontColors.InkLight;
+            menuColors.pressedColor = SporefrontColors.InkMid;
+            menuColors.disabledColor = Color.clear;
+            ellipsisButton.colors = menuColors;
             ellipsisButton.onClick.AddListener(() =>
             {
                 if (ellipsisDropdown != null)
-                    ellipsisDropdown.SetActive(!ellipsisDropdown.activeSelf);
+                {
+                    bool show = !ellipsisDropdown.activeSelf;
+                    ellipsisDropdown.SetActive(show);
+                    if (show)
+                        ellipsisDropdown.transform.SetAsLastSibling();
+                }
             });
 
             var le = btnGO.GetComponent<LayoutElement>();
-            le.preferredWidth = 36;
-            le.preferredHeight = 36;
+            le.preferredWidth = 44;
+            le.preferredHeight = 32;
 
-            var dotsLabel = CreateThemedLabel(btnGO.transform, "...", 16,
-                SporefrontColors.InkMid, false);
+            var dotsLabel = CreateThemedLabel(btnGO.transform, "\u2630", 20,
+                SporefrontColors.ParchmentMid, false);
             dotsLabel.alignment = TextAnchor.MiddleCenter;
             var dotsRT = dotsLabel.GetComponent<RectTransform>();
             dotsRT.anchorMin = Vector2.zero;

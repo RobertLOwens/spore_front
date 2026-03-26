@@ -30,6 +30,16 @@ namespace Sporefront.Visual
         public VisibilityMode visibilityMode;
         public FactionType playerFaction;
         public FactionType aiFaction;
+        public bool isOnlineMode;
+
+        // Matchmaking fields (empty for offline games)
+        public string matchGameID;
+        public bool matchIsHost;
+        public string matchOpponentUID;
+        public string matchLocalPlayerID;
+        public string matchOpponentPlayerID;
+        public string matchOpponentDisplayName;
+        public FactionType matchOpponentFaction;
 
         public static GameSetupConfig Default => new GameSetupConfig
         {
@@ -77,6 +87,7 @@ namespace Sporefront.Visual
         public event Action<ArenaConfig> OnPlayArena;
         public event Action<ArenaConfig, int> OnAutoSim;
         public event Action OnBack;
+        public event Action OnStartMatchmaking;
 
         // ================================================================
         // Screen State
@@ -85,6 +96,7 @@ namespace Sporefront.Visual
         private enum SetupScreen { ModeSelect, Details }
         private SetupScreen currentScreen = SetupScreen.ModeSelect;
         private bool isArenaMode = false;
+        private bool isOnlineMode = false;
 
         // ================================================================
         // State
@@ -336,8 +348,15 @@ namespace Sporefront.Visual
             CreateSetupMenuItem(backdropGO.transform, "1v1 Battle", SporefrontColors.InkDark, () =>
             {
                 isArenaMode = false;
+                isOnlineMode = false;
                 selectedMapType = selectedOneVsOneMap;
                 TransitionToDetails();
+            });
+
+            // Online Game (queue-based matchmaking)
+            CreateSetupMenuItem(backdropGO.transform, "Online Game", SporefrontColors.InkDark, () =>
+            {
+                OnStartMatchmaking?.Invoke();
             });
 
             // Arena
@@ -1159,7 +1178,8 @@ namespace Sporefront.Visual
                     startingResources = selectedStartingResources,
                     visibilityMode = selectedVisibility,
                     playerFaction = selectedFaction,
-                    aiFaction = selectedAIFaction
+                    aiFaction = selectedAIFaction,
+                    isOnlineMode = isOnlineMode
                 };
                 OnStartGame?.Invoke(config);
             });

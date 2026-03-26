@@ -23,6 +23,16 @@ namespace Sporefront.Commands
             this.outputType = outputType;
         }
 
+        // Reconstruction constructor for online deserialization
+        public MarketTradeCommand(Guid id, Guid playerID, double timestamp, Guid buildingID,
+            Dictionary<ResourceType, int> inputResources, ResourceType outputType)
+            : base(id, playerID, timestamp)
+        {
+            this.buildingID = buildingID;
+            this.inputResources = inputResources;
+            this.outputType = outputType;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             var player = state.GetPlayer(PlayerID);

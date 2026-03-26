@@ -17,6 +17,13 @@ namespace Sporefront.Commands
             this.reinforcementID = reinforcementID;
         }
 
+        // Reconstruction constructor for online deserialization
+        public CancelReinforcementCommand(Guid id, Guid playerID, double timestamp, Guid reinforcementID)
+            : base(id, playerID, timestamp)
+        {
+            this.reinforcementID = reinforcementID;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Find the reinforcement across all armies

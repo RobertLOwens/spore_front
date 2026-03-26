@@ -532,6 +532,26 @@ namespace Sporefront.Engine
         /// Handle False Morel attack: instant destruction + poison the attacker.
         /// Returns a CombatStartedChange for notification purposes.
         /// </summary>
+        /// <summary>
+        /// Accumulated extra state changes from False Morel attacks that need to
+        /// be returned alongside the primary CombatStartedChange. Collected by
+        /// callers after StartBuildingCombat returns.
+        /// </summary>
+        private readonly List<StateChange> pendingFalseMorelChanges = new List<StateChange>();
+
+        /// <summary>
+        /// Collect and clear any pending changes from False Morel attacks.
+        /// Callers should invoke this after StartBuildingCombat returns.
+        /// </summary>
+        public List<StateChange> CollectPendingFalseMorelChanges()
+        {
+            if (pendingFalseMorelChanges.Count == 0)
+                return new List<StateChange>();
+            var result = new List<StateChange>(pendingFalseMorelChanges);
+            pendingFalseMorelChanges.Clear();
+            return result;
+        }
+
         private StateChange HandleFalseMorelAttack(ArmyData attacker, BuildingData building)
         {
             var changes = new List<StateChange>();
@@ -578,12 +598,8 @@ namespace Sporefront.Engine
             // Remove building from game state
             gameState.RemoveBuilding(buildingID);
 
-            // Emit all changes via the state change event
-            if (changes.Count > 0)
-            {
-                var batch = new StateChangeBatch(changes, Guid.Empty);
-                GameEngine.Instance?.EmitStateChanges(batch);
-            }
+            // Store extra changes (building destroyed, poison) for caller to collect
+            pendingFalseMorelChanges.AddRange(changes);
 
             return new CombatStartedChange
             {
@@ -914,6 +930,8 @@ namespace Sporefront.Engine
             if (combatChange != null)
             {
                 changes.Add(combatChange);
+                // Collect any extra changes from False Morel instant-kill
+                changes.AddRange(CollectPendingFalseMorelChanges());
             }
         }
 

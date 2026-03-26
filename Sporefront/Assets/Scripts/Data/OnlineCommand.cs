@@ -54,6 +54,8 @@ namespace Sporefront.Data
         public string payload; // base64-encoded JSON
         public string createdAt; // ISO 8601 string (JsonUtility cannot serialize DateTime)
         public bool isAICommand;
+        public string senderUID; // Firebase Auth UID of the submitting client
+        public long stateHash;   // Periodic state hash for desync detection (0 = not included)
 
         // ================================================================
         // Create from IEngineCommand (player commands)
@@ -63,9 +65,9 @@ namespace Sporefront.Data
         {
             try
             {
-                // Serialize the command via JsonUtility on a wrapper or directly
-                // Note: JsonUtility requires [Serializable] on the command class
-                string json = JsonUtility.ToJson(command);
+                // Serialize via PlayerCommandRegistry to handle Dictionary and
+                // nullable Guid fields that JsonUtility silently drops
+                string json = PlayerCommandRegistry.Serialize(command);
                 string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
 
                 return new OnlineCommand
@@ -116,23 +118,34 @@ namespace Sporefront.Data
         }
 
         // ================================================================
-        // Decode to IEngineCommand (stub)
+        // Decode to IEngineCommand
         // ================================================================
 
         /// <summary>
         /// Decode the payload back to an IEngineCommand.
-        /// This is a stub -- full deserialization requires a command type registry
-        /// since C# IEngineCommand implementations are not polymorphically
-        /// serializable via JsonUtility. In practice, the online system uses
-        /// AICommandEnvelope for AI commands and can be extended for player
-        /// commands later with a registered type map.
+        /// Routes AI commands through AICommandEnvelope and player commands
+        /// through PlayerCommandRegistry for type-safe deserialization.
         /// </summary>
         public IEngineCommand ToEngineCommand()
         {
-            DebugLog.Log(string.Format(
-                "OnlineCommand.ToEngineCommand() stub called for type: {0}",
-                commandType));
-            return null;
+            try
+            {
+                if (isAICommand)
+                {
+                    var envelope = ToAICommandEnvelope();
+                    return envelope?.ToEngineCommand();
+                }
+
+                string json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+                return PlayerCommandRegistry.Deserialize(commandType, json, commandID, playerID, timestamp);
+            }
+            catch (Exception e)
+            {
+                DebugLog.Log(string.Format(
+                    "OnlineCommand.ToEngineCommand() failed for type {0}: {1}",
+                    commandType, e.Message));
+                return null;
+            }
         }
 
         // ================================================================
@@ -170,7 +183,7 @@ namespace Sporefront.Data
 
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var dict = new Dictionary<string, object>
             {
                 { "sequence", sequence },
                 { "commandID", commandID },
@@ -181,6 +194,11 @@ namespace Sporefront.Data
                 { "createdAt", createdAt },
                 { "isAICommand", isAICommand }
             };
+            if (!string.IsNullOrEmpty(senderUID))
+                dict["senderUID"] = senderUID;
+            if (stateHash != 0)
+                dict["stateHash"] = stateHash;
+            return dict;
         }
 
         public static OnlineCommand FromDictionary(Dictionary<string, object> data)
@@ -214,6 +232,15 @@ namespace Sporefront.Data
 
             cmd.isAICommand = data.ContainsKey("isAICommand")
                 && data["isAICommand"] is bool b && b;
+
+            cmd.senderUID = data.ContainsKey("senderUID")
+                ? data["senderUID"] as string : null;
+
+            if (data.ContainsKey("stateHash"))
+            {
+                try { cmd.stateHash = Convert.ToInt64(data["stateHash"]); }
+                catch { cmd.stateHash = 0; }
+            }
 
             return cmd;
         }

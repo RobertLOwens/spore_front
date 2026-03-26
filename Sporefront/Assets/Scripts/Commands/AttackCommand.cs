@@ -25,6 +25,14 @@ namespace Sporefront.Commands
             this.targetCoordinate = targetCoordinate;
         }
 
+        // Reconstruction constructor for online deserialization
+        public AttackCommand(Guid id, Guid playerID, double timestamp, Guid armyID, HexCoordinate targetCoordinate)
+            : base(id, playerID, timestamp)
+        {
+            this.armyID = armyID;
+            this.targetCoordinate = targetCoordinate;
+        }
+
         public override EngineCommandResult Validate(GameState state)
         {
             // Check army exists
@@ -249,6 +257,11 @@ namespace Sporefront.Commands
 
                     if (buildingChange != null)
                         changeBuilder.Add(buildingChange);
+
+                    // Collect any extra changes from False Morel instant-kill
+                    var falseMorelChanges = GameEngine.Instance.combatEngine.CollectPendingFalseMorelChanges();
+                    foreach (var fmc in falseMorelChanges)
+                        changeBuilder.Add(fmc);
                 }
 
                 return EngineCommandResult.Success(changeBuilder.Build().changes);
