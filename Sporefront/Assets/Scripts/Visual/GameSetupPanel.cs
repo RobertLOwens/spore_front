@@ -53,7 +53,7 @@ namespace Sporefront.Visual
         };
     }
 
-    public enum MapType { Arabia, MountainValley, Random, Arena }
+    public enum MapType { Arabia, MountainValley, GoldRush, Random, Arena }
     public enum MapSize { Small, Medium, Large, Huge }
     public enum ResourceDensity { Sparse, Normal, Abundant }
     public enum StartingResources { Small, Medium, Large }
@@ -794,12 +794,13 @@ namespace Sporefront.Visual
 
             // Populate options
             mapDropdown.ClearOptions();
-            mapDropdown.AddOptions(new List<string> { "Arabia", "Mountain Valley", "Random" });
+            mapDropdown.AddOptions(new List<string> { "Arabia", "Mountain Valley", "Gold Rush", "Random" });
 
             // Set initial selection
             int initialIndex = 0;
             if (selectedOneVsOneMap == MapType.MountainValley) initialIndex = 1;
-            else if (selectedOneVsOneMap == MapType.Random) initialIndex = 2;
+            else if (selectedOneVsOneMap == MapType.GoldRush) initialIndex = 2;
+            else if (selectedOneVsOneMap == MapType.Random) initialIndex = 3;
             mapDropdown.value = initialIndex;
 
             // Description label below dropdown
@@ -817,7 +818,8 @@ namespace Sporefront.Visual
                 {
                     case 0: selectedOneVsOneMap = MapType.Arabia; break;
                     case 1: selectedOneVsOneMap = MapType.MountainValley; break;
-                    case 2: selectedOneVsOneMap = MapType.Random; break;
+                    case 2: selectedOneVsOneMap = MapType.GoldRush; break;
+                    case 3: selectedOneVsOneMap = MapType.Random; break;
                 }
                 selectedMapType = selectedOneVsOneMap;
                 mapDescriptionLabel.text = GetMapDescription(selectedOneVsOneMap);
@@ -832,6 +834,8 @@ namespace Sporefront.Visual
                     return "Open terrain with scattered hills and forests. Balanced starting positions with resources spread evenly across the map.";
                 case MapType.MountainValley:
                     return "Two ridges separated by a resource-rich valley. Sparse hilltop starts force players downhill to contest forests, minerals, and game.";
+                case MapType.GoldRush:
+                    return "A massive central resource cluster surrounded by barren desert. Minimal starting resources force an early race to claim and hold the rich center.";
                 case MapType.Random:
                     return "Randomly selects a map type for a unique experience every game.";
                 default:

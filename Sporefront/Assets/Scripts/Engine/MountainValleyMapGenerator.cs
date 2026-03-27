@@ -32,6 +32,10 @@ namespace Sporefront.Engine
         public int valleyTreePocketSizeMin = 6;
         public int valleyTreePocketSizeMax = 12;
         public int valleyAnimalCount = 10;
+        public int valleyForageCount = 4;
+        public int valleyMineralCount = 4;
+        public int valleyMineralSizeMin = 2;
+        public int valleyMineralSizeMax = 4;
 
         // Ridge resources (per ridge)
         public int ridgeTreePocketCount = 2;
@@ -41,6 +45,16 @@ namespace Sporefront.Engine
 
         // Terrain
         public int maxElevation = 3;
+        public int zoneJitter = 4;
+
+        // Terrain variation — probability of plains clearings on slopes (0.0–1.0)
+        public float slopePlainsClearingChance = 0.12f;
+        public int plainsClearingMinSize = 3;
+        public int plainsClearingMaxSize = 6;
+
+        // Mountain passes — flattened corridors through slopes
+        public int passCount = 2;
+        public int passWidth = 2;
     }
 
     // ================================================================
@@ -71,6 +85,9 @@ namespace Sporefront.Engine
         private int[] slopeTopEnd;      // upper slope ends at this row (exclusive)
         private int[] valleyEnd;        // valley floor ends at this row (exclusive)
         private int[] slopeBottomEnd;   // lower slope ends at this row (exclusive)
+
+        // Mountain pass tiles — flattened to plains for tactical corridors
+        private HashSet<HexCoordinate> passTiles = new HashSet<HexCoordinate>();
 
         // Cached starting positions — avoids RNG drift when called multiple times
         private List<PlayerStartPosition> cachedStartPositions;
@@ -110,8 +127,11 @@ namespace Sporefront.Engine
         {
             var terrain = new Dictionary<HexCoordinate, TerrainGenerationData>();
 
-            // Compute zone boundary rows (with ±2 jitter per column)
+            // Compute zone boundary rows (with ±jitter per column)
             ComputeZoneBoundaries();
+
+            // Generate mountain passes before terrain fill so we can flatten them
+            GenerateMountainPasses();
 
             // Fill map based on zone membership
             for (int r = 0; r < Height; r++)
@@ -120,6 +140,13 @@ namespace Sporefront.Engine
                 {
                     var coord = new HexCoordinate(q, r);
                     var zone = GetZone(q, r);
+
+                    // Mountain pass tiles are always flattened plains
+                    if (passTiles.Contains(coord))
+                    {
+                        terrain[coord] = new TerrainGenerationData(TerrainType.Plains, 0);
+                        continue;
+                    }
 
                     switch (zone)
                     {
@@ -148,6 +175,12 @@ namespace Sporefront.Engine
                     }
                 }
             }
+
+            // Carve plains clearings into slopes for terrain variation
+            CarveSlopeClearings(terrain);
+
+            // Add occasional hill outcrops in the valley for cover
+            AddValleyOutcrops(terrain);
 
             // Flatten starting areas
             var startPositions = GetStartingPositions();
@@ -206,8 +239,12 @@ namespace Sporefront.Engine
             var placements = new List<ResourcePlacement>();
             var usedCoordinates = new HashSet<HexCoordinate> { position };
 
-            // Get all valid coordinates within starting radius, excluding a 3-tile gap around center
-            int minResourceDistance = 3;
+            // Block tiles immediately around city center to prevent cluttered spawns
+            foreach (var neighbor in position.Neighbors())
+                usedCoordinates.Add(neighbor);
+
+            // Get all valid coordinates within starting radius, excluding a 4-tile gap around center
+            int minResourceDistance = 4;
             var availableCoords = new List<HexCoordinate>();
             for (int q = -startingResourceRadius; q <= startingResourceRadius; q++)
             {
@@ -378,8 +415,12 @@ namespace Sporefront.Engine
             // Huntable animals — most numerous in valley
             PlaceAnimals(config.valleyAnimalCount, valleyTiles, aroundPositions, excludingRadius, placements, usedCoordinates);
 
-            // Some forage in valley
-            PlaceScatteredResources(4, ResourcePointType.Forage,
+            // Forage in valley
+            PlaceScatteredResources(config.valleyForageCount, ResourcePointType.Forage,
+                valleyTiles, aroundPositions, excludingRadius, placements, usedCoordinates);
+
+            // Mineral deposits in valley — contested ore/stone to reward pushing down
+            PlaceMineralDeposits(config.valleyMineralCount, config.valleyMineralSizeMin, config.valleyMineralSizeMax,
                 valleyTiles, aroundPositions, excludingRadius, placements, usedCoordinates);
 
             // --- RIDGE RESOURCES (very sparse) ---
@@ -404,6 +445,169 @@ namespace Sporefront.Engine
         }
 
         // ================================================================
+        // Terrain Variation
+        // ================================================================
+
+        /// <summary>
+        /// Generates 1-2 mountain passes — narrow plains corridors cutting vertically
+        /// through the slope zones, creating strategic chokepoints.
+        /// </summary>
+        private void GenerateMountainPasses()
+        {
+            passTiles.Clear();
+            int passCount = config.passCount;
+            int passWidth = config.passWidth;
+
+            // Divide the map into passCount+1 sections and place passes at section boundaries
+            // to spread them evenly across the width
+            for (int i = 0; i < passCount; i++)
+            {
+                // Spread passes across the map width with some randomness
+                int sectionWidth = Width / (passCount + 1);
+                int baseQ = sectionWidth * (i + 1);
+                int passQ = baseQ + rng.NextInt(-sectionWidth / 4, sectionWidth / 4);
+                passQ = Clamp(passQ, 3, Width - 4);
+
+                // Pass runs from upper slope through valley to lower slope
+                // (ridges stay intact — passes only cut through slopes)
+                for (int r = 0; r < Height; r++)
+                {
+                    var zone = GetZone(passQ, r);
+                    if (zone == Zone.UpperSlope || zone == Zone.LowerSlope)
+                    {
+                        // Fill pass width with slight horizontal jitter per row
+                        int rowJitter = rng.NextInt(-1, 1);
+                        for (int w = 0; w < passWidth; w++)
+                        {
+                            int q = passQ + w + rowJitter;
+                            if (q >= 0 && q < Width)
+                            {
+                                passTiles.Add(new HexCoordinate(q, r));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Carves small plains clearings into the slope zones using BFS expansion.
+        /// Breaks up the monotonous hillside with natural-looking flat patches.
+        /// </summary>
+        private void CarveSlopeClearings(Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            var slopeTiles = new List<HexCoordinate>();
+            for (int r = 0; r < Height; r++)
+            {
+                for (int q = 0; q < Width; q++)
+                {
+                    var coord = new HexCoordinate(q, r);
+                    var zone = GetZone(q, r);
+                    if ((zone == Zone.UpperSlope || zone == Zone.LowerSlope) && !passTiles.Contains(coord))
+                    {
+                        slopeTiles.Add(coord);
+                    }
+                }
+            }
+
+            rng.Shuffle(slopeTiles);
+
+            var cleared = new HashSet<HexCoordinate>();
+            foreach (var seed in slopeTiles)
+            {
+                if (cleared.Contains(seed)) continue;
+                if (rng.NextFloat() > config.slopePlainsClearingChance) continue;
+
+                // BFS expand a small clearing
+                int clearingSize = rng.NextInt(config.plainsClearingMinSize, config.plainsClearingMaxSize);
+                var frontier = new List<HexCoordinate> { seed };
+                int placed = 0;
+
+                while (placed < clearingSize && frontier.Count > 0)
+                {
+                    int idx = rng.NextInt(0, frontier.Count - 1);
+                    var current = frontier[idx];
+                    frontier.RemoveAt(idx);
+
+                    if (cleared.Contains(current)) continue;
+                    if (current.q < 0 || current.q >= Width || current.r < 0 || current.r >= Height) continue;
+
+                    var zone = GetZone(current.q, current.r);
+                    if (zone != Zone.UpperSlope && zone != Zone.LowerSlope) continue;
+
+                    terrain[current] = new TerrainGenerationData(TerrainType.Plains, 0);
+                    cleared.Add(current);
+                    placed++;
+
+                    foreach (var neighbor in current.Neighbors())
+                    {
+                        if (!cleared.Contains(neighbor))
+                            frontier.Add(neighbor);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Scatters a few small hill outcrops in the valley floor for cover and variety.
+        /// </summary>
+        private void AddValleyOutcrops(Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            var valleyTiles = new List<HexCoordinate>();
+            for (int r = 0; r < Height; r++)
+            {
+                for (int q = 0; q < Width; q++)
+                {
+                    if (GetZone(q, r) == Zone.ValleyFloor)
+                        valleyTiles.Add(new HexCoordinate(q, r));
+                }
+            }
+
+            rng.Shuffle(valleyTiles);
+
+            // Place 2-4 small outcrops (1-3 tiles each)
+            int outcropCount = rng.NextInt(2, 4);
+            var used = new HashSet<HexCoordinate>();
+            for (int i = 0; i < outcropCount && valleyTiles.Count > 0; i++)
+            {
+                HexCoordinate? center = null;
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    var candidate = valleyTiles[rng.NextInt(0, valleyTiles.Count - 1)];
+                    if (!used.Contains(candidate))
+                    {
+                        center = candidate;
+                        break;
+                    }
+                }
+                if (!center.HasValue) continue;
+
+                int outcropSize = rng.NextInt(1, 3);
+                var frontier = new List<HexCoordinate> { center.Value };
+                int placed = 0;
+
+                while (placed < outcropSize && frontier.Count > 0)
+                {
+                    var current = frontier[0];
+                    frontier.RemoveAt(0);
+                    if (used.Contains(current)) continue;
+                    if (GetZone(current.q, current.r) != Zone.ValleyFloor) continue;
+
+                    terrain[current] = new TerrainGenerationData(TerrainType.Hill, 1);
+                    used.Add(current);
+                    placed++;
+
+                    var neighbors = new List<HexCoordinate>(current.Neighbors());
+                    rng.Shuffle(neighbors);
+                    foreach (var n in neighbors)
+                    {
+                        if (!used.Contains(n)) frontier.Add(n);
+                    }
+                }
+            }
+        }
+
+        // ================================================================
         // Zone Computation
         // ================================================================
 
@@ -420,13 +624,14 @@ namespace Sporefront.Engine
             int baseValley = (int)(Height * 0.625);           // + 25%
             int baseSlopeBottom = (int)(Height * 0.875);      // + 25%
 
+            int jitter = config.zoneJitter;
             for (int q = 0; q < Width; q++)
             {
-                // ±2 row jitter per column for organic, non-straight edges
-                ridgeTopEnd[q] = Clamp(baseRidgeTop + rng.NextInt(-2, 2), 2, Height - 2);
-                slopeTopEnd[q] = Clamp(baseSlopeTop + rng.NextInt(-2, 2), ridgeTopEnd[q] + 1, Height - 2);
-                valleyEnd[q] = Clamp(baseValley + rng.NextInt(-2, 2), slopeTopEnd[q] + 1, Height - 2);
-                slopeBottomEnd[q] = Clamp(baseSlopeBottom + rng.NextInt(-2, 2), valleyEnd[q] + 1, Height - 1);
+                // ±jitter row per column for organic, non-straight zone edges
+                ridgeTopEnd[q] = Clamp(baseRidgeTop + rng.NextInt(-jitter, jitter), 2, Height - 2);
+                slopeTopEnd[q] = Clamp(baseSlopeTop + rng.NextInt(-jitter, jitter), ridgeTopEnd[q] + 1, Height - 2);
+                valleyEnd[q] = Clamp(baseValley + rng.NextInt(-jitter, jitter), slopeTopEnd[q] + 1, Height - 2);
+                slopeBottomEnd[q] = Clamp(baseSlopeBottom + rng.NextInt(-jitter, jitter), valleyEnd[q] + 1, Height - 1);
             }
         }
 

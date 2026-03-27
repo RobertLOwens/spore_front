@@ -89,14 +89,20 @@ namespace Sporefront.Engine
     [Serializable]
     public class ArabiaMapConfig
     {
-        public int treePocketCount = 25;
-        public int treePocketSizeMin = 3;
-        public int treePocketSizeMax = 8;
+        // Ridgelines
+        public int ridgeCount = 4;
+        public int ridgeLengthMin = 6;
+        public int ridgeLengthMax = 12;
+        public double ridgeFoothillChance = 0.4;
+
+        // Neutral resources
+        public int treePocketCount = 15;
+        public int treePocketSizeMin = 5;
+        public int treePocketSizeMax = 10;
         public int mineralDepositCount = 12;
         public int mineralDepositSizeMin = 2;
         public int mineralDepositSizeMax = 4;
-        public double hillClusterChance = 0.15;
-        public int maxElevation = 3;
+        public int animalCount = 15;
     }
 
     // ================================================================
@@ -128,6 +134,15 @@ namespace Sporefront.Engine
 
         // Cached starting positions — avoids RNG drift when called multiple times
         private List<PlayerStartPosition> cachedStartPositions;
+
+        // Cached terrain — used by GenerateStartingResources for mining hill placement
+        private Dictionary<HexCoordinate, TerrainGenerationData> cachedTerrain;
+
+        // Mining hill tiles per player index — ore/stone placed here
+        private Dictionary<int, List<HexCoordinate>> miningHillTiles = new Dictionary<int, List<HexCoordinate>>();
+
+        // All ridgeline tile coordinates — used for neutral mineral placement
+        private HashSet<HexCoordinate> ridgeTiles = new HashSet<HexCoordinate>();
 
         // ================================================================
         // Initialization
@@ -161,16 +176,27 @@ namespace Sporefront.Engine
                 }
             }
 
-            // Step 2: Generate hill clusters with elevation
-            GenerateHillClusters(terrain);
-
-            // Step 3: Flatten starting areas
+            // Step 2: Get starting positions for ridge exclusion
             var startPositions = GetStartingPositions();
             var startCoords = new List<HexCoordinate>();
             foreach (var pos in startPositions)
                 startCoords.Add(pos.coordinate);
 
+            // Step 3: Generate connected ridgelines
+            GenerateRidgelines(terrain, startCoords);
+
+            // Step 4: Flatten starting areas
             EnsureStartingAreasFlat(terrain, startCoords, 5);
+
+            // Step 5: Place mining hills at edge of each starting area
+            for (int i = 0; i < startPositions.Count; i++)
+            {
+                var hillTiles = PlaceStartingMiningHill(terrain, startPositions[i].coordinate);
+                miningHillTiles[i] = hillTiles;
+            }
+
+            // Cache terrain for use in GenerateStartingResources
+            cachedTerrain = terrain;
 
             return terrain;
         }
@@ -208,8 +234,12 @@ namespace Sporefront.Engine
             var placements = new List<ResourcePlacement>();
             var usedCoordinates = new HashSet<HexCoordinate> { position };
 
-            // Get all valid coordinates within starting radius, excluding a 3-tile gap around center
-            int minResourceDistance = 3;
+            // Block tiles immediately around city center to prevent cluttered spawns
+            foreach (var neighbor in position.Neighbors())
+                usedCoordinates.Add(neighbor);
+
+            // Get all valid coordinates within starting radius, excluding a 4-tile gap around center
+            int minResourceDistance = 4;
             var availableCoords = new List<HexCoordinate>();
             for (int q = -startingResourceRadius; q <= startingResourceRadius; q++)
             {
@@ -259,22 +289,91 @@ namespace Sporefront.Engine
                 }
             }
 
-            // Place 4-tile ore cluster
-            var oreCluster = PlaceResourceCluster(
-                ResourcePointType.OreMine, 4, position, startingResourceRadius, usedCoordinates);
-            foreach (var placement in oreCluster)
+            // Place ore and stone on mining hill tiles if available
+            int playerIndex = -1;
+            var startPositions = GetStartingPositions();
+            for (int i = 0; i < startPositions.Count; i++)
             {
-                placements.Add(placement);
-                usedCoordinates.Add(placement.coordinate);
+                if (startPositions[i].coordinate.Equals(position))
+                {
+                    playerIndex = i;
+                    break;
+                }
             }
 
-            // Place 3-tile stone cluster
-            var stoneCluster = PlaceResourceCluster(
-                ResourcePointType.StoneQuarry, 3, position, startingResourceRadius, usedCoordinates);
-            foreach (var placement in stoneCluster)
+            List<HexCoordinate> hillTiles = null;
+            if (playerIndex >= 0 && miningHillTiles.ContainsKey(playerIndex))
             {
-                placements.Add(placement);
-                usedCoordinates.Add(placement.coordinate);
+                hillTiles = new List<HexCoordinate>(miningHillTiles[playerIndex]);
+                rng.Shuffle(hillTiles);
+            }
+
+            if (hillTiles != null && hillTiles.Count >= 7)
+            {
+                // Place ore cluster on mining hill tiles
+                int orePlaced = 0;
+                for (int i = 0; i < hillTiles.Count && orePlaced < 4; i++)
+                {
+                    if (!usedCoordinates.Contains(hillTiles[i]))
+                    {
+                        placements.Add(new ResourcePlacement(hillTiles[i], ResourcePointType.OreMine));
+                        usedCoordinates.Add(hillTiles[i]);
+                        orePlaced++;
+                    }
+                }
+
+                // Place stone cluster on remaining mining hill tiles
+                int stonePlaced = 0;
+                for (int i = 0; i < hillTiles.Count && stonePlaced < 3; i++)
+                {
+                    if (!usedCoordinates.Contains(hillTiles[i]))
+                    {
+                        placements.Add(new ResourcePlacement(hillTiles[i], ResourcePointType.StoneQuarry));
+                        usedCoordinates.Add(hillTiles[i]);
+                        stonePlaced++;
+                    }
+                }
+
+                // Fall back to BFS cluster for any remaining
+                if (orePlaced < 4)
+                {
+                    var oreCluster = PlaceResourceCluster(
+                        ResourcePointType.OreMine, 4 - orePlaced, position, startingResourceRadius, usedCoordinates);
+                    foreach (var placement in oreCluster)
+                    {
+                        placements.Add(placement);
+                        usedCoordinates.Add(placement.coordinate);
+                    }
+                }
+                if (stonePlaced < 3)
+                {
+                    var stoneCluster = PlaceResourceCluster(
+                        ResourcePointType.StoneQuarry, 3 - stonePlaced, position, startingResourceRadius, usedCoordinates);
+                    foreach (var placement in stoneCluster)
+                    {
+                        placements.Add(placement);
+                        usedCoordinates.Add(placement.coordinate);
+                    }
+                }
+            }
+            else
+            {
+                // Fallback: place ore/stone via BFS cluster (no mining hill available)
+                var oreCluster = PlaceResourceCluster(
+                    ResourcePointType.OreMine, 4, position, startingResourceRadius, usedCoordinates);
+                foreach (var placement in oreCluster)
+                {
+                    placements.Add(placement);
+                    usedCoordinates.Add(placement.coordinate);
+                }
+
+                var stoneCluster = PlaceResourceCluster(
+                    ResourcePointType.StoneQuarry, 3, position, startingResourceRadius, usedCoordinates);
+                foreach (var placement in stoneCluster)
+                {
+                    placements.Add(placement);
+                    usedCoordinates.Add(placement.coordinate);
+                }
             }
 
             // Place 4-6 woodlines (tree clusters) within starting radius
@@ -316,62 +415,83 @@ namespace Sporefront.Engine
                 }
             }
 
-            // Generate tree pockets
+            // Collect tiles by terrain type for targeted placement
+            var plainsTiles = new List<HexCoordinate>();
+            var hillTiles = new List<HexCoordinate>();
+
+            if (cachedTerrain != null)
+            {
+                for (int r = 0; r < Height; r++)
+                {
+                    for (int q = 0; q < Width; q++)
+                    {
+                        var coord = new HexCoordinate(q, r);
+                        if (usedCoordinates.Contains(coord)) continue;
+
+                        TerrainGenerationData data;
+                        if (cachedTerrain.TryGetValue(coord, out data))
+                        {
+                            if (data.terrain == TerrainType.Plains)
+                                plainsTiles.Add(coord);
+                            else if (data.terrain == TerrainType.Hill)
+                                hillTiles.Add(coord);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Fallback: treat all non-excluded tiles as plains
+                for (int r = 0; r < Height; r++)
+                {
+                    for (int q = 0; q < Width; q++)
+                    {
+                        var coord = new HexCoordinate(q, r);
+                        if (!usedCoordinates.Contains(coord))
+                            plainsTiles.Add(coord);
+                    }
+                }
+            }
+
+            rng.Shuffle(plainsTiles);
+            rng.Shuffle(hillTiles);
+
+            // Track tree coordinates for animal placement near woodlines
+            var treeCoordinates = new HashSet<HexCoordinate>();
+
+            // Generate tree pockets on plains tiles
             int treeExclusionRadius = 6;
             for (int i = 0; i < config.treePocketCount; i++)
             {
+                var center = FindValidPlacementFromList(
+                    plainsTiles, aroundPositions, treeExclusionRadius, usedCoordinates);
+                if (!center.HasValue) continue;
+
                 int pocketSize = rng.NextInt(config.treePocketSizeMin, config.treePocketSizeMax);
-                int centerQ = rng.NextInt(3, Width - 4);
-                int centerR = rng.NextInt(3, Height - 4);
-                var center = new HexCoordinate(centerQ, centerR);
-
-                // Skip if too close to starting positions
-                bool tooClose = false;
-                foreach (var startPos in aroundPositions)
-                {
-                    if (center.Distance(startPos) < treeExclusionRadius)
-                    {
-                        tooClose = true;
-                        break;
-                    }
-                }
-                if (tooClose) continue;
-
-                // Generate cluster of trees
                 var treePlacements = GenerateResourceCluster(
-                    ResourcePointType.Trees, pocketSize, center, usedCoordinates);
+                    ResourcePointType.Trees, pocketSize, center.Value, usedCoordinates);
                 foreach (var placement in treePlacements)
                 {
                     placements.Add(placement);
                     usedCoordinates.Add(placement.coordinate);
+                    treeCoordinates.Add(placement.coordinate);
                 }
             }
 
-            // Generate mineral deposits (mix of ore and stone)
+            // Generate mineral deposits on hill tiles (terrain-correlated)
             for (int i = 0; i < config.mineralDepositCount; i++)
             {
+                // Try hill tiles first, fall back to any tile
+                var candidates = hillTiles.Count > 0 ? hillTiles : plainsTiles;
+                var center = FindValidPlacementFromList(
+                    candidates, aroundPositions, excludingRadius + 3, usedCoordinates);
+                if (!center.HasValue) continue;
+
                 int depositSize = rng.NextInt(config.mineralDepositSizeMin, config.mineralDepositSizeMax);
-                int centerQ = rng.NextInt(10, Width - 11);
-                int centerR = rng.NextInt(10, Height - 11);
-                var center = new HexCoordinate(centerQ, centerR);
-
-                // Skip if too close to starting positions
-                bool tooClose = false;
-                foreach (var startPos in aroundPositions)
-                {
-                    if (center.Distance(startPos) < excludingRadius + 3)
-                    {
-                        tooClose = true;
-                        break;
-                    }
-                }
-                if (tooClose) continue;
-
-                // Alternate between ore and stone
                 var resourceType = (i % 2 == 0) ? ResourcePointType.OreMine : ResourcePointType.StoneQuarry;
 
                 var mineralPlacements = GenerateResourceCluster(
-                    resourceType, depositSize, center, usedCoordinates);
+                    resourceType, depositSize, center.Value, usedCoordinates);
                 foreach (var placement in mineralPlacements)
                 {
                     placements.Add(placement);
@@ -379,20 +499,77 @@ namespace Sporefront.Engine
                 }
             }
 
-            // Scatter some deer and boar across the map
-            int animalCount = 15;
-            for (int i = 0; i < animalCount; i++)
+            // Scatter animals, preferring tiles near woodlines
+            var nearTreeTiles = new List<HexCoordinate>();
+            foreach (var treeCoord in treeCoordinates)
             {
-                int q = rng.NextInt(5, Width - 6);
-                int r = rng.NextInt(5, Height - 6);
-                var coord = new HexCoordinate(q, r);
-
-                // Skip if used or too close to starting positions
-                if (usedCoordinates.Contains(coord)) continue;
-                bool tooClose = false;
-                foreach (var startPos in aroundPositions)
+                foreach (var neighbor in treeCoord.Neighbors())
                 {
-                    if (coord.Distance(startPos) < excludingRadius)
+                    if (!usedCoordinates.Contains(neighbor) && !treeCoordinates.Contains(neighbor))
+                    {
+                        if (neighbor.q >= 0 && neighbor.q < Width && neighbor.r >= 0 && neighbor.r < Height)
+                        {
+                            nearTreeTiles.Add(neighbor);
+                        }
+                    }
+                }
+            }
+            // Also add tiles at distance 2 from trees
+            var nearTreeSet = new HashSet<HexCoordinate>(nearTreeTiles);
+            foreach (var tile in new List<HexCoordinate>(nearTreeTiles))
+            {
+                foreach (var neighbor in tile.Neighbors())
+                {
+                    if (!usedCoordinates.Contains(neighbor) && !treeCoordinates.Contains(neighbor)
+                        && !nearTreeSet.Contains(neighbor))
+                    {
+                        if (neighbor.q >= 0 && neighbor.q < Width && neighbor.r >= 0 && neighbor.r < Height)
+                        {
+                            nearTreeTiles.Add(neighbor);
+                            nearTreeSet.Add(neighbor);
+                        }
+                    }
+                }
+            }
+            rng.Shuffle(nearTreeTiles);
+
+            for (int i = 0; i < config.animalCount; i++)
+            {
+                // Try near-tree tiles first, fall back to plains
+                var candidates = nearTreeTiles.Count > 0 ? nearTreeTiles : plainsTiles;
+                var coord = FindValidPlacementFromList(
+                    candidates, aroundPositions, excludingRadius, usedCoordinates);
+                if (!coord.HasValue) continue;
+
+                var animalType = rng.NextBool() ? ResourcePointType.Deer : ResourcePointType.WildBoar;
+                placements.Add(new ResourcePlacement(coord.Value, animalType));
+                usedCoordinates.Add(coord.Value);
+            }
+
+            return placements;
+        }
+
+        /// <summary>
+        /// Find a valid placement from a pre-collected tile list, respecting exclusion radius from start positions.
+        /// Tries up to 20 random candidates.
+        /// </summary>
+        private HexCoordinate? FindValidPlacementFromList(
+            List<HexCoordinate> candidates,
+            List<HexCoordinate> startPositions,
+            int exclusionRadius,
+            HashSet<HexCoordinate> used)
+        {
+            for (int attempt = 0; attempt < 20 && candidates.Count > 0; attempt++)
+            {
+                int idx = rng.NextInt(0, candidates.Count - 1);
+                var coord = candidates[idx];
+
+                if (used.Contains(coord)) continue;
+
+                bool tooClose = false;
+                foreach (var startPos in startPositions)
+                {
+                    if (coord.Distance(startPos) < exclusionRadius)
                     {
                         tooClose = true;
                         break;
@@ -400,87 +577,210 @@ namespace Sporefront.Engine
                 }
                 if (tooClose) continue;
 
-                var animalType = rng.NextBool() ? ResourcePointType.Deer : ResourcePointType.WildBoar;
-                placements.Add(new ResourcePlacement(coord, animalType));
-                usedCoordinates.Add(coord);
+                return coord;
             }
-
-            return placements;
+            return null;
         }
 
         // ================================================================
         // Private Helper Methods
         // ================================================================
 
-        private void GenerateHillClusters(Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        /// <summary>
+        /// Generate connected ridgelines via random walks with directional bias.
+        /// Each ridge is 6-12 tiles long with foothills expanding outward.
+        /// </summary>
+        private void GenerateRidgelines(
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain,
+            List<HexCoordinate> startCoords)
         {
-            var hillSeeds = new List<HexCoordinate>();
+            int ridgeExclusionRadius = 8;
 
-            // Generate hill seed points
-            for (int r = 0; r < Height; r++)
+            for (int i = 0; i < config.ridgeCount; i++)
             {
-                for (int q = 0; q < Width; q++)
+                // Pick a seed point biased toward mid-map, away from edges and spawns
+                HexCoordinate? seed = null;
+                for (int attempt = 0; attempt < 30; attempt++)
                 {
-                    if (rng.NextDouble(0.0, 1.0) < config.hillClusterChance * 0.3)
+                    int q = rng.NextInt(6, Width - 7);
+                    int r = rng.NextInt(6, Height - 7);
+                    var candidate = new HexCoordinate(q, r);
+
+                    // Skip if too close to any starting position
+                    bool tooClose = false;
+                    foreach (var startPos in startCoords)
                     {
-                        hillSeeds.Add(new HexCoordinate(q, r));
+                        if (candidate.Distance(startPos) < ridgeExclusionRadius)
+                        {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+                    if (tooClose) continue;
+
+                    seed = candidate;
+                    break;
+                }
+
+                if (!seed.HasValue) continue;
+
+                // Random walk to form the ridge spine
+                int ridgeLength = rng.NextInt(config.ridgeLengthMin, config.ridgeLengthMax);
+                var spineTiles = new List<HexCoordinate> { seed.Value };
+                var current = seed.Value;
+
+                // Pick an initial direction (0-5 for hex neighbors)
+                int direction = rng.NextInt(0, 5);
+
+                for (int step = 1; step < ridgeLength; step++)
+                {
+                    // 70% continue same direction, 30% turn ±1
+                    if (rng.NextDouble(0.0, 1.0) < 0.3)
+                    {
+                        direction = (direction + (rng.NextBool() ? 1 : 5)) % 6;
+                    }
+
+                    var neighbors = current.Neighbors();
+                    // Neighbors() returns list of 6 neighbors in a fixed order
+                    var next = neighbors[direction % neighbors.Count];
+
+                    // Stay in bounds
+                    if (next.q < 2 || next.q >= Width - 2 || next.r < 2 || next.r >= Height - 2)
+                    {
+                        // Try turning instead of going out of bounds
+                        direction = (direction + (rng.NextBool() ? 2 : 4)) % 6;
+                        next = neighbors[direction % neighbors.Count];
+                        if (next.q < 2 || next.q >= Width - 2 || next.r < 2 || next.r >= Height - 2)
+                            break;
+                    }
+
+                    // Skip if too close to a spawn
+                    bool nearSpawn = false;
+                    foreach (var startPos in startCoords)
+                    {
+                        if (next.Distance(startPos) < ridgeExclusionRadius)
+                        {
+                            nearSpawn = true;
+                            break;
+                        }
+                    }
+                    if (nearSpawn) break;
+
+                    spineTiles.Add(next);
+                    current = next;
+                }
+
+                // Set spine tiles as Hill with elevation 2
+                foreach (var tile in spineTiles)
+                {
+                    TerrainGenerationData data;
+                    if (terrain.TryGetValue(tile, out data))
+                    {
+                        data.terrain = TerrainType.Hill;
+                        data.elevation = 2;
+                        terrain[tile] = data;
+                        ridgeTiles.Add(tile);
                     }
                 }
-            }
 
-            // For each seed, create a hill cluster
-            foreach (var seed in hillSeeds)
-            {
-                int clusterSize = rng.NextInt(2, 5);
-                int peakElevation = rng.NextInt(1, config.maxElevation);
-
-                // Set the seed tile
-                TerrainGenerationData data;
-                if (terrain.TryGetValue(seed, out data))
+                // Expand foothills (elevation 1) from spine tiles
+                foreach (var tile in spineTiles)
                 {
-                    data.terrain = TerrainType.Hill;
-                    data.elevation = peakElevation;
-                    terrain[seed] = data;
-                }
-
-                // Expand outward with decreasing elevation
-                var frontier = new List<HexCoordinate> { seed };
-                var visited = new HashSet<HexCoordinate> { seed };
-                int tilesPlaced = 1;
-
-                while (tilesPlaced < clusterSize && frontier.Count > 0)
-                {
-                    var current = frontier[0];
-                    frontier.RemoveAt(0);
-
-                    TerrainGenerationData currentData;
-                    int currentElevation = terrain.TryGetValue(current, out currentData) ? currentData.elevation : 0;
-
-                    foreach (var neighbor in current.Neighbors())
+                    foreach (var neighbor in tile.Neighbors())
                     {
-                        if (tilesPlaced >= clusterSize) break;
-                        if (visited.Contains(neighbor)) continue;
+                        if (ridgeTiles.Contains(neighbor)) continue;
                         if (neighbor.q < 0 || neighbor.q >= Width || neighbor.r < 0 || neighbor.r >= Height) continue;
 
-                        visited.Add(neighbor);
-
-                        // Probability decreases with distance from seed
-                        if (rng.NextDouble(0.0, 1.0) < 0.6)
+                        if (rng.NextDouble(0.0, 1.0) < config.ridgeFoothillChance)
                         {
-                            int newElevation = Math.Max(1, currentElevation - rng.NextInt(0, 1));
                             TerrainGenerationData neighborData;
                             if (terrain.TryGetValue(neighbor, out neighborData))
                             {
-                                neighborData.terrain = TerrainType.Hill;
-                                neighborData.elevation = newElevation;
-                                terrain[neighbor] = neighborData;
+                                if (neighborData.terrain == TerrainType.Plains)
+                                {
+                                    neighborData.terrain = TerrainType.Hill;
+                                    neighborData.elevation = 1;
+                                    terrain[neighbor] = neighborData;
+                                    ridgeTiles.Add(neighbor);
+                                }
                             }
-                            frontier.Add(neighbor);
-                            tilesPlaced++;
                         }
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Place a small mining hill (4-5 tiles) at distance 5-6 from spawn for starting ore/stone.
+        /// Returns the hill tile coordinates.
+        /// </summary>
+        private List<HexCoordinate> PlaceStartingMiningHill(
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain,
+            HexCoordinate spawnPosition)
+        {
+            var hillCoords = new List<HexCoordinate>();
+
+            // Find a suitable center at distance 5-6 from spawn
+            var candidates = new List<HexCoordinate>();
+            for (int q = -7; q <= 7; q++)
+            {
+                for (int r = -7; r <= 7; r++)
+                {
+                    var coord = new HexCoordinate(spawnPosition.q + q, spawnPosition.r + r);
+                    int dist = coord.Distance(spawnPosition);
+                    if (dist >= 5 && dist <= 6)
+                    {
+                        if (coord.q >= 0 && coord.q < Width && coord.r >= 0 && coord.r < Height)
+                        {
+                            candidates.Add(coord);
+                        }
+                    }
+                }
+            }
+
+            if (candidates.Count == 0) return hillCoords;
+
+            rng.Shuffle(candidates);
+            var center = candidates[0];
+
+            // BFS expand 4-5 hill tiles from center
+            int hillSize = rng.NextInt(4, 5);
+            var frontier = new List<HexCoordinate> { center };
+            var visited = new HashSet<HexCoordinate>();
+            int placed = 0;
+
+            while (placed < hillSize && frontier.Count > 0)
+            {
+                var current = frontier[0];
+                frontier.RemoveAt(0);
+
+                if (visited.Contains(current)) continue;
+                if (current.q < 0 || current.q >= Width || current.r < 0 || current.r >= Height) continue;
+                visited.Add(current);
+
+                TerrainGenerationData data;
+                if (terrain.TryGetValue(current, out data))
+                {
+                    data.terrain = TerrainType.Hill;
+                    data.elevation = 1;
+                    terrain[current] = data;
+                    hillCoords.Add(current);
+                    placed++;
+
+                    var neighbors = current.Neighbors();
+                    var neighborList = new List<HexCoordinate>(neighbors);
+                    rng.Shuffle(neighborList);
+                    foreach (var neighbor in neighborList)
+                    {
+                        if (!visited.Contains(neighbor))
+                        {
+                            frontier.Add(neighbor);
+                        }
+                    }
+                }
+            }
+
+            return hillCoords;
         }
 
         private HexCoordinate? FindUnusedCoordinate(

@@ -270,7 +270,8 @@ namespace Sporefront.Visual
             var resolvedMapType = config.mapType;
             if (resolvedMapType == MapType.Random)
             {
-                resolvedMapType = (seed % 2 == 0) ? MapType.MountainValley : MapType.Arabia;
+                var mapChoices = new[] { MapType.Arabia, MapType.MountainValley, MapType.GoldRush };
+                resolvedMapType = mapChoices[seed % (ulong)mapChoices.Length];
             }
 
             switch (resolvedMapType)
@@ -287,12 +288,29 @@ namespace Sporefront.Visual
                     };
                     generator = new MountainValleyMapGenerator(width, height, seed, mvConfig);
                     break;
+                case MapType.GoldRush:
+                    var grConfig = new GoldRushMapConfig
+                    {
+                        centerOreCount = Mathf.RoundToInt(12 * areaRatio),
+                        centerStoneCount = Mathf.RoundToInt(8 * areaRatio),
+                        centerForageCount = Mathf.RoundToInt(6 * areaRatio),
+                        centerTreePocketCount = Mathf.RoundToInt(6 * areaRatio),
+                        centerAnimalCount = Mathf.RoundToInt(8 * areaRatio),
+                        outskirtTreePocketCount = Mathf.RoundToInt(4 * areaRatio),
+                        outskirtAnimalCount = Mathf.RoundToInt(4 * areaRatio),
+                        outskirtMineralCount = Mathf.RoundToInt(2 * areaRatio),
+                        ridgeCount = Mathf.RoundToInt(2 * areaRatio),
+                    };
+                    generator = new GoldRushMapGenerator(width, height, seed, grConfig);
+                    break;
                 case MapType.Arabia:
                 default:
                     var mapConfig = new ArabiaMapConfig
                     {
-                        treePocketCount = Mathf.RoundToInt(25 * areaRatio),
+                        ridgeCount = Mathf.RoundToInt(4 * areaRatio),
+                        treePocketCount = Mathf.RoundToInt(15 * areaRatio),
                         mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
+                        animalCount = Mathf.RoundToInt(15 * areaRatio),
                     };
                     generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
                     break;
@@ -743,7 +761,10 @@ namespace Sporefront.Visual
             MapGeneratorBase generator;
             var resolvedMapType = config.mapType;
             if (resolvedMapType == MapType.Random)
-                resolvedMapType = (seed % 2 == 0) ? MapType.MountainValley : MapType.Arabia;
+            {
+                var mapChoices = new[] { MapType.Arabia, MapType.MountainValley, MapType.GoldRush };
+                resolvedMapType = mapChoices[seed % (ulong)mapChoices.Length];
+            }
 
             switch (resolvedMapType)
             {
@@ -759,12 +780,29 @@ namespace Sporefront.Visual
                     };
                     generator = new MountainValleyMapGenerator(width, height, seed, mvConfig);
                     break;
+                case MapType.GoldRush:
+                    var grConfig = new GoldRushMapConfig
+                    {
+                        centerOreCount = Mathf.RoundToInt(12 * areaRatio),
+                        centerStoneCount = Mathf.RoundToInt(8 * areaRatio),
+                        centerForageCount = Mathf.RoundToInt(6 * areaRatio),
+                        centerTreePocketCount = Mathf.RoundToInt(6 * areaRatio),
+                        centerAnimalCount = Mathf.RoundToInt(8 * areaRatio),
+                        outskirtTreePocketCount = Mathf.RoundToInt(4 * areaRatio),
+                        outskirtAnimalCount = Mathf.RoundToInt(4 * areaRatio),
+                        outskirtMineralCount = Mathf.RoundToInt(2 * areaRatio),
+                        ridgeCount = Mathf.RoundToInt(2 * areaRatio),
+                    };
+                    generator = new GoldRushMapGenerator(width, height, seed, grConfig);
+                    break;
                 case MapType.Arabia:
                 default:
                     var mapConfig = new ArabiaMapConfig
                     {
-                        treePocketCount = Mathf.RoundToInt(25 * areaRatio),
+                        ridgeCount = Mathf.RoundToInt(4 * areaRatio),
+                        treePocketCount = Mathf.RoundToInt(15 * areaRatio),
                         mineralDepositCount = Mathf.RoundToInt(12 * areaRatio),
+                        animalCount = Mathf.RoundToInt(15 * areaRatio),
                     };
                     generator = new ArabiaMapGenerator(width, height, seed, mapConfig);
                     break;
