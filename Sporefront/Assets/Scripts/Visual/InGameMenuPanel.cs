@@ -24,6 +24,7 @@ namespace Sporefront.Visual
         public event Action OnSettings;
         public event Action OnQuitToMainMenu;
         public event Action OnSurrender;
+        public event Action OnCombatLog;
 
         // ================================================================
         // State
@@ -204,6 +205,15 @@ namespace Sporefront.Visual
                 () =>
                 {
                     OnSettings?.Invoke();
+                });
+
+            // Combat Log
+            CreateMenuButton(buttonsArea.transform, "Combat Log",
+                SporefrontColors.ParchmentDeep, UIHelper.InkBodyText,
+                () =>
+                {
+                    Hide();
+                    OnCombatLog?.Invoke();
                 });
 
             // Surrender (online games only)

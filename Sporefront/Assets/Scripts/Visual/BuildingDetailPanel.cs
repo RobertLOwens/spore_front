@@ -324,7 +324,8 @@ namespace Sporefront.Visual
             // State info
             if (building.state != BuildingState.Completed)
             {
-                var stateLabel = UIHelper.CreateLabel(statusCard.transform, $"State: {building.state}");
+                var stateLabel = UIHelper.CreateLabel(statusCard.transform, $"State: {building.state}",
+                    UIConstants.FontCaption, UIHelper.InkBodyText);
                 var stateLE = stateLabel.gameObject.AddComponent<LayoutElement>();
                 stateLE.preferredHeight = 20;
 
@@ -373,6 +374,8 @@ namespace Sporefront.Visual
                             {
                                 OnCancelUpgradeRequested?.Invoke(capturedID);
                             });
+                        var cancelLabel = UIHelper.GetButtonLabel(cancelBtn);
+                        UIHelper.EnableAutoFit(cancelLabel, 10, UIConstants.FontCaption);
                         var cancelLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
                         cancelLE.preferredHeight = 30;
                     }

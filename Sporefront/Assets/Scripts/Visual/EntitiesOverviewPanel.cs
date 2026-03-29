@@ -22,6 +22,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         public event Action<Guid, bool> OnEntitySelected; // (entityID, isArmy)
+        public event Action<Guid> OnScoutSelected;
         public event Action OnClose;
 
         // ================================================================
@@ -268,6 +269,29 @@ namespace Sporefront.Visual
                 }
             }
 
+            // Scouts (always shown in All mode)
+            if (currentFilter == FilterMode.All)
+            {
+                var scouts = gameState.GetScoutsForPlayer(localPlayerID);
+                if (scouts.Count > 0)
+                {
+                    UIHelper.CreateDivider(contentRT, UIHelper.InkDividerColor);
+
+                    var sectionLabel = UIHelper.CreateLabel(contentRT,
+                        $"Scouts ({scouts.Count})",
+                        UIConstants.FontSubheader, UIHelper.InkHeaderText,
+                        TextAnchor.MiddleLeft, true);
+                    var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+                    sectionLE.preferredHeight = 26;
+
+                    foreach (var scout in scouts)
+                    {
+                        BuildScoutRow(scout);
+                        entityCount++;
+                    }
+                }
+            }
+
             if (entityCount == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No entities found.",
@@ -435,6 +459,40 @@ namespace Sporefront.Visual
 
             var capturedID = army.id;
             cardBtn.onClick.AddListener(() => OnEntitySelected?.Invoke(capturedID, true));
+        }
+
+        // ================================================================
+        // Scout Row
+        // ================================================================
+
+        private void BuildScoutRow(ScoutData scout)
+        {
+            var card = UIHelper.CreateLedgerCard(contentRT, "ScoutRow");
+            var cardLE = card.GetComponent<LayoutElement>();
+            if (cardLE != null) cardLE.minHeight = 50;
+
+            // Scout info
+            string status = scout.HasPath() ? "Moving" : "Idle";
+            string staminaStr = $"{(int)scout.stamina}/{(int)scout.maxStamina}";
+            var nameLabel = UIHelper.CreateLabel(card.transform,
+                $"Mycelium Scout — {status}",
+                UIConstants.FontBody, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
+            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLE.preferredHeight = 22;
+
+            var detailLabel = UIHelper.CreateLabel(card.transform,
+                $"HP: {(int)scout.hp}/{(int)scout.maxHp}  Stamina: {staminaStr}  Vision: {scout.visionRange}",
+                UIConstants.FontCaption, UIHelper.InkSubText, TextAnchor.MiddleLeft);
+            var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();
+            detailLE.preferredHeight = 18;
+
+            // Click to select
+            var cardBtn = card.AddComponent<Button>();
+            cardBtn.transition = Selectable.Transition.ColorTint;
+            cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentDark);
+
+            var capturedID = scout.id;
+            cardBtn.onClick.AddListener(() => OnScoutSelected?.Invoke(capturedID));
         }
 
         // ================================================================

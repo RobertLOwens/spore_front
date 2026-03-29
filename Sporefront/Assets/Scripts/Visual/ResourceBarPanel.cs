@@ -41,6 +41,7 @@ namespace Sporefront.Visual
         public event Action OnCombatLogClicked;
         public event Action OnSettingsClicked;
         public event Action OnMainMenuClicked;
+        public event Action OnIdleVillagerClicked;
 
         // ================================================================
         // Per-resource UI struct
@@ -83,9 +84,14 @@ namespace Sporefront.Visual
         private Text badgeText;
         private GameObject badgeGO;
 
+        // Idle villager
+        private Button idleVillagerButton;
+        private Text idleVillagerBadgeText;
+        private GameObject idleVillagerBadgeGO;
+
         // Ellipsis
         private Button ellipsisButton;
-        private GameObject ellipsisDropdown;
+        // ellipsisDropdown removed — button now opens InGameMenuPanel directly
         private Transform canvasRoot;
 
         // Warning pulse animation
@@ -148,14 +154,14 @@ namespace Sporefront.Visual
             // Game speed indicator (hidden at 1x)
             CreateSpeedIndicator(strip.transform);
 
+            // Idle villager button
+            CreateIdleVillagerButton(strip.transform);
+
             // Notification bell
             CreateNotificationButton(strip.transform);
 
             // Ellipsis menu
             CreateEllipsisButton(strip.transform);
-
-            // Dropdown (parented to canvas for z-ordering)
-            CreateEllipsisDropdown();
 
             gameObject.transform.SetParent(panel.transform, false);
             panel.SetActive(false);
@@ -252,20 +258,7 @@ namespace Sporefront.Visual
                 }
             }
 
-            // Dismiss ellipsis dropdown on outside click
-            if (ellipsisDropdown != null && ellipsisDropdown.activeSelf
-                && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                var dropdownRT = ellipsisDropdown.GetComponent<RectTransform>();
-                var ellipsisBtnRT = ellipsisButton.GetComponent<RectTransform>();
-                Vector2 mousePos = Mouse.current.position.ReadValue();
-
-                if (!RectTransformUtility.RectangleContainsScreenPoint(dropdownRT, mousePos)
-                    && !RectTransformUtility.RectangleContainsScreenPoint(ellipsisBtnRT, mousePos))
-                {
-                    ellipsisDropdown.SetActive(false);
-                }
-            }
+            // (Ellipsis dropdown removed — button now opens InGameMenuPanel directly)
         }
 
         // ================================================================
@@ -712,6 +705,79 @@ namespace Sporefront.Visual
         // Notification Button
         // ================================================================
 
+        private void CreateIdleVillagerButton(Transform parent)
+        {
+            var btnGO = new GameObject("IdleVillagerBtn", typeof(RectTransform), typeof(Image),
+                typeof(Button), typeof(LayoutElement));
+            btnGO.transform.SetParent(parent, false);
+
+            var img = btnGO.GetComponent<Image>();
+            img.color = Color.clear;
+            img.sprite = UIHelper.GetRoundedRectSprite(UIHelper.SmallCornerRadius);
+            img.type = Image.Type.Sliced;
+
+            idleVillagerButton = btnGO.GetComponent<Button>();
+            idleVillagerButton.colors = HoverButtonColors();
+            idleVillagerButton.onClick.AddListener(() => OnIdleVillagerClicked?.Invoke());
+
+            var le = btnGO.GetComponent<LayoutElement>();
+            le.preferredWidth = 36;
+            le.preferredHeight = 36;
+
+            // "V" label for villager
+            var label = CreateThemedLabel(btnGO.transform, "V", 14,
+                SporefrontColors.InkMid, false);
+            label.alignment = TextAnchor.MiddleCenter;
+            var labelRT = label.GetComponent<RectTransform>();
+            labelRT.anchorMin = Vector2.zero;
+            labelRT.anchorMax = Vector2.one;
+            labelRT.offsetMin = Vector2.zero;
+            labelRT.offsetMax = Vector2.zero;
+            label.raycastTarget = false;
+
+            // Badge (red circle with count)
+            idleVillagerBadgeGO = new GameObject("IdleBadge", typeof(RectTransform), typeof(Image));
+            idleVillagerBadgeGO.transform.SetParent(btnGO.transform, false);
+            var badgeImg = idleVillagerBadgeGO.GetComponent<Image>();
+            badgeImg.color = SporefrontColors.SporeRed;
+            badgeImg.sprite = UIHelper.GetRoundedRectSprite(10);
+            badgeImg.type = Image.Type.Sliced;
+
+            var badgeRT = idleVillagerBadgeGO.GetComponent<RectTransform>();
+            badgeRT.anchorMin = new Vector2(1, 1);
+            badgeRT.anchorMax = new Vector2(1, 1);
+            badgeRT.pivot = new Vector2(1, 1);
+            badgeRT.anchoredPosition = new Vector2(4, 4);
+            badgeRT.sizeDelta = new Vector2(18, 18);
+
+            var badgeTextGO = new GameObject("BadgeText", typeof(RectTransform), typeof(Text));
+            badgeTextGO.transform.SetParent(idleVillagerBadgeGO.transform, false);
+            idleVillagerBadgeText = badgeTextGO.GetComponent<Text>();
+            idleVillagerBadgeText.text = "0";
+            idleVillagerBadgeText.fontSize = 9;
+            idleVillagerBadgeText.fontStyle = FontStyle.Bold;
+            idleVillagerBadgeText.color = Color.white;
+            idleVillagerBadgeText.alignment = TextAnchor.MiddleCenter;
+            idleVillagerBadgeText.font = UIHelper.BodyFont;
+            UIHelper.StretchFull(badgeTextGO.GetComponent<RectTransform>());
+
+            idleVillagerBadgeGO.SetActive(false);
+        }
+
+        public void UpdateIdleVillagerBadge(int count)
+        {
+            if (idleVillagerBadgeGO == null) return;
+            if (count <= 0)
+            {
+                idleVillagerBadgeGO.SetActive(false);
+            }
+            else
+            {
+                idleVillagerBadgeGO.SetActive(true);
+                idleVillagerBadgeText.text = count > 99 ? "99+" : count.ToString();
+            }
+        }
+
         private void CreateNotificationButton(Transform parent)
         {
             var btnGO = new GameObject("NotifBtn", typeof(RectTransform), typeof(Image),
@@ -795,13 +861,7 @@ namespace Sporefront.Visual
             ellipsisButton.colors = menuColors;
             ellipsisButton.onClick.AddListener(() =>
             {
-                if (ellipsisDropdown != null)
-                {
-                    bool show = !ellipsisDropdown.activeSelf;
-                    ellipsisDropdown.SetActive(show);
-                    if (show)
-                        ellipsisDropdown.transform.SetAsLastSibling();
-                }
+                OnMainMenuClicked?.Invoke();
             });
 
             var le = btnGO.GetComponent<LayoutElement>();
@@ -819,57 +879,7 @@ namespace Sporefront.Visual
             dotsLabel.raycastTarget = false;
         }
 
-        private void CreateEllipsisDropdown()
-        {
-            ellipsisDropdown = UIHelper.CreatePanel(canvasRoot, "EllipsisDropdown", UIHelper.PanelBg);
-            var rt = ellipsisDropdown.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1, 1);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(1, 1);
-            rt.anchoredPosition = new Vector2(-8, -84);
-            rt.sizeDelta = new Vector2(180, 0);
-
-            var vlg = ellipsisDropdown.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
-
-            var csf = ellipsisDropdown.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            // Combat Log
-            var combatLogBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Combat Log",
-                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid, 14, () =>
-                {
-                    ellipsisDropdown.SetActive(false);
-                    OnCombatLogClicked?.Invoke();
-                });
-            var clLE = combatLogBtn.gameObject.AddComponent<LayoutElement>();
-            clLE.preferredHeight = 38;
-
-            // Settings
-            var settingsBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Settings",
-                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid, 14, () =>
-                {
-                    ellipsisDropdown.SetActive(false);
-                    OnSettingsClicked?.Invoke();
-                });
-            var sLE = settingsBtn.gameObject.AddComponent<LayoutElement>();
-            sLE.preferredHeight = 38;
-
-            // Main Menu
-            var menuBtn = UIHelper.CreateButton(ellipsisDropdown.transform, "Main Menu",
-                SporefrontColors.BgSurface, SporefrontColors.ParchmentMid, 14, () =>
-                {
-                    ellipsisDropdown.SetActive(false);
-                    OnMainMenuClicked?.Invoke();
-                });
-            var mLE = menuBtn.gameObject.AddComponent<LayoutElement>();
-            mLE.preferredHeight = 38;
-
-            ellipsisDropdown.SetActive(false);
-        }
+        // CreateEllipsisDropdown removed — ☰ button now opens InGameMenuPanel directly
 
         // ================================================================
         // Label Helper

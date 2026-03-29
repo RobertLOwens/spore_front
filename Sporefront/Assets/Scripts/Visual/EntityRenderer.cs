@@ -51,6 +51,7 @@ namespace Sporefront.Visual
 
         // Cached label transforms to avoid Find() lookups
         private Dictionary<Guid, Transform> cachedLabelTransforms = new Dictionary<Guid, Transform>();
+        private Dictionary<Guid, GameObject> badgeLabels = new Dictionary<Guid, GameObject>();
 
         // Reusable collections to reduce GC
         private Dictionary<HexCoordinate, List<EntityPlacement>> entitiesPerTile =
@@ -97,6 +98,7 @@ namespace Sporefront.Visual
             if (toRemove == null) toRemove = new List<Guid>();
             if (movementStates == null) movementStates = new Dictionary<Guid, MovementInterpolationState>();
             if (timerLabels == null) timerLabels = new Dictionary<Guid, GameObject>();
+            if (badgeLabels == null) badgeLabels = new Dictionary<Guid, GameObject>();
             if (activelyMovingEntities == null) activelyMovingEntities = new HashSet<Guid>();
             if (smoothedETAs == null) smoothedETAs = new Dictionary<Guid, double>();
             if (buildingBars == null) buildingBars = new Dictionary<Guid, BuildingBarVisuals>();
@@ -142,6 +144,7 @@ namespace Sporefront.Visual
                 cachedLabelTransforms.Remove(id);
                 movementStates.Remove(id);
                 timerLabels.Remove(id); // child GO destroyed with parent
+                badgeLabels.Remove(id); // child GO destroyed with parent
                 buildingBars.Remove(id); // child GOs destroyed with parent
             }
 
@@ -202,6 +205,47 @@ namespace Sporefront.Visual
                                     ? SporefrontColors.InkBlack : SporefrontColors.ParchmentLight;
                             }
                         }
+                        changed = true;
+                    }
+
+                    // Update label text if changed (army count, villager task, etc.)
+                    if (current.label != desired.label)
+                    {
+                        if (!cachedLabelTransforms.TryGetValue(id, out var labelTF))
+                        {
+                            labelTF = go.transform.Find("Label");
+                            if (labelTF != null)
+                                cachedLabelTransforms[id] = labelTF;
+                        }
+
+                        if (desired.label != null && labelTF == null)
+                        {
+                            // Need to create a label that didn't exist before
+                            CreateLabel(go.transform, desired.label, desired.color);
+                            // Cache the newly created label transform
+                            var newLabelTF = go.transform.Find("Label");
+                            if (newLabelTF != null)
+                                cachedLabelTransforms[id] = newLabelTF;
+                        }
+                        else if (desired.label == null && labelTF != null)
+                        {
+                            // Remove label
+                            Destroy(labelTF.gameObject);
+                            cachedLabelTransforms.Remove(id);
+                        }
+                        else if (labelTF != null)
+                        {
+                            var textMesh = labelTF.GetComponent<TextMesh>();
+                            if (textMesh != null)
+                                textMesh.text = desired.label;
+                        }
+                        changed = true;
+                    }
+
+                    // Update badge label (garrison count on buildings)
+                    if (current.badgeLabel != desired.badgeLabel)
+                    {
+                        UpdateBadgeLabel(id, go, desired.badgeLabel, desired.color);
                         changed = true;
                     }
 
@@ -296,13 +340,57 @@ namespace Sporefront.Visual
 
                 string label = GetBuildingLabel(building.buildingType);
 
+                // Garrison badge: show troop count for own operational buildings
+                string badge = null;
+                if (!isEnemy && building.IsOperational)
+                {
+                    int garrisonCount = building.GetTotalGarrisonCount();
+                    if (garrisonCount > 0)
+                        badge = garrisonCount.ToString();
+                }
+
                 entitiesPerTile[coord].Add(new EntityPlacement
                 {
                     id = building.id,
                     type = EntityVisualType.Building,
                     color = color,
-                    label = label
+                    label = label,
+                    badgeLabel = badge
                 });
+
+                // Multi-tile buildings: render on all occupied tiles
+                if (building.buildingType.HexSize() > 1)
+                {
+                    var occupied = building.OccupiedCoordinates;
+                    for (int oi = 0; oi < occupied.Count; oi++)
+                    {
+                        var oCoord = occupied[oi];
+                        if (oCoord.Equals(coord)) continue; // skip anchor (already added)
+
+                        if (isEnemy)
+                        {
+                            var oLevel = localPlayer.GetVisibilityLevel(oCoord);
+                            if (oLevel == VisibilityLevel.Unexplored) continue;
+                        }
+
+                        if (!entitiesPerTile.ContainsKey(oCoord))
+                            entitiesPerTile[oCoord] = new List<EntityPlacement>();
+
+                        // Deterministic ID for secondary tiles: XOR building ID with tile index
+                        // to avoid Guid.NewGuid() churn causing constant GO destroy+recreate
+                        var bytes = building.id.ToByteArray();
+                        bytes[0] ^= (byte)(oi + 1);
+                        var secondaryID = new Guid(bytes);
+
+                        entitiesPerTile[oCoord].Add(new EntityPlacement
+                        {
+                            id = secondaryID,
+                            type = EntityVisualType.Building,
+                            color = color,
+                            label = null
+                        });
+                    }
+                }
             }
 
             // Collect armies
@@ -322,12 +410,13 @@ namespace Sporefront.Visual
 
                 Color color = GetOwnerColor(army.ownerID, gameState);
 
+                int unitCount = army.GetTotalUnits();
                 entitiesPerTile[coord].Add(new EntityPlacement
                 {
                     id = army.id,
                     type = EntityVisualType.Army,
                     color = color,
-                    label = null,
+                    label = unitCount > 0 ? unitCount.ToString() : null,
                     isEntrenched = army.isEntrenched,
                     isEntrenching = army.isEntrenching
                 });
@@ -350,12 +439,39 @@ namespace Sporefront.Visual
 
                 Color color = GetOwnerColor(group.ownerID, gameState);
 
+                string taskIcon = GetVillagerTaskIcon(group);
                 entitiesPerTile[coord].Add(new EntityPlacement
                 {
                     id = group.id,
                     type = EntityVisualType.Villager,
                     color = color,
-                    label = null
+                    label = taskIcon
+                });
+            }
+
+            // Collect scouts
+            foreach (var kvp in gameState.scouts)
+            {
+                var scout = kvp.Value;
+
+                // Fog filter: own scouts always shown; enemy scouts only when tile is Visible
+                if (localPlayer != null && (!scout.ownerID.HasValue || scout.ownerID.Value != fogLocalPlayerID))
+                {
+                    if (!localPlayer.IsVisible(scout.coordinate)) continue;
+                }
+
+                var coord = scout.coordinate;
+                if (!entitiesPerTile.ContainsKey(coord))
+                    entitiesPerTile[coord] = new List<EntityPlacement>();
+
+                Color color = GetOwnerColor(scout.ownerID, gameState);
+
+                entitiesPerTile[coord].Add(new EntityPlacement
+                {
+                    id = scout.id,
+                    type = EntityVisualType.Scout,
+                    color = color,
+                    label = "\ud83d\udc41" // eye icon for scout
                 });
             }
 
@@ -401,6 +517,7 @@ namespace Sporefront.Visual
                 var armies = new List<EntityPlacement>();
                 var villagers = new List<EntityPlacement>();
                 var resources = new List<EntityPlacement>();
+                var scouts = new List<EntityPlacement>();
 
                 foreach (var p in placements)
                 {
@@ -410,6 +527,7 @@ namespace Sporefront.Visual
                         case EntityVisualType.Army: armies.Add(p); break;
                         case EntityVisualType.Villager: villagers.Add(p); break;
                         case EntityVisualType.Resource: resources.Add(p); break;
+                        case EntityVisualType.Scout: scouts.Add(p); break;
                     }
                 }
 
@@ -438,6 +556,12 @@ namespace Sporefront.Visual
                 for (int i = 0; i < villagers.Count; i++)
                 {
                     AddDesiredState(villagers[i], tileCenter, Vector2.zero);
+                }
+
+                // Scouts at tile center
+                for (int i = 0; i < scouts.Count; i++)
+                {
+                    AddDesiredState(scouts[i], tileCenter, Vector2.zero);
                 }
             }
 
@@ -563,6 +687,28 @@ namespace Sporefront.Visual
                 }
             }
 
+            // Scout movement interpolation
+            foreach (var kvp in gameState.scouts)
+            {
+                var scout = kvp.Value;
+                if (scout.currentPath != null && scout.pathIndex < scout.currentPath.Count &&
+                    scout.movementSpeed > 0 && desiredStates.ContainsKey(scout.id))
+                {
+                    activelyMovingEntities.Add(scout.id);
+                    var desired = desiredStates[scout.id];
+                    var fromPos = desired.worldPosition;
+                    var nextTileCenter = HexMetrics.HexToWorldPosition(scout.currentPath[scout.pathIndex]);
+                    var typeOffset = new Vector3(desired.worldPosition.x - HexMetrics.HexToWorldPosition(scout.coordinate).x,
+                                                 desired.worldPosition.y - HexMetrics.HexToWorldPosition(scout.coordinate).y, 0f);
+                    var toPos = new Vector3(nextTileCenter.x + typeOffset.x, nextTileCenter.y + typeOffset.y, ZPosition);
+                    float t = Mathf.Clamp01((float)scout.movementProgress);
+                    var interpolatedPos = Vector3.Lerp(fromPos, toPos, t);
+
+                    desired.worldPosition = interpolatedPos;
+                    desiredStates[scout.id] = desired;
+                }
+            }
+
             // Clean up movement states and timer labels for entities that stopped moving
             toRemove.Clear();
             foreach (var id in movementStates.Keys)
@@ -589,6 +735,7 @@ namespace Sporefront.Visual
                 type = placement.type,
                 color = placement.color,
                 label = placement.label,
+                badgeLabel = placement.badgeLabel,
                 worldPosition = new Vector3(
                     tileCenter.x + offset.x,
                     tileCenter.y + offset.y,
@@ -728,6 +875,9 @@ namespace Sporefront.Visual
                 case EntityVisualType.Resource:
                     meshFilter.sharedMesh = triangleMesh;
                     break;
+                case EntityVisualType.Scout:
+                    meshFilter.sharedMesh = smallCircleMesh;
+                    break;
             }
 
             meshRenderer.sharedMaterial = sharedMaterial;
@@ -742,6 +892,12 @@ namespace Sporefront.Visual
             if (state.label != null)
             {
                 CreateLabel(go.transform, state.label, state.color);
+            }
+
+            // Badge label (garrison count on buildings)
+            if (state.badgeLabel != null)
+            {
+                CreateBadgeLabel(state.id, go, state.badgeLabel);
             }
 
             // Progress/HP bars for buildings
@@ -773,6 +929,56 @@ namespace Sporefront.Visual
 
             var meshRenderer = labelGO.GetComponent<MeshRenderer>();
             meshRenderer.sortingOrder = 7;
+        }
+
+        // ================================================================
+        // Badge Labels (garrison count)
+        // ================================================================
+
+        private void CreateBadgeLabel(Guid id, GameObject parent, string text)
+        {
+            var badgeGO = new GameObject("Badge");
+            badgeGO.transform.SetParent(parent.transform, false);
+            // Position offset to upper-right of building
+            badgeGO.transform.localPosition = new Vector3(
+                BuildingSize * 0.7f, BuildingSize * 0.5f * HexMetrics.IsometricYScale, -0.01f);
+
+            var textMesh = badgeGO.AddComponent<TextMesh>();
+            textMesh.text = text;
+            textMesh.fontSize = 28;
+            textMesh.characterSize = 0.055f;
+            textMesh.anchor = TextAnchor.MiddleCenter;
+            textMesh.alignment = TextAlignment.Center;
+            textMesh.color = SporefrontColors.SporeAmber;
+
+            var meshRenderer = badgeGO.GetComponent<MeshRenderer>();
+            meshRenderer.sortingOrder = 8;
+
+            badgeLabels[id] = badgeGO;
+        }
+
+        private void UpdateBadgeLabel(Guid id, GameObject parent, string text, Color entityColor)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                // Remove badge
+                if (badgeLabels.TryGetValue(id, out var oldBadge) && oldBadge != null)
+                    Destroy(oldBadge);
+                badgeLabels.Remove(id);
+                return;
+            }
+
+            if (badgeLabels.TryGetValue(id, out var badgeGO) && badgeGO != null)
+            {
+                // Update existing
+                var textMesh = badgeGO.GetComponent<TextMesh>();
+                if (textMesh != null) textMesh.text = text;
+            }
+            else
+            {
+                // Create new
+                CreateBadgeLabel(id, parent, text);
+            }
         }
 
         // ================================================================
@@ -932,6 +1138,9 @@ namespace Sporefront.Visual
                     case EntityVisualType.Villager:
                         bottomOffset = VillagerSize * HexMetrics.IsometricYScale;
                         break;
+                    case EntityVisualType.Scout:
+                        bottomOffset = VillagerSize * HexMetrics.IsometricYScale;
+                        break;
                 }
             }
 
@@ -1086,6 +1295,39 @@ namespace Sporefront.Visual
             }
         }
 
+        private string GetVillagerTaskIcon(VillagerGroupData group)
+        {
+            if (group.currentTask == null || group.currentTask.IsIdle)
+                return null; // no icon for idle — visually distinct as "unlabeled"
+
+            if (group.currentTask is BuildingTask || group.currentTask is UpgradingTask
+                || group.currentTask is DemolishingTask || group.currentTask is RepairingTask)
+                return "Bld";
+
+            if (group.currentTask is GatheringTask gt)
+            {
+                switch (gt.GatherResourceType)
+                {
+                    case ResourceType.Wood: return "W";
+                    case ResourceType.Food: return "F";
+                    case ResourceType.Stone: return "S";
+                    case ResourceType.Ore: return "O";
+                    default: return "G";
+                }
+            }
+
+            if (group.currentTask is GatheringResourceTask)
+                return "G";
+
+            if (group.currentTask is HuntingTask)
+                return "H";
+
+            if (group.currentTask is MovingTask)
+                return ">";
+
+            return "*";
+        }
+
         private string GetResourceLabel(ResourcePointType type)
         {
             switch (type)
@@ -1113,6 +1355,7 @@ namespace Sporefront.Visual
             movementStates.Clear();
             smoothedETAs.Clear();
             timerLabels.Clear();
+            badgeLabels.Clear();
             buildingBars.Clear();
         }
 
@@ -1125,7 +1368,8 @@ namespace Sporefront.Visual
             Building,
             Army,
             Villager,
-            Resource
+            Resource,
+            Scout
         }
 
         private struct EntityPlacement
@@ -1134,6 +1378,7 @@ namespace Sporefront.Visual
             public EntityVisualType type;
             public Color color;
             public string label;
+            public string badgeLabel; // secondary label (garrison count for buildings)
             public bool isEntrenched;
             public bool isEntrenching;
         }
@@ -1144,6 +1389,7 @@ namespace Sporefront.Visual
             public EntityVisualType type;
             public Color color;
             public string label;
+            public string badgeLabel;
             public Vector3 worldPosition;
             public bool isEntrenched;
             public bool isEntrenching;

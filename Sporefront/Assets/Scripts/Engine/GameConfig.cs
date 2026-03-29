@@ -52,6 +52,18 @@ namespace Sporefront.Engine
             public const double LethalSporesDurationMultiplier = 1.5;    // Tier II: +50% duration
         }
 
+        public static class Scout
+        {
+            public const double MovementSpeedMultiplier = 1.5;     // 50% faster than armies
+            public const double MaxStamina = 100.0;
+            public const double StaminaCostPerTile = 10.0;
+            public const double StaminaRegenPerSecond = 5.0;
+            public const int VisionRange = 3;
+            public const double TrainingTime = 15.0;
+            public const int FoodCost = 50;
+            public const double MaxHp = 30.0;
+        }
+
         public static class Resources
         {
             public const double BaseGatherRatePerVillager = 0.2;

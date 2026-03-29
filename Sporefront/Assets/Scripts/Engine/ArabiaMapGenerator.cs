@@ -559,27 +559,7 @@ namespace Sporefront.Engine
             int exclusionRadius,
             HashSet<HexCoordinate> used)
         {
-            for (int attempt = 0; attempt < 20 && candidates.Count > 0; attempt++)
-            {
-                int idx = rng.NextInt(0, candidates.Count - 1);
-                var coord = candidates[idx];
-
-                if (used.Contains(coord)) continue;
-
-                bool tooClose = false;
-                foreach (var startPos in startPositions)
-                {
-                    if (coord.Distance(startPos) < exclusionRadius)
-                    {
-                        tooClose = true;
-                        break;
-                    }
-                }
-                if (tooClose) continue;
-
-                return coord;
-            }
-            return null;
+            return FindValidPlacement(rng, candidates, startPositions, exclusionRadius, used);
         }
 
         // ================================================================
@@ -714,181 +694,27 @@ namespace Sporefront.Engine
         /// Place a small mining hill (4-5 tiles) at distance 5-6 from spawn for starting ore/stone.
         /// Returns the hill tile coordinates.
         /// </summary>
+        // Delegates to base class methods
+
         private List<HexCoordinate> PlaceStartingMiningHill(
             Dictionary<HexCoordinate, TerrainGenerationData> terrain,
             HexCoordinate spawnPosition)
         {
-            var hillCoords = new List<HexCoordinate>();
-
-            // Find a suitable center at distance 5-6 from spawn
-            var candidates = new List<HexCoordinate>();
-            for (int q = -7; q <= 7; q++)
-            {
-                for (int r = -7; r <= 7; r++)
-                {
-                    var coord = new HexCoordinate(spawnPosition.q + q, spawnPosition.r + r);
-                    int dist = coord.Distance(spawnPosition);
-                    if (dist >= 5 && dist <= 6)
-                    {
-                        if (coord.q >= 0 && coord.q < Width && coord.r >= 0 && coord.r < Height)
-                        {
-                            candidates.Add(coord);
-                        }
-                    }
-                }
-            }
-
-            if (candidates.Count == 0) return hillCoords;
-
-            rng.Shuffle(candidates);
-            var center = candidates[0];
-
-            // BFS expand 4-5 hill tiles from center
-            int hillSize = rng.NextInt(4, 5);
-            var frontier = new List<HexCoordinate> { center };
-            var visited = new HashSet<HexCoordinate>();
-            int placed = 0;
-
-            while (placed < hillSize && frontier.Count > 0)
-            {
-                var current = frontier[0];
-                frontier.RemoveAt(0);
-
-                if (visited.Contains(current)) continue;
-                if (current.q < 0 || current.q >= Width || current.r < 0 || current.r >= Height) continue;
-                visited.Add(current);
-
-                TerrainGenerationData data;
-                if (terrain.TryGetValue(current, out data))
-                {
-                    data.terrain = TerrainType.Hill;
-                    data.elevation = 1;
-                    terrain[current] = data;
-                    hillCoords.Add(current);
-                    placed++;
-
-                    var neighbors = current.Neighbors();
-                    var neighborList = new List<HexCoordinate>(neighbors);
-                    rng.Shuffle(neighborList);
-                    foreach (var neighbor in neighborList)
-                    {
-                        if (!visited.Contains(neighbor))
-                        {
-                            frontier.Add(neighbor);
-                        }
-                    }
-                }
-            }
-
-            return hillCoords;
-        }
-
-        private HexCoordinate? FindUnusedCoordinate(
-            List<HexCoordinate> coords, HashSet<HexCoordinate> used)
-        {
-            while (coords.Count > 0)
-            {
-                var coord = coords[0];
-                coords.RemoveAt(0);
-                if (!used.Contains(coord))
-                    return coord;
-            }
-            return null;
+            return base.PlaceStartingMiningHill(rng, terrain, spawnPosition, 4, 5);
         }
 
         private List<ResourcePlacement> PlaceResourceCluster(
             ResourcePointType type, int size, HexCoordinate center,
             int radius, HashSet<HexCoordinate> used)
         {
-            var placements = new List<ResourcePlacement>();
-            var usedLocal = new HashSet<HexCoordinate>(used);
-
-            // Find candidate starting points for the cluster
-            var candidates = new List<HexCoordinate>();
-            for (int q = -radius; q <= radius; q++)
-            {
-                for (int r = -radius; r <= radius; r++)
-                {
-                    var coord = new HexCoordinate(center.q + q, center.r + r);
-                    if (coord.Distance(center) <= radius && !usedLocal.Contains(coord))
-                    {
-                        candidates.Add(coord);
-                    }
-                }
-            }
-
-            rng.Shuffle(candidates);
-
-            if (candidates.Count == 0) return placements;
-            var startCoord = candidates[0];
-
-            // BFS to create adjacent cluster
-            var frontier = new List<HexCoordinate> { startCoord };
-            int placed = 0;
-
-            while (placed < size && frontier.Count > 0)
-            {
-                var current = frontier[0];
-                frontier.RemoveAt(0);
-
-                if (usedLocal.Contains(current)) continue;
-                if (current.Distance(center) > radius) continue;
-
-                placements.Add(new ResourcePlacement(current, type));
-                usedLocal.Add(current);
-                placed++;
-
-                // Add neighbors to frontier (shuffled for organic shape)
-                var neighbors = current.Neighbors();
-                var neighborList = new List<HexCoordinate>(neighbors);
-                rng.Shuffle(neighborList);
-                foreach (var neighbor in neighborList)
-                {
-                    if (!usedLocal.Contains(neighbor) && neighbor.Distance(center) <= radius)
-                    {
-                        frontier.Add(neighbor);
-                    }
-                }
-            }
-
-            return placements;
+            return base.PlaceResourceCluster(rng, type, size, center, radius, used);
         }
 
         private List<ResourcePlacement> GenerateResourceCluster(
             ResourcePointType type, int size, HexCoordinate center,
             HashSet<HexCoordinate> used)
         {
-            var placements = new List<ResourcePlacement>();
-            var usedLocal = new HashSet<HexCoordinate>(used);
-            var frontier = new List<HexCoordinate> { center };
-            int placed = 0;
-
-            while (placed < size && frontier.Count > 0)
-            {
-                var current = frontier[0];
-                frontier.RemoveAt(0);
-
-                if (usedLocal.Contains(current)) continue;
-                if (current.q < 0 || current.q >= Width || current.r < 0 || current.r >= Height) continue;
-
-                placements.Add(new ResourcePlacement(current, type));
-                usedLocal.Add(current);
-                placed++;
-
-                // Add neighbors to frontier (shuffled for organic shape)
-                var neighbors = current.Neighbors();
-                var neighborList = new List<HexCoordinate>(neighbors);
-                rng.Shuffle(neighborList);
-                foreach (var neighbor in neighborList)
-                {
-                    if (!usedLocal.Contains(neighbor))
-                    {
-                        frontier.Add(neighbor);
-                    }
-                }
-            }
-
-            return placements;
+            return base.GenerateResourceCluster(rng, type, size, center, used);
         }
     }
 }

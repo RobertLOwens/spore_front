@@ -48,7 +48,7 @@ namespace Sporefront.Engine
         public int zoneJitter = 4;
 
         // Terrain variation — probability of plains clearings on slopes (0.0–1.0)
-        public float slopePlainsClearingChance = 0.12f;
+        public double slopePlainsClearingChance = 0.12;
         public int plainsClearingMinSize = 3;
         public int plainsClearingMaxSize = 6;
 
@@ -433,7 +433,7 @@ namespace Sporefront.Engine
             int ridgeAnimals = config.ridgeAnimalCount * 2; // both ridges
             for (int i = 0; i < ridgeAnimals; i++)
             {
-                var coord = FindValidPlacement(ridgeTiles, aroundPositions, excludingRadius, usedCoordinates);
+                var coord = FindValidPlacement(rng, ridgeTiles, aroundPositions, excludingRadius, usedCoordinates);
                 if (coord.HasValue)
                 {
                     placements.Add(new ResourcePlacement(coord.Value, ResourcePointType.Deer));
@@ -516,7 +516,7 @@ namespace Sporefront.Engine
             foreach (var seed in slopeTiles)
             {
                 if (cleared.Contains(seed)) continue;
-                if (rng.NextFloat() > config.slopePlainsClearingChance) continue;
+                if (rng.NextDouble(0.0, 1.0) > config.slopePlainsClearingChance) continue;
 
                 // BFS expand a small clearing
                 int clearingSize = rng.NextInt(config.plainsClearingMinSize, config.plainsClearingMaxSize);
@@ -662,36 +662,24 @@ namespace Sporefront.Engine
             int exclusionRadius, List<ResourcePlacement> placements, HashSet<HexCoordinate> used)
         {
             int treeExclusionRadius = 6;
-            for (int i = 0; i < count; i++)
-            {
-                var center = FindValidPlacementWithExclusion(zoneTiles, startPositions, treeExclusionRadius, used);
-                if (!center.HasValue) continue;
-
-                int pocketSize = rng.NextInt(sizeMin, sizeMax);
-                var treePlacements = GenerateResourceCluster(
-                    ResourcePointType.Trees, pocketSize, center.Value, used);
-                foreach (var placement in treePlacements)
-                {
-                    placements.Add(placement);
-                    used.Add(placement.coordinate);
-                }
-            }
+            base.PlaceTreePockets(rng, count, sizeMin, sizeMax, zoneTiles, startPositions,
+                treeExclusionRadius, placements, used);
         }
 
+        // PlaceMineralDeposits has unique alternating ore/stone logic, so keep inline but use base helpers
         private void PlaceMineralDeposits(int count, int sizeMin, int sizeMax,
             List<HexCoordinate> zoneTiles, List<HexCoordinate> startPositions,
             int exclusionRadius, List<ResourcePlacement> placements, HashSet<HexCoordinate> used)
         {
             for (int i = 0; i < count; i++)
             {
-                var center = FindValidPlacementWithExclusion(zoneTiles, startPositions, exclusionRadius + 3, used);
+                var center = FindValidPlacement(rng, zoneTiles, startPositions, exclusionRadius + 3, used);
                 if (!center.HasValue) continue;
 
                 int depositSize = rng.NextInt(sizeMin, sizeMax);
                 var resourceType = (i % 2 == 0) ? ResourcePointType.OreMine : ResourcePointType.StoneQuarry;
 
-                var mineralPlacements = GenerateResourceCluster(
-                    resourceType, depositSize, center.Value, used);
+                var mineralPlacements = GenerateResourceCluster(rng, resourceType, depositSize, center.Value, used);
                 foreach (var placement in mineralPlacements)
                 {
                     placements.Add(placement);
@@ -700,176 +688,37 @@ namespace Sporefront.Engine
             }
         }
 
+        // ================================================================
+        // Resource Placement Helpers — delegates to MapGeneratorBase
+        // ================================================================
+
         private void PlaceAnimals(int count,
             List<HexCoordinate> zoneTiles, List<HexCoordinate> startPositions,
             int exclusionRadius, List<ResourcePlacement> placements, HashSet<HexCoordinate> used)
         {
-            for (int i = 0; i < count; i++)
-            {
-                var coord = FindValidPlacement(zoneTiles, startPositions, exclusionRadius, used);
-                if (!coord.HasValue) continue;
-
-                var animalType = rng.NextBool() ? ResourcePointType.Deer : ResourcePointType.WildBoar;
-                placements.Add(new ResourcePlacement(coord.Value, animalType));
-                used.Add(coord.Value);
-            }
+            base.PlaceAnimals(rng, count, zoneTiles, startPositions, exclusionRadius, placements, used);
         }
 
         private void PlaceScatteredResources(int count, ResourcePointType type,
             List<HexCoordinate> zoneTiles, List<HexCoordinate> startPositions,
             int exclusionRadius, List<ResourcePlacement> placements, HashSet<HexCoordinate> used)
         {
-            for (int i = 0; i < count; i++)
-            {
-                var coord = FindValidPlacement(zoneTiles, startPositions, exclusionRadius, used);
-                if (!coord.HasValue) continue;
-
-                placements.Add(new ResourcePlacement(coord.Value, type));
-                used.Add(coord.Value);
-            }
-        }
-
-        private HexCoordinate? FindValidPlacement(
-            List<HexCoordinate> candidates, List<HexCoordinate> startPositions,
-            int exclusionRadius, HashSet<HexCoordinate> used)
-        {
-            return FindValidPlacementWithExclusion(candidates, startPositions, exclusionRadius, used);
-        }
-
-        private HexCoordinate? FindValidPlacementWithExclusion(
-            List<HexCoordinate> candidates, List<HexCoordinate> startPositions,
-            int exclusionRadius, HashSet<HexCoordinate> used)
-        {
-            // Try up to 20 random candidates from the zone tile list
-            for (int attempt = 0; attempt < 20 && candidates.Count > 0; attempt++)
-            {
-                int idx = rng.NextInt(0, candidates.Count - 1);
-                var coord = candidates[idx];
-
-                if (used.Contains(coord)) continue;
-
-                bool tooClose = false;
-                foreach (var startPos in startPositions)
-                {
-                    if (coord.Distance(startPos) < exclusionRadius)
-                    {
-                        tooClose = true;
-                        break;
-                    }
-                }
-                if (tooClose) continue;
-
-                return coord;
-            }
-            return null;
-        }
-
-        // ================================================================
-        // BFS Cluster Generation (same pattern as Arabia)
-        // ================================================================
-
-        private HexCoordinate? FindUnusedCoordinate(
-            List<HexCoordinate> coords, HashSet<HexCoordinate> used)
-        {
-            while (coords.Count > 0)
-            {
-                var coord = coords[0];
-                coords.RemoveAt(0);
-                if (!used.Contains(coord))
-                    return coord;
-            }
-            return null;
+            base.PlaceScatteredResources(rng, count, type, zoneTiles, startPositions,
+                exclusionRadius, placements, used);
         }
 
         private List<ResourcePlacement> PlaceResourceCluster(
             ResourcePointType type, int size, HexCoordinate center,
             int radius, HashSet<HexCoordinate> used)
         {
-            var placements = new List<ResourcePlacement>();
-            var usedLocal = new HashSet<HexCoordinate>(used);
-
-            var candidates = new List<HexCoordinate>();
-            for (int q = -radius; q <= radius; q++)
-            {
-                for (int r = -radius; r <= radius; r++)
-                {
-                    var coord = new HexCoordinate(center.q + q, center.r + r);
-                    if (coord.Distance(center) <= radius && !usedLocal.Contains(coord))
-                    {
-                        candidates.Add(coord);
-                    }
-                }
-            }
-
-            rng.Shuffle(candidates);
-
-            if (candidates.Count == 0) return placements;
-            var startCoord = candidates[0];
-
-            var frontier = new List<HexCoordinate> { startCoord };
-            int placed = 0;
-
-            while (placed < size && frontier.Count > 0)
-            {
-                var current = frontier[0];
-                frontier.RemoveAt(0);
-
-                if (usedLocal.Contains(current)) continue;
-                if (current.Distance(center) > radius) continue;
-
-                placements.Add(new ResourcePlacement(current, type));
-                usedLocal.Add(current);
-                placed++;
-
-                var neighbors = current.Neighbors();
-                var neighborList = new List<HexCoordinate>(neighbors);
-                rng.Shuffle(neighborList);
-                foreach (var neighbor in neighborList)
-                {
-                    if (!usedLocal.Contains(neighbor) && neighbor.Distance(center) <= radius)
-                    {
-                        frontier.Add(neighbor);
-                    }
-                }
-            }
-
-            return placements;
+            return base.PlaceResourceCluster(rng, type, size, center, radius, used);
         }
 
         private List<ResourcePlacement> GenerateResourceCluster(
             ResourcePointType type, int size, HexCoordinate center,
             HashSet<HexCoordinate> used)
         {
-            var placements = new List<ResourcePlacement>();
-            var usedLocal = new HashSet<HexCoordinate>(used);
-            var frontier = new List<HexCoordinate> { center };
-            int placed = 0;
-
-            while (placed < size && frontier.Count > 0)
-            {
-                var current = frontier[0];
-                frontier.RemoveAt(0);
-
-                if (usedLocal.Contains(current)) continue;
-                if (current.q < 0 || current.q >= Width || current.r < 0 || current.r >= Height) continue;
-
-                placements.Add(new ResourcePlacement(current, type));
-                usedLocal.Add(current);
-                placed++;
-
-                var neighbors = current.Neighbors();
-                var neighborList = new List<HexCoordinate>(neighbors);
-                rng.Shuffle(neighborList);
-                foreach (var neighbor in neighborList)
-                {
-                    if (!usedLocal.Contains(neighbor))
-                    {
-                        frontier.Add(neighbor);
-                    }
-                }
-            }
-
-            return placements;
+            return base.GenerateResourceCluster(rng, type, size, center, used);
         }
     }
 }

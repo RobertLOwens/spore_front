@@ -45,6 +45,7 @@ namespace Sporefront.Data
         // Training Queues
         public List<TrainingQueueEntry> trainingQueue = new List<TrainingQueueEntry>();
         public List<VillagerTrainingEntry> villagerTrainingQueue = new List<VillagerTrainingEntry>();
+        public List<ScoutTrainingEntry> scoutTrainingQueue = new List<ScoutTrainingEntry>();
 
         // Computed Properties
         public int MaxLevel => buildingType.MaxLevel();
@@ -284,6 +285,11 @@ namespace Sporefront.Data
                    (buildingType == BuildingType.CityCenter || buildingType == BuildingType.Neighborhood);
         }
 
+        public bool CanTrainScouts()
+        {
+            return state == BuildingState.Completed && buildingType == BuildingType.CityCenter;
+        }
+
         public void StartTraining(MilitaryUnitType unitType, int quantity, double time)
         {
             if (!CanTrain(unitType)) return;
@@ -294,6 +300,37 @@ namespace Sporefront.Data
         {
             if (!CanTrainVillagers()) return;
             villagerTrainingQueue.Add(new VillagerTrainingEntry(quantity, time));
+        }
+
+        public void StartScoutTraining(double time)
+        {
+            if (!CanTrainScouts()) return;
+            scoutTrainingQueue.Add(new ScoutTrainingEntry(time));
+        }
+
+        public List<ScoutTrainingEntry> UpdateScoutTraining(double currentTime)
+        {
+            if (scoutTrainingQueue.Count == 0) return new List<ScoutTrainingEntry>();
+
+            var completed = new List<ScoutTrainingEntry>();
+            var completedIndices = new List<int>();
+
+            for (int i = 0; i < scoutTrainingQueue.Count; i++)
+            {
+                double progress = scoutTrainingQueue[i].GetProgress(currentTime);
+                scoutTrainingQueue[i].progress = progress;
+
+                if (progress >= 1.0)
+                {
+                    completed.Add(scoutTrainingQueue[i]);
+                    completedIndices.Add(i);
+                }
+            }
+
+            for (int i = completedIndices.Count - 1; i >= 0; i--)
+                scoutTrainingQueue.RemoveAt(completedIndices[i]);
+
+            return completed;
         }
 
         public List<TrainingQueueEntry> UpdateTraining(double currentTime, double researchMultiplier = 1.0)

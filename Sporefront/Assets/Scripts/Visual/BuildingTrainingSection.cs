@@ -57,6 +57,12 @@ namespace Sporefront.Visual
                     currentPop, popCapacity);
             }
 
+            // Scout training (City Center only)
+            if (building.buildingType == BuildingType.CityCenter && building.IsOperational)
+            {
+                BuildScoutTrainingControl(contentRT, building, player, localPlayerID);
+            }
+
             // Military unit training
             var unitTypes = (MilitaryUnitType[])Enum.GetValues(typeof(MilitaryUnitType));
             foreach (var ut in unitTypes)
@@ -96,6 +102,25 @@ namespace Sporefront.Visual
                 foreach (var entry in building.villagerTrainingQueue)
                 {
                     BuildVillagerQueueRow(contentRT, building, entry, gameState, state);
+                }
+            }
+
+            // Scout training queue
+            if (building.scoutTrainingQueue != null && building.scoutTrainingQueue.Count > 0)
+            {
+                if ((building.trainingQueue == null || building.trainingQueue.Count == 0)
+                    && (building.villagerTrainingQueue == null || building.villagerTrainingQueue.Count == 0))
+                    UIHelper.CreateDivider(contentRT, null, 1);
+
+                var scoutQueueLabel = UIHelper.CreateLabel(contentRT,
+                    $"Scout queue: {building.scoutTrainingQueue.Count} item(s)", UIConstants.FontCaption,
+                    UIHelper.InkMutedText);
+                var sqLE = scoutQueueLabel.gameObject.AddComponent<LayoutElement>();
+                sqLE.preferredHeight = 20;
+
+                foreach (var entry in building.scoutTrainingQueue)
+                {
+                    BuildScoutQueueRow(contentRT, building, entry, gameState);
                 }
             }
 
@@ -285,6 +310,85 @@ namespace Sporefront.Visual
                 capturedCountLabel.text = selectedQty.ToString();
                 capturedTotalCostLabel.text = $"Total: F{capturedCostPerUnit * selectedQty}";
             });
+        }
+
+        // ================================================================
+        // Scout Training Control (single button — no slider, trains 1 at a time)
+        // ================================================================
+
+        private static void BuildScoutTrainingControl(RectTransform contentRT,
+            BuildingData building, PlayerState player, Guid localPlayerID)
+        {
+            int foodCost = GameConfig.Scout.FoodCost;
+            bool canAfford = player != null && player.GetResource(ResourceType.Food) >= foodCost;
+
+            // Name row
+            var nameRow = UIHelper.CreateHorizontalRow(contentRT, 22f, 4f);
+            var nameLabel = UIHelper.CreateLabel(nameRow.transform, "Mycelium Scout", UIConstants.FontCaption);
+            var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+            nameLE.flexibleWidth = 1;
+
+            var costLabel = UIHelper.CreateLabel(nameRow.transform, $"F{foodCost}", UIConstants.FontCaption,
+                canAfford ? UIHelper.InkMutedText : SporefrontColors.SporeRed);
+            var costLE = costLabel.gameObject.AddComponent<LayoutElement>();
+            costLE.preferredWidth = 100;
+
+            // Train button row
+            var row = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
+            var capturedBuildingID = building.id;
+            var trainBtn = UIHelper.CreateButton(row.transform, "Train",
+                canAfford ? SporefrontColors.ParchmentDeep : UIHelper.InkMutedText,
+                UIHelper.InkBodyText, UIConstants.FontCaption,
+                canAfford ? (Action)(() =>
+                {
+                    var cmd = new TrainScoutCommand(localPlayerID, capturedBuildingID);
+                    UIManager.ExecutePlayerCommand(cmd);
+                }) : null);
+            trainBtn.interactable = canAfford;
+            var btnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
+            btnLE.flexibleWidth = 1;
+        }
+
+        // ================================================================
+        // Scout Queue Progress Row
+        // ================================================================
+
+        private static void BuildScoutQueueRow(RectTransform contentRT,
+            BuildingData building, ScoutTrainingEntry entry, GameState gameState)
+        {
+            double progress = entry.GetProgress(gameState.currentTime);
+            float progressFloat = Mathf.Clamp01((float)progress);
+
+            var row = UIHelper.CreateHorizontalRow(contentRT, 20f, 4f);
+
+            var unitLabel = UIHelper.CreateLabel(row.transform,
+                "Mycelium Scout", UIConstants.FontCaption, UIHelper.InkMutedText);
+            var unitLE = unitLabel.gameObject.AddComponent<LayoutElement>();
+            unitLE.preferredWidth = 100;
+
+            var (bg, fill) = UIHelper.CreateInkProgressBar(row.transform, 12f,
+                UIHelper.InkMutedText, SporefrontColors.SporeTeal);
+            var fillRT = fill.GetComponent<RectTransform>();
+            fillRT.anchorMax = new Vector2(progressFloat, 1);
+            var barLE = bg.gameObject.AddComponent<LayoutElement>();
+            barLE.flexibleWidth = 1;
+            barLE.preferredHeight = 12;
+
+            var pctLabel = UIHelper.CreateLabel(row.transform,
+                $"{(int)(progressFloat * 100)}%", UIConstants.FontCaption, UIHelper.InkMutedText);
+            var pctLE = pctLabel.gameObject.AddComponent<LayoutElement>();
+            pctLE.preferredWidth = 30;
+
+            // Time remaining
+            double totalTime = GameConfig.Scout.TrainingTime;
+            double elapsed = gameState.currentTime - entry.startTime;
+            double remaining = Math.Max(0, totalTime - elapsed);
+
+            var timeLabel = UIHelper.CreateLabel(row.transform,
+                $"~{UIHelper.FormatTime(remaining)}",
+                UIConstants.FontCaption, UIHelper.InkMutedText);
+            var timeLE = timeLabel.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = 50;
         }
 
         // ================================================================

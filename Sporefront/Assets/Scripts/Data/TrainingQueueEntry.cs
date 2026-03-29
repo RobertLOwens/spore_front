@@ -1,4 +1,5 @@
 using System;
+using Sporefront.Engine;
 using Sporefront.Models;
 
 namespace Sporefront.Data
@@ -53,6 +54,27 @@ namespace Sporefront.Data
             double elapsed = currentTime - startTime;
             double totalTime = TrainingTimePerVillager * quantity;
             return Math.Min(1.0, elapsed / totalTime);
+        }
+    }
+
+    [System.Serializable]
+    public class ScoutTrainingEntry
+    {
+        public Guid id;
+        public double startTime;
+        public double progress;
+
+        public ScoutTrainingEntry(double startTime)
+        {
+            this.id = Guid.NewGuid();
+            this.startTime = startTime;
+            this.progress = 0.0;
+        }
+
+        public double GetProgress(double currentTime)
+        {
+            double elapsed = currentTime - startTime;
+            return Math.Min(1.0, elapsed / Sporefront.Engine.GameConfig.Scout.TrainingTime);
         }
     }
 }

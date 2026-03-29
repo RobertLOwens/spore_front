@@ -196,6 +196,46 @@ namespace Sporefront.Engine
             var poisonChanges = ProcessPoisonDamage(currentTime, gameState);
             changes.AddRange(poisonChanges);
 
+            // Eliminate scouts on contact with enemy armies
+            var scoutChanges = ProcessScoutElimination(gameState);
+            changes.AddRange(scoutChanges);
+
+            return changes;
+        }
+
+        // MARK: - Scout Elimination (instant kill on enemy army contact)
+
+        private List<StateChange> ProcessScoutElimination(GameState state)
+        {
+            var changes = new List<StateChange>();
+            var scoutsToRemove = new List<Guid>();
+
+            foreach (var scout in state.scouts.Values)
+            {
+                if (!scout.ownerID.HasValue) continue;
+
+                // Check if any enemy army is on the same tile
+                var armiesAtTile = state.GetArmies(scout.coordinate);
+                foreach (var army in armiesAtTile)
+                {
+                    if (army.ownerID.HasValue && army.ownerID.Value != scout.ownerID.Value)
+                    {
+                        scoutsToRemove.Add(scout.id);
+                        changes.Add(new ScoutRemovedChange
+                        {
+                            scoutID = scout.id,
+                            coordinate = scout.coordinate
+                        });
+                        break;
+                    }
+                }
+            }
+
+            foreach (var id in scoutsToRemove)
+            {
+                state.RemoveScout(id);
+            }
+
             return changes;
         }
 
