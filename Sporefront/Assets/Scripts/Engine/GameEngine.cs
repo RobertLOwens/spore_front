@@ -65,6 +65,7 @@ namespace Sporefront.Engine
         public readonly ConstructionEngine constructionEngine;
         public readonly TrainingEngine trainingEngine;
         public readonly VisionEngine visionEngine;
+        public readonly DominationEngine dominationEngine;
 
         private AIController aiController;
 
@@ -99,6 +100,7 @@ namespace Sporefront.Engine
         private double lastEntrenchmentUpdate;
         private double lastResearchCheck;
         private double lastWinConditionCheck;
+        private double lastDominationUpdate;
 
         // Starvation tracking: per-player accumulated time with zero food
         private Dictionary<Guid, double> starvationTimers = new Dictionary<Guid, double>();
@@ -130,6 +132,7 @@ namespace Sporefront.Engine
             constructionEngine = new ConstructionEngine();
             trainingEngine = new TrainingEngine();
             visionEngine = new VisionEngine();
+            dominationEngine = new DominationEngine();
         }
 
         // ================================================================
@@ -152,6 +155,10 @@ namespace Sporefront.Engine
             constructionEngine.Setup(gameState);
             trainingEngine.Setup(gameState);
             visionEngine.Setup(gameState);
+
+            // Initialize domination engine if in domination mode
+            if (gameState.gameMode.UsesControlZones())
+                dominationEngine.Setup(gameState);
 
             // Initialize AI controller
             aiController = AIController.Instance;
@@ -271,6 +278,7 @@ namespace Sporefront.Engine
             lastEntrenchmentUpdate = 0;
             lastResearchCheck = 0;
             lastWinConditionCheck = 0;
+            lastDominationUpdate = 0;
             starvationTimers.Clear();
 
             // Reset online mode state
@@ -445,6 +453,15 @@ namespace Sporefront.Engine
                 allChanges.AddRange(unitUpgradeChanges);
 
                 lastResearchCheck = adjustedTime;
+            }
+
+            // Domination updates (1x per second, only in domination mode)
+            if (gameState.gameMode.UsesControlZones() &&
+                adjustedTime - lastDominationUpdate >= GameConfig.Domination.UpdateInterval)
+            {
+                var dominationChanges = dominationEngine.Update(adjustedTime);
+                allChanges.AddRange(dominationChanges);
+                lastDominationUpdate = adjustedTime;
             }
 
             // Win condition checks (1x per second)
@@ -640,26 +657,29 @@ namespace Sporefront.Engine
             // Need at least 2 players for win conditions
             if (allPlayers.Count < 2) return StateChange.EmptyChanges;
 
-            // --- City Center Destroyed ---
-            foreach (var player in allPlayers)
+            // --- City Center Destroyed (Conquest mode only) ---
+            if (gameState.gameMode == GameMode.Conquest)
             {
-                var cityCenter = gameState.GetCityCenter(player.id);
-                if (cityCenter == null)
+                foreach (var player in allPlayers)
                 {
-                    // This player's city center is destroyed — find the opponent
-                    var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
-                    if (opponent != null)
+                    var cityCenter = gameState.GetCityCenter(player.id);
+                    if (cityCenter == null)
                     {
-                        gameState.isGameOver = true;
-                        return new List<StateChange>
+                        // This player's city center is destroyed — find the opponent
+                        var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
+                        if (opponent != null)
                         {
-                            new GameOverChange
+                            gameState.isGameOver = true;
+                            return new List<StateChange>
                             {
-                                reason = GameOverReason.CityCenterDestroyed.DisplayMessage(),
-                                winnerID = opponent.id,
-                                reasonType = GameOverReason.CityCenterDestroyed
-                            }
-                        };
+                                new GameOverChange
+                                {
+                                    reason = GameOverReason.CityCenterDestroyed.DisplayMessage(),
+                                    winnerID = opponent.id,
+                                    reasonType = GameOverReason.CityCenterDestroyed
+                                }
+                            };
+                        }
                     }
                 }
             }

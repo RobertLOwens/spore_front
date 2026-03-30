@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sporefront.Data;
 using Sporefront.Models;
 
@@ -375,6 +376,271 @@ namespace Sporefront.Engine
             }
 
             return hillCoords;
+        }
+
+        // ================================================================
+        // Domination Zone Placement
+        // ================================================================
+
+        public virtual List<ControlZoneData> GenerateControlZones(
+            List<HexCoordinate> startPositions,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            if (startPositions.Count < 2 || Seed == null)
+                return new List<ControlZoneData>();
+
+            var rng = new SeededRandom(Seed.Value ^ 0xD0D0D0D0D0D0UL);
+            var posA = startPositions[0];
+            var posB = startPositions[1];
+
+            // Compute midpoint between the two starting positions
+            double midQ = (posA.q + posB.q) / 2.0;
+            double midR = (posA.r + posB.r) / 2.0;
+
+            // Axis from A to B
+            double axisQ = posB.q - posA.q;
+            double axisR = posB.r - posA.r;
+
+            // Perpendicular direction (rotate 90°)
+            double perpQ = -axisR;
+            double perpR = axisQ;
+
+            // Normalize perpendicular
+            double perpLen = Math.Sqrt(perpQ * perpQ + perpR * perpR);
+            if (perpLen > 0)
+            {
+                perpQ /= perpLen;
+                perpR /= perpLen;
+            }
+
+            // Spacing: spread zones along perpendicular axis
+            double spacing = Math.Min(Width, Height) / 4.0;
+
+            string[] labels = { "A", "B", "C" };
+            double[] offsets = { -spacing, 0.0, spacing };
+            var zones = new List<ControlZoneData>();
+            int zoneRadius = GameConfig.Domination.ZoneRadius;
+
+            for (int i = 0; i < GameConfig.Domination.ZoneCount; i++)
+            {
+                // Base position along perpendicular
+                double baseQ = midQ + perpQ * offsets[i];
+                double baseR = midR + perpR * offsets[i];
+
+                // Random jitter ±2 hexes
+                int jitterQ = rng.NextInt(-2, 2);
+                int jitterR = rng.NextInt(-2, 2);
+                int centerQ = Math.Max(zoneRadius, Math.Min(Width - 1 - zoneRadius, (int)Math.Round(baseQ) + jitterQ));
+                int centerR = Math.Max(zoneRadius, Math.Min(Height - 1 - zoneRadius, (int)Math.Round(baseR) + jitterR));
+
+                var center = new HexCoordinate(centerQ, centerR);
+
+                // Snap to nearest walkable tile if center is unwalkable
+                TerrainGenerationData centerTerrain;
+                if (terrain.TryGetValue(center, out centerTerrain) && !centerTerrain.terrain.IsWalkable())
+                {
+                    center = FindNearestWalkable(center, terrain, zoneRadius + 3) ?? center;
+                }
+
+                // Expand zone tiles within radius, filtering non-walkable
+                var tiles = new List<HexCoordinate>();
+                for (int q = -zoneRadius; q <= zoneRadius; q++)
+                {
+                    for (int r = -zoneRadius; r <= zoneRadius; r++)
+                    {
+                        var coord = new HexCoordinate(center.q + q, center.r + r);
+                        if (coord.Distance(center) > zoneRadius) continue;
+                        if (coord.q < 0 || coord.q >= Width || coord.r < 0 || coord.r >= Height) continue;
+                        TerrainGenerationData td;
+                        if (terrain.TryGetValue(coord, out td) && td.terrain.IsWalkable())
+                            tiles.Add(coord);
+                    }
+                }
+
+                zones.Add(new ControlZoneData(labels[i], center, tiles));
+            }
+
+            return zones;
+        }
+
+        protected HexCoordinate? FindNearestWalkable(
+            HexCoordinate center,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain,
+            int searchRadius)
+        {
+            for (int dist = 1; dist <= searchRadius; dist++)
+            {
+                for (int q = -dist; q <= dist; q++)
+                {
+                    for (int r = -dist; r <= dist; r++)
+                    {
+                        var coord = new HexCoordinate(center.q + q, center.r + r);
+                        if (coord.Distance(center) != dist) continue;
+                        TerrainGenerationData td;
+                        if (terrain.TryGetValue(coord, out td) && td.terrain.IsWalkable())
+                            return coord;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // ================================================================
+        // Zone Dispatch
+        // ================================================================
+
+        public virtual List<ControlZoneData> GenerateZonesForMode(
+            GameMode mode,
+            List<HexCoordinate> startPositions,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            switch (mode)
+            {
+                case GameMode.Domination:
+                    return GenerateControlZones(startPositions, terrain);
+                case GameMode.CrookedDomination:
+                    return GenerateCrookedZones(startPositions, terrain);
+                case GameMode.Ring:
+                    return GenerateRingZones(startPositions, terrain);
+                default:
+                    return new List<ControlZoneData>();
+            }
+        }
+
+        // ================================================================
+        // Crooked Domination Zone Placement
+        // ================================================================
+
+        public virtual List<ControlZoneData> GenerateCrookedZones(
+            List<HexCoordinate> startPositions,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            if (startPositions.Count < 2 || Seed == null)
+                return new List<ControlZoneData>();
+
+            var rng = new SeededRandom(Seed.Value ^ 0xC200CED000UL);
+            var posA = startPositions[0];
+            var posB = startPositions[1];
+
+            double midQ = (posA.q + posB.q) / 2.0;
+            double midR = (posA.r + posB.r) / 2.0;
+
+            // Axis from A to B (normalized)
+            double axisQ = posB.q - posA.q;
+            double axisR = posB.r - posA.r;
+            double axisLen = Math.Sqrt(axisQ * axisQ + axisR * axisR);
+            if (axisLen > 0) { axisQ /= axisLen; axisR /= axisLen; }
+
+            // Perpendicular (for jitter)
+            double perpQ = -axisR;
+            double perpR = axisQ;
+
+            double offset = GameConfig.Domination.CrookedAxisOffset * axisLen;
+            int zoneRadius = GameConfig.Domination.ZoneRadius;
+
+            // Zone A: offset toward player A
+            // Zone B: at midpoint
+            // Zone C: offset toward player B
+            var zoneDefs = new[]
+            {
+                (label: "A", qBase: midQ - axisQ * offset, rBase: midR - axisR * offset),
+                (label: "B", qBase: midQ, rBase: midR),
+                (label: "C", qBase: midQ + axisQ * offset, rBase: midR + axisR * offset),
+            };
+
+            var zones = new List<ControlZoneData>();
+            foreach (var def in zoneDefs)
+            {
+                // Jitter on perpendicular axis only (the axis offset is intentional)
+                int jitterQ = (int)Math.Round(perpQ * rng.NextInt(-2, 2));
+                int jitterR = (int)Math.Round(perpR * rng.NextInt(-2, 2));
+                int centerQ = Math.Max(zoneRadius, Math.Min(Width - 1 - zoneRadius, (int)Math.Round(def.qBase) + jitterQ));
+                int centerR = Math.Max(zoneRadius, Math.Min(Height - 1 - zoneRadius, (int)Math.Round(def.rBase) + jitterR));
+
+                var center = new HexCoordinate(centerQ, centerR);
+
+                TerrainGenerationData centerTerrain;
+                if (terrain.TryGetValue(center, out centerTerrain) && !centerTerrain.terrain.IsWalkable())
+                    center = FindNearestWalkable(center, terrain, zoneRadius + 3) ?? center;
+
+                var tiles = ExpandZoneTiles(center, zoneRadius, terrain);
+                zones.Add(new ControlZoneData(def.label, center, tiles));
+            }
+
+            return zones;
+        }
+
+        // ================================================================
+        // Ring Zone Placement
+        // ================================================================
+
+        public virtual List<ControlZoneData> GenerateRingZones(
+            List<HexCoordinate> startPositions,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            if (Seed == null)
+                return new List<ControlZoneData>();
+
+            int centerQ = Width / 2;
+            int centerR = Height / 2;
+            var mapCenter = new HexCoordinate(centerQ, centerR);
+
+            // Snap to walkable if needed
+            TerrainGenerationData centerTerrain;
+            if (terrain.TryGetValue(mapCenter, out centerTerrain) && !centerTerrain.terrain.IsWalkable())
+                mapCenter = FindNearestWalkable(mapCenter, terrain, 5) ?? mapCenter;
+
+            int innerRadius = GameConfig.Domination.RingInnerRadius;
+            int outerRadius = GameConfig.Domination.RingOuterRadius;
+
+            // Inner zone: all tiles within innerRadius
+            var innerTiles = ExpandZoneTiles(mapCenter, innerRadius, terrain);
+
+            // Outer zone: ring of tiles from innerRadius+1 to outerRadius
+            var outerTiles = new List<HexCoordinate>();
+            for (int q = -outerRadius; q <= outerRadius; q++)
+            {
+                for (int r = -outerRadius; r <= outerRadius; r++)
+                {
+                    var coord = new HexCoordinate(mapCenter.q + q, mapCenter.r + r);
+                    int dist = coord.Distance(mapCenter);
+                    if (dist <= innerRadius || dist > outerRadius) continue;
+                    if (coord.q < 0 || coord.q >= Width || coord.r < 0 || coord.r >= Height) continue;
+                    TerrainGenerationData td;
+                    if (terrain.TryGetValue(coord, out td) && td.terrain.IsWalkable())
+                        outerTiles.Add(coord);
+                }
+            }
+
+            var zones = new List<ControlZoneData>();
+            zones.Add(new ControlZoneData("Inner", mapCenter, innerTiles, GameConfig.Domination.RingInnerMultiplier));
+            zones.Add(new ControlZoneData("Outer", mapCenter, outerTiles, GameConfig.Domination.RingOuterMultiplier));
+
+            return zones;
+        }
+
+        // ================================================================
+        // Shared Zone Tile Expansion
+        // ================================================================
+
+        protected List<HexCoordinate> ExpandZoneTiles(
+            HexCoordinate center, int radius,
+            Dictionary<HexCoordinate, TerrainGenerationData> terrain)
+        {
+            var tiles = new List<HexCoordinate>();
+            for (int q = -radius; q <= radius; q++)
+            {
+                for (int r = -radius; r <= radius; r++)
+                {
+                    var coord = new HexCoordinate(center.q + q, center.r + r);
+                    if (coord.Distance(center) > radius) continue;
+                    if (coord.q < 0 || coord.q >= Width || coord.r < 0 || coord.r >= Height) continue;
+                    TerrainGenerationData td;
+                    if (terrain.TryGetValue(coord, out td) && td.terrain.IsWalkable())
+                        tiles.Add(coord);
+                }
+            }
+            return tiles;
         }
     }
 }

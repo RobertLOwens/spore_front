@@ -238,6 +238,24 @@ namespace Sporefront.Engine
             public const int BurnAreasFoodPerLevel = 25;
         }
 
+        public static class Domination
+        {
+            public const int ZoneCount = 3;
+            public const int ZoneRadius = 2;
+            public const double PointsPerSecond = 1.0;
+            public const double ScoreToWin = 300.0;
+            public const double UpdateInterval = 1.0;
+
+            // Crooked Domination — how far A/C zones shift toward each player
+            public const double CrookedAxisOffset = 0.3;
+
+            // Ring — concentric circles at map center
+            public const int RingInnerRadius = 2;
+            public const int RingOuterRadius = 4;
+            public const double RingInnerMultiplier = 2.0;
+            public const double RingOuterMultiplier = 1.0;
+        }
+
         public static class MapDimensions
         {
             public const int Small = 25;

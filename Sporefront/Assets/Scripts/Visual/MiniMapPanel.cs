@@ -12,6 +12,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Sporefront.Data;
 using Sporefront.Models;
+using GameMode = Sporefront.Models.GameMode;
 
 namespace Sporefront.Visual
 {
@@ -428,8 +429,62 @@ namespace Sporefront.Visual
         // Entity Painting
         // ================================================================
 
+        // Zone colors (semi-transparent overlays for A, B, C)
+        private static readonly Color ZoneColorA = new Color(0.9f, 0.3f, 0.3f, 0.5f);
+        private static readonly Color ZoneColorB = new Color(0.3f, 0.6f, 0.9f, 0.5f);
+        private static readonly Color ZoneColorC = new Color(0.3f, 0.9f, 0.4f, 0.5f);
+        private static readonly Color ZoneColorNeutral = new Color(0.6f, 0.6f, 0.6f, 0.4f);
+
+        // Ring zone colors: inner (gold), outer (silver)
+        private static readonly Color RingInnerColor = new Color(0.95f, 0.75f, 0.2f, 0.55f);
+        private static readonly Color RingOuterColor = new Color(0.7f, 0.7f, 0.75f, 0.4f);
+
         private void PaintEntities(GameState gameState, PlayerState localPlayer, bool hasFog)
         {
+            // Paint domination zones (under entities)
+            if (gameState.gameMode.UsesControlZones() && gameState.controlZones != null)
+            {
+                bool isRing = gameState.gameMode == GameMode.Ring;
+                Color[] zoneBaseColors = { ZoneColorA, ZoneColorB, ZoneColorC };
+                for (int i = 0; i < gameState.controlZones.Count; i++)
+                {
+                    var zone = gameState.controlZones[i];
+
+                    // Pick base color depending on mode
+                    Color baseColor;
+                    if (isRing)
+                        baseColor = zone.pointsMultiplier > 1.0 ? RingInnerColor : RingOuterColor;
+                    else
+                        baseColor = i < zoneBaseColors.Length ? zoneBaseColors[i] : ZoneColorNeutral;
+
+                    Color zoneColor;
+                    if (zone.controllingPlayerID.HasValue)
+                    {
+                        var owner = gameState.GetPlayer(zone.controllingPlayerID.Value);
+                        if (owner != null)
+                        {
+                            var pColor = SporefrontColors.ParsePlayerColor(owner.colorHex);
+                            zoneColor = new Color(pColor.r, pColor.g, pColor.b, 0.55f);
+                        }
+                        else
+                            zoneColor = baseColor;
+                    }
+                    else
+                    {
+                        zoneColor = baseColor;
+                    }
+
+                    foreach (var tile in zone.tiles)
+                    {
+                        PaintDot(displayPixels, tile.q, tile.r, zoneColor, pixelsPerHex);
+                    }
+
+                    // Paint center brighter
+                    PaintDot(displayPixels, zone.center.q, zone.center.r,
+                        Color.Lerp(zoneColor, Color.white, 0.3f), pixelsPerHex + 1);
+                }
+            }
+
             // Paint buildings
             foreach (var kvp in gameState.mapData.buildingCoordinates)
             {

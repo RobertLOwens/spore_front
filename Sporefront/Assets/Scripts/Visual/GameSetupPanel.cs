@@ -12,6 +12,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Sporefront.Data;
 using Sporefront.Models;
+using GameMode = Sporefront.Models.GameMode;
 using TendrilBranch = Sporefront.Visual.UITendrilRenderer.TendrilBranch;
 
 namespace Sporefront.Visual
@@ -32,6 +33,7 @@ namespace Sporefront.Visual
         public FactionType aiFaction;
         public bool isOnlineMode;
         public int startingCCLevel;
+        public GameMode gameMode;
 
         // Matchmaking fields (empty for offline games)
         public string matchGameID;
@@ -51,7 +53,8 @@ namespace Sporefront.Visual
             visibilityMode = VisibilityMode.Normal,
             playerFaction = FactionType.Morel,
             aiFaction = FactionType.Muscaria,
-            startingCCLevel = 1
+            startingCCLevel = 1,
+            gameMode = GameMode.Conquest
         };
     }
 
@@ -126,6 +129,7 @@ namespace Sporefront.Visual
         private FactionType selectedFaction = FactionType.Morel;
         private FactionType selectedAIFaction = FactionType.Muscaria;
         private int selectedCCLevel = 1;
+        private GameMode selectedGameMode = GameMode.Conquest;
 
         // Arena config
         private ArenaScenarioConfig arenaScenario = ArenaScenarioConfig.Default;
@@ -620,6 +624,8 @@ namespace Sporefront.Visual
             rightColVLG.childControlWidth = true;
             rightColVLG.childControlHeight = false;
 
+            BuildGameModeSection(rightCol.transform);
+            UIHelper.CreateDivider(rightCol.transform, softDivider);
             BuildResourceDensitySection(rightCol.transform);
             UIHelper.CreateDivider(rightCol.transform, softDivider);
             BuildVisibilitySection(rightCol.transform);
@@ -1025,6 +1031,51 @@ namespace Sporefront.Visual
         }
 
         // ================================================================
+        // Game Mode
+        // ================================================================
+
+        private void BuildGameModeSection(Transform parent)
+        {
+            var sectionLabel = UIHelper.CreateLabel(parent, "Game Mode",
+                UIConstants.FontHeader, SporefrontColors.InkDark,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 28;
+
+            var descLabel = UIHelper.CreateLabel(parent,
+                "Conquest: destroy all. Domination: 3 zones. Crooked: offset zones. Ring: concentric circles.",
+                UIConstants.FontBody, SporefrontColors.InkLight,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
+
+            var row = UIHelper.CreateHorizontalRow(parent, 40f, 4f);
+            var buttons = new List<Button>();
+
+            string[] names = { "Conquest", "Domination", "Crooked", "Ring" };
+            GameMode[] modes = { GameMode.Conquest, GameMode.Domination, GameMode.CrookedDomination, GameMode.Ring };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int idx = i;
+                var btn = UIHelper.CreateButton(row.transform, names[i], null, null, UIConstants.FontSubheader, () =>
+                {
+                    selectedGameMode = modes[idx];
+                    UpdateSegmentSelection("gameMode", idx);
+                });
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 110;
+                btnLE.preferredHeight = 40;
+                buttons.Add(btn);
+            }
+
+            segmentGroups["gameMode"] = buttons;
+            segmentBorders["gameMode"] = AddSegmentBottomBorders(buttons);
+            segmentSelections["gameMode"] = (int)selectedGameMode;
+            UpdateSegmentColors("gameMode");
+        }
+
+        // ================================================================
         // Resource Density
         // ================================================================
 
@@ -1235,7 +1286,8 @@ namespace Sporefront.Visual
                     playerFaction = selectedFaction,
                     aiFaction = selectedAIFaction,
                     isOnlineMode = isOnlineMode,
-                    startingCCLevel = selectedCCLevel
+                    startingCCLevel = selectedCCLevel,
+                    gameMode = selectedGameMode
                 };
                 OnStartGame?.Invoke(config);
             });

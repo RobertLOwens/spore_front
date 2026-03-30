@@ -278,8 +278,18 @@ namespace Sporefront.Visual
         // Phase 2: Start Game — populate world, start engine
         // ================================================================
 
+        private bool gameInitializing;
+
         private void StartNewGame(GameSetupConfig config)
         {
+            // Guard: prevent duplicate initialization during VS loading screen
+            if (gameInitializing || gameStarted)
+            {
+                Debug.LogWarning("[GameSceneManager] StartNewGame rejected — already initializing or started");
+                return;
+            }
+            gameInitializing = true;
+
             // 1. Create game state with configured dimensions
             var (width, height) = GetMapDimensions(config.mapSize);
             gameState = new GameState(width, height);
@@ -376,6 +386,16 @@ namespace Sporefront.Visual
                 gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
             }
 
+            // 5c. Set game mode and generate domination zones if applicable
+            gameState.gameMode = config.gameMode;
+            if (config.gameMode.UsesControlZones())
+            {
+                var zones = generator.GenerateZonesForMode(config.gameMode, startCoords, terrain);
+                gameState.controlZones = zones;
+                foreach (var player in gameState.players.Values)
+                    gameState.dominationScores[player.id] = 0.0;
+            }
+
             // 6. Initialize engine
             gameState.visibilityMode = config.visibilityMode;
             GameEngine.Instance.Setup(gameState);
@@ -387,6 +407,10 @@ namespace Sporefront.Visual
             // 7. Build visual grid
             gridRenderer.BuildGrid(gameState.mapData);
 
+            // 7b. Apply domination zone overlays
+            if (config.gameMode.UsesControlZones())
+                gridRenderer.ApplyZoneOverlays(gameState);
+
             // 8. Set camera bounds and focus on player start
             cameraController.SetMapBounds(width, height);
             if (startPositions.Count > 0)
@@ -397,14 +421,38 @@ namespace Sporefront.Visual
             // 9. Subscribe to state changes
             GameEngine.Instance.OnStateChangesProduced += HandleStateChanges;
 
-            // 10. Transition UI from main menu to gameplay
-            uiManager.OnGameStarted(gameState);
+            // 10. Show VS loading screen, then transition to gameplay
+            string mapLabel = VSLoadingPanel.FormatMapLabel(
+                resolvedMapType.ToString(), config.mapSize.ToString());
+            string modeLabel = VSLoadingPanel.FormatGameMode(config.gameMode);
 
-            // 11. Game is now running
-            ResetOnlineFlags();
-            gameStarted = true;
-
-            Debug.Log($"[GameSceneManager] Game started — seed: {seed}, map: {width}x{height}, tiles: {terrain.Count}");
+            var canvas = GetComponentInChildren<Canvas>();
+            if (canvas != null)
+            {
+                VSLoadingPanel.Show(
+                    canvas.transform,
+                    "Player 1", config.playerFaction, "3A5E8B",
+                    "AI Opponent", config.aiFaction, "8B3A3A",
+                    mapLabel, modeLabel,
+                    () =>
+                    {
+                        // Called when VS screen finishes — activate gameplay
+                        uiManager.OnGameStarted(gameState);
+                        ResetOnlineFlags();
+                        gameInitializing = false;
+                        gameStarted = true;
+                        Debug.Log($"[GameSceneManager] Game started — seed: {seed}, map: {width}x{height}, tiles: {terrain.Count}");
+                    });
+            }
+            else
+            {
+                // Fallback: no canvas, start immediately
+                uiManager.OnGameStarted(gameState);
+                ResetOnlineFlags();
+                gameInitializing = false;
+                gameStarted = true;
+                Debug.Log($"[GameSceneManager] Game started (no VS screen) — seed: {seed}, map: {width}x{height}, tiles: {terrain.Count}");
+            }
         }
 
         private (int width, int height) GetMapDimensions(MapSize size)
@@ -508,6 +556,16 @@ namespace Sporefront.Visual
                 gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
             }
 
+            // 4b. Set game mode and generate domination zones if applicable
+            gameState.gameMode = config.gameMode;
+            if (config.gameMode.UsesControlZones())
+            {
+                var zones = generator.GenerateZonesForMode(config.gameMode, startCoords, terrain);
+                gameState.controlZones = zones;
+                foreach (var player in gameState.players.Values)
+                    gameState.dominationScores[player.id] = 0.0;
+            }
+
             // 5. Create online session with both human players
             var sessionMapConfig = new Data.MapGenerationConfig("arabia", seed, width, height);
             var aiPlayersList = new List<(string displayName, Guid playerID, string colorHex, string faction)>();
@@ -565,6 +623,8 @@ namespace Sporefront.Visual
 
                 // 9. Build visual
                 gridRenderer.BuildGrid(gameState.mapData);
+                if (gameState.gameMode.UsesControlZones())
+                    gridRenderer.ApplyZoneOverlays(gameState);
                 cameraController.SetMapBounds(width, height);
                 if (startPositions.Count > 0)
                     cameraController.FocusOn(startPositions[0].coordinate, 8f, false);
@@ -681,6 +741,8 @@ namespace Sporefront.Visual
 
                 // Build visual
                 gridRenderer.BuildGrid(gameState.mapData);
+                if (gameState.gameMode.UsesControlZones())
+                    gridRenderer.ApplyZoneOverlays(gameState);
                 int width = gameState.mapData.width;
                 int height = gameState.mapData.height;
                 cameraController.SetMapBounds(width, height);
@@ -866,6 +928,16 @@ namespace Sporefront.Visual
                 gameState.mapData.resourcePointCoordinates[rp.id] = placement.coordinate;
             }
 
+            // 5c. Set game mode and generate domination zones if applicable
+            gameState.gameMode = config.gameMode;
+            if (config.gameMode.UsesControlZones())
+            {
+                var zones = generator.GenerateZonesForMode(config.gameMode, startCoords, terrain);
+                gameState.controlZones = zones;
+                foreach (var player in gameState.players.Values)
+                    gameState.dominationScores[player.id] = 0.0;
+            }
+
             // 6. Create online session
             var sessionMapConfig = new Data.MapGenerationConfig(
                 resolvedMapType.ToString().ToLower(), seed, width, height);
@@ -921,6 +993,8 @@ namespace Sporefront.Visual
 
                 // 10. Build visual grid
                 gridRenderer.BuildGrid(gameState.mapData);
+                if (gameState.gameMode.UsesControlZones())
+                    gridRenderer.ApplyZoneOverlays(gameState);
 
                 // 11. Set camera
                 cameraController.SetMapBounds(width, height);
@@ -1359,6 +1433,8 @@ namespace Sporefront.Visual
 
                 // Build visual grid
                 gridRenderer.BuildGrid(gameState.mapData);
+                if (gameState.gameMode.UsesControlZones())
+                    gridRenderer.ApplyZoneOverlays(gameState);
                 int width = gameState.mapData.width;
                 int height = gameState.mapData.height;
                 cameraController.SetMapBounds(width, height);
@@ -1635,6 +1711,8 @@ namespace Sporefront.Visual
 
             // Rebuild visual grid
             gridRenderer.BuildGrid(gameState.mapData);
+            if (gameState.gameMode.UsesControlZones())
+                gridRenderer.ApplyZoneOverlays(gameState);
 
             // Set camera bounds
             cameraController.SetMapBounds(gameState.mapData.width, gameState.mapData.height);

@@ -23,6 +23,7 @@ namespace Sporefront.Visual
         private bool _isSelected;
         private bool _isHovered;
         private VisibilityLevel _visibilityLevel = VisibilityLevel.Visible;
+        private Color? _zoneOverlay;
 
         private MeshRenderer fillRenderer;
         private MeshRenderer borderRenderer;
@@ -106,6 +107,13 @@ namespace Sporefront.Visual
 
         public VisibilityLevel CurrentVisibility => _visibilityLevel;
 
+        public void SetZoneOverlay(Color? color)
+        {
+            if (_zoneOverlay == color) return;
+            _zoneOverlay = color;
+            UpdateVisuals();
+        }
+
         // ================================================================
         // Visual Update
         // ================================================================
@@ -125,6 +133,10 @@ namespace Sporefront.Visual
                     break;
                 // Visible: full baseColor, no change
             }
+
+            // Zone overlay tint (domination control zones)
+            if (_zoneOverlay.HasValue)
+                color = Color.Lerp(color, _zoneOverlay.Value, _zoneOverlay.Value.a);
 
             // Selection visuals delegated to SelectionRenderer with glow effect (#15)
             // Only apply hover tinting here; suppress hover on non-visible tiles

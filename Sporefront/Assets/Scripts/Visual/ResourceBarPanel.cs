@@ -13,6 +13,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Sporefront.Data;
 using Sporefront.Models;
+using GameMode = Sporefront.Models.GameMode;
 
 namespace Sporefront.Visual
 {
@@ -94,6 +95,11 @@ namespace Sporefront.Visual
         // ellipsisDropdown removed — button now opens InGameMenuPanel directly
         private Transform canvasRoot;
 
+        // Domination score
+        private GameObject dominationScoreContainer;
+        private Text dominationLocalScoreLabel;
+        private Text dominationOpponentScoreLabel;
+
         // Warning pulse animation
         private readonly List<Image> warningIcons = new List<Image>();
         private float warningTimer;
@@ -147,6 +153,9 @@ namespace Sporefront.Visual
 
             // Population
             CreatePopulationEntry(strip.transform);
+
+            // Domination score section (hidden until domination mode)
+            CreateDominationScoreSection(strip.transform);
 
             // Section divider before right-side controls
             CreateSectionDivider(strip.transform);
@@ -216,6 +225,9 @@ namespace Sporefront.Visual
             speedContainer.SetActive(showSpeed);
             if (showSpeed)
                 speedLabel.text = $"{gameState.gameSpeed:0.#}x";
+
+            // Domination score
+            UpdateDominationScores(gameState, localPlayerID);
         }
 
         // ================================================================
@@ -948,6 +960,106 @@ namespace Sporefront.Visual
             colors.pressedColor = new Color(HoverBg.r, HoverBg.g, HoverBg.b, 0.4f);
             colors.disabledColor = Color.clear;
             return colors;
+        }
+
+        // ================================================================
+        // Domination Score Section
+        // ================================================================
+
+        private void CreateDominationScoreSection(Transform parent)
+        {
+            // Container (hidden by default — only shown in domination mode)
+            dominationScoreContainer = new GameObject("DominationScore", typeof(RectTransform),
+                typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            dominationScoreContainer.transform.SetParent(parent, false);
+
+            var hlg = dominationScoreContainer.GetComponent<HorizontalLayoutGroup>();
+            hlg.padding = new RectOffset(8, 8, 5, 5);
+            hlg.spacing = 6;
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+
+            // Divider before score
+            CreateSectionDivider(parent);
+
+            // Trophy icon
+            var trophyLabel = CreateThemedLabel(dominationScoreContainer.transform, "\u2605", 18,
+                SporefrontColors.SporeAmber, false);
+            var trophyLE = trophyLabel.gameObject.AddComponent<LayoutElement>();
+            trophyLE.preferredHeight = 20;
+
+            // Local player score
+            dominationLocalScoreLabel = CreateThemedLabel(dominationScoreContainer.transform, "0", 19,
+                SporefrontColors.SporeGreen, true);
+            var localLE = dominationLocalScoreLabel.gameObject.AddComponent<LayoutElement>();
+            localLE.preferredHeight = 22;
+
+            // Separator
+            var sepLabel = CreateThemedLabel(dominationScoreContainer.transform, "/", 16,
+                SporefrontColors.InkFaded, false);
+            var sepLE = sepLabel.gameObject.AddComponent<LayoutElement>();
+            sepLE.preferredHeight = 22;
+
+            // Target score
+            var targetLabel = CreateThemedLabel(dominationScoreContainer.transform,
+                ((int)Engine.GameConfig.Domination.ScoreToWin).ToString(), 16,
+                SporefrontColors.InkLight, false);
+            var targetLE = targetLabel.gameObject.AddComponent<LayoutElement>();
+            targetLE.preferredHeight = 22;
+
+            // Dash separator
+            var dashLabel = CreateThemedLabel(dominationScoreContainer.transform, " \u2014 ", 14,
+                SporefrontColors.InkFaded, false);
+            var dashLE = dashLabel.gameObject.AddComponent<LayoutElement>();
+            dashLE.preferredHeight = 22;
+
+            // Opponent score
+            dominationOpponentScoreLabel = CreateThemedLabel(dominationScoreContainer.transform, "0", 19,
+                SporefrontColors.SporeRed, true);
+            var oppLE = dominationOpponentScoreLabel.gameObject.AddComponent<LayoutElement>();
+            oppLE.preferredHeight = 22;
+
+            // Opponent target
+            var sepLabel2 = CreateThemedLabel(dominationScoreContainer.transform, "/", 16,
+                SporefrontColors.InkFaded, false);
+            var sepLE2 = sepLabel2.gameObject.AddComponent<LayoutElement>();
+            sepLE2.preferredHeight = 22;
+
+            var targetLabel2 = CreateThemedLabel(dominationScoreContainer.transform,
+                ((int)Engine.GameConfig.Domination.ScoreToWin).ToString(), 16,
+                SporefrontColors.InkLight, false);
+            var targetLE2 = targetLabel2.gameObject.AddComponent<LayoutElement>();
+            targetLE2.preferredHeight = 22;
+
+            dominationScoreContainer.SetActive(false);
+        }
+
+        private void UpdateDominationScores(GameState gameState, Guid localPlayerID)
+        {
+            if (dominationScoreContainer == null) return;
+
+            bool isDomination = gameState.gameMode.UsesControlZones();
+            dominationScoreContainer.SetActive(isDomination);
+            if (!isDomination) return;
+
+            double localScore;
+            gameState.dominationScores.TryGetValue(localPlayerID, out localScore);
+            dominationLocalScoreLabel.text = ((int)localScore).ToString();
+
+            // Find opponent score
+            double opponentScore = 0;
+            foreach (var kvp in gameState.dominationScores)
+            {
+                if (kvp.Key != localPlayerID)
+                {
+                    opponentScore = kvp.Value;
+                    break;
+                }
+            }
+            dominationOpponentScoreLabel.text = ((int)opponentScore).ToString();
         }
     }
 }
