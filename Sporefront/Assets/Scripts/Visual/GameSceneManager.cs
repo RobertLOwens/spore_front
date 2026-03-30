@@ -41,14 +41,16 @@ namespace Sporefront.Visual
         private const float DragThreshold = 5f; // pixels
 
         // Selected entity for drag-to-move
+        private enum EntityKind { Villager, Army, Scout }
+
         private Guid? selectedEntityID;
-        private bool selectedEntityIsArmy;
+        private EntityKind selectedEntityKind;
 
         // Multi-selection (drag-select box)
         private struct SelectedEntity
         {
             public Guid id;
-            public bool isArmy;
+            public EntityKind kind;
         }
         private List<SelectedEntity> selectedEntities = new List<SelectedEntity>();
         private bool isDragSelecting;
@@ -57,9 +59,16 @@ namespace Sporefront.Visual
         // Drag preview entity IDs (for per-frame tendril updates)
         private HashSet<Guid> dragPreviewEntityIDs = new HashSet<Guid>();
 
+        // Wall draw mode — drag to place a line of walls
+        private bool isWallDrawMode;
+        private HexCoordinate? wallDrawStart;
+        private HexCoordinate? lastWallDrawHex;
+        private List<HexCoordinate> wallDrawPreview = new List<HexCoordinate>();
+        private const int MaxWallSegments = 20;
+
         // Focused entity (from clicking a card in SelectedEntitiesPanel)
         private Guid? focusedEntityID;
-        private bool focusedEntityIsArmy;
+        private EntityKind focusedEntityKind;
 
         // Auto-save state
         private const double AutoSaveIntervalGameTime = 300.0; // 5 minutes game time
@@ -164,6 +173,25 @@ namespace Sporefront.Visual
                 HandleTileInteraction();
                 HandleRightClick();
 
+                // Period key — cycle to next idle villager
+                if (Keyboard.current != null && Keyboard.current.periodKey.wasPressedThisFrame)
+                    uiManager?.CycleToNextIdleVillager();
+
+                // R key — rotate building in placement preview
+                if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
+                    uiManager?.RotateBuilding();
+
+                // Left click confirms rotation preview
+                if (uiManager != null && uiManager.IsRotatePreviewActive)
+                {
+                    var mouse = Mouse.current;
+                    if (mouse != null && mouse.leftButton.wasPressedThisFrame
+                        && !uiManager.IsPointerOverUI())
+                    {
+                        uiManager.ConfirmRotatePreview();
+                    }
+                }
+
                 // Auto-save check (offline only — online uses cloud snapshots)
                 if (!isOnlineGame && gameState != null && !gameState.isPaused &&
                     gameState.currentTime - lastAutoSaveGameTime >= AutoSaveIntervalGameTime)
@@ -220,13 +248,16 @@ namespace Sporefront.Visual
             uiManager.OnPlayArenaGame += StartArenaGame;
             uiManager.OnLoadGame += LoadGame;
 
+            // Wall draw mode
+            uiManager.OnWallDrawRequested += (coord) => EnterWallDrawMode(coord);
+
             // 4. Listen for entity focus from SelectedEntitiesPanel card click
             uiManager.OnEntityFocused += (id, isArmy) =>
             {
                 focusedEntityID = id;
-                focusedEntityIsArmy = isArmy;
+                focusedEntityKind = isArmy ? EntityKind.Army : EntityKind.Villager;
                 selectedEntityID = id;
-                selectedEntityIsArmy = isArmy;
+                selectedEntityKind = focusedEntityKind;
             };
 
             // 5. Listen for surrender request from in-game menu
@@ -329,7 +360,7 @@ namespace Sporefront.Visual
 
             // 5. Place starting resources and city centers
             var startPositions = generator.GetStartingPositions();
-            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources);
+            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources, config.startingCCLevel);
 
             // 5b. Place neutral resources across the map (trees, minerals, animals)
             var startCoords = new List<HexCoordinate>();
@@ -463,7 +494,7 @@ namespace Sporefront.Visual
 
             // 4. Place starting entities for both players
             var startPositions = generator.GetStartingPositions();
-            PlaceStartingEntities(startPositions, localPlayer, opponent, generator, config.startingResources);
+            PlaceStartingEntities(startPositions, localPlayer, opponent, generator, config.startingResources, config.startingCCLevel);
 
             var startCoords = new List<HexCoordinate>();
             foreach (var pos in startPositions)
@@ -821,7 +852,7 @@ namespace Sporefront.Visual
 
             // 5. Place starting resources and city centers
             var startPositions = generator.GetStartingPositions();
-            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources);
+            PlaceStartingEntities(startPositions, human, ai, generator, config.startingResources, config.startingCCLevel);
 
             var startCoords = new List<HexCoordinate>();
             foreach (var pos in startPositions)
@@ -1640,7 +1671,8 @@ namespace Sporefront.Visual
             PlayerState human,
             PlayerState ai,
             MapGeneratorBase generator,
-            StartingResources startingResources = StartingResources.Medium)
+            StartingResources startingResources = StartingResources.Medium,
+            int startingCCLevel = 1)
         {
             // Determine resource amounts based on tier
             int food, wood, ore, stone;
@@ -1652,10 +1684,15 @@ namespace Sporefront.Visual
                 case StartingResources.Large:
                     food = 500; wood = 500; ore = 300; stone = 300;
                     break;
+                case StartingResources.VeryHigh:
+                    food = 9999; wood = 9999; ore = 9999; stone = 9999;
+                    break;
                 default: // Medium
                     food = 300; wood = 300; ore = 200; stone = 200;
                     break;
             }
+
+            int ccLevel = System.Math.Max(1, System.Math.Min(10, startingCCLevel));
 
             var playerList = new List<PlayerState> { human, ai };
 
@@ -1671,6 +1708,7 @@ namespace Sporefront.Visual
                     player.id
                 );
                 cc.state = BuildingState.Completed;
+                cc.level = ccLevel;
                 cc.health = cc.maxHealth;
                 gameState.AddBuilding(cc);
 
@@ -1698,6 +1736,21 @@ namespace Sporefront.Visual
                 var villagerCoord = spawnCoord ?? pos.coordinate;
                 var villagers = new VillagerGroupData("Villagers", villagerCoord, 5, player.id);
                 gameState.AddVillagerGroup(villagers);
+
+                // Spawn starting scout (1 per player) — 1 tile from CC, not on the villager tile
+                HexCoordinate scoutSpawn = villagerCoord;
+                var ccNeighbors = pos.coordinate.Neighbors();
+                foreach (var neighbor in ccNeighbors)
+                {
+                    if (!neighbor.Equals(villagerCoord) && gameState.mapData.IsValidCoordinate(neighbor)
+                        && gameState.mapData.IsWalkable(neighbor))
+                    {
+                        scoutSpawn = neighbor;
+                        break;
+                    }
+                }
+                var scout = new ScoutData(scoutSpawn, player.id);
+                gameState.AddScout(scout);
             }
         }
 
@@ -1858,11 +1911,74 @@ namespace Sporefront.Visual
         {
             // Only block new interactions when pointer is over UI; allow ongoing drags to continue
             bool pointerOverUI = uiManager != null && uiManager.IsPointerOverUI();
-            if (pointerOverUI && !mouseIsDown) return;
+            if (pointerOverUI && !mouseIsDown && !isWallDrawMode) return;
             var mouse = Mouse.current;
             if (mouse == null) return;
 
             Vector3 mousePos = mouse.position.ReadValue();
+
+            // ── Wall draw mode ──────────────────────────────────────────
+            if (isWallDrawMode)
+            {
+                // Cancel on right-click or Escape
+                if ((mouse.rightButton != null && mouse.rightButton.wasPressedThisFrame)
+                    || (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame))
+                {
+                    ExitWallDrawMode();
+                    return;
+                }
+
+                Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mousePos);
+                mouseWorld.z = 0f;
+                var currentHex = HexMetrics.WorldToHex(mouseWorld);
+
+                if (mouse.leftButton.wasPressedThisFrame && !pointerOverUI)
+                {
+                    wallDrawStart = currentHex;
+                }
+
+                if (mouse.leftButton.isPressed && wallDrawStart.HasValue)
+                {
+                    // Only recompute when mouse moves to a different hex tile
+                    if (!lastWallDrawHex.HasValue || !lastWallDrawHex.Value.Equals(currentHex))
+                    {
+                        lastWallDrawHex = currentHex;
+                        wallDrawPreview = wallDrawStart.Value.LineTo(currentHex);
+                        if (wallDrawPreview.Count > MaxWallSegments)
+                            wallDrawPreview = wallDrawPreview.GetRange(0, MaxWallSegments);
+
+                        var localID = gameState.localPlayerID ?? Guid.Empty;
+                        bool allValid = true;
+                        foreach (var hex in wallDrawPreview)
+                        {
+                            if (!gameState.CanBuildAt(hex, localID))
+                            {
+                                allValid = false;
+                                break;
+                            }
+                        }
+                        uiManager.SelectionRenderer.ShowBuildPreview(wallDrawPreview, allValid);
+                    }
+                }
+
+                if (mouse.leftButton.wasReleasedThisFrame && wallDrawStart.HasValue)
+                {
+                    // Place walls for each valid hex in the line
+                    var localID = gameState.localPlayerID ?? Guid.Empty;
+                    foreach (var hex in wallDrawPreview)
+                    {
+                        if (gameState.CanBuildAt(hex, localID))
+                        {
+                            var cmd = new BuildCommand(localID, BuildingType.Wall, hex, 0);
+                            UIManager.ExecutePlayerCommand(cmd);
+                        }
+                    }
+                    ExitWallDrawMode();
+                }
+                return;
+            }
+
+            // ── Normal interaction ──────────────────────────────────────
 
             // Track left mouse button press (#13)
             if (mouse.leftButton.wasPressedThisFrame)
@@ -1931,14 +2047,32 @@ namespace Sporefront.Visual
                     if (view != null && releaseCoord != mouseDownTile.Value)
                     {
                         var localID = gameState.localPlayerID ?? Guid.Empty;
-                        var cmd = new MoveCommand(localID, selectedEntityID.Value,
-                            releaseCoord, selectedEntityIsArmy);
-                        UIManager.ExecutePlayerCommand(cmd);
+                        IssueMoveCommand(localID, selectedEntityID.Value, releaseCoord, selectedEntityKind);
                     }
                 }
 
                 mouseDownTile = null;
             }
+        }
+
+        // ================================================================
+        // Wall Draw Mode
+        // ================================================================
+
+        public void EnterWallDrawMode(HexCoordinate startCoord)
+        {
+            isWallDrawMode = true;
+            wallDrawStart = null;
+            wallDrawPreview.Clear();
+        }
+
+        private void ExitWallDrawMode()
+        {
+            isWallDrawMode = false;
+            wallDrawStart = null;
+            lastWallDrawHex = null;
+            wallDrawPreview.Clear();
+            uiManager.SelectionRenderer.ClearBuildPreview();
         }
 
         private void HandleTileClick(HexCoordinate coord)
@@ -1972,7 +2106,7 @@ namespace Sporefront.Visual
                 if (tileEntities.Count > 1)
                     uiManager.UpdateSelectedEntitiesPanel(null, false, tileEntities);
                 else
-                    uiManager.UpdateSelectedEntitiesPanel(selectedEntityID, selectedEntityIsArmy, null);
+                    uiManager.UpdateSelectedEntitiesPanel(selectedEntityID, selectedEntityKind == EntityKind.Army, null);
             }
 
             Debug.Log($"[GameSceneManager] Selected tile ({coord.q},{coord.r}) — {view.TerrainType}");
@@ -1984,7 +2118,7 @@ namespace Sporefront.Visual
         private void UpdateSelectedEntity(HexCoordinate coord)
         {
             selectedEntityID = null;
-            selectedEntityIsArmy = false;
+            selectedEntityKind = EntityKind.Villager;
 
             var localID = gameState.localPlayerID ?? Guid.Empty;
 
@@ -1997,7 +2131,7 @@ namespace Sporefront.Visual
                     if (army.ownerID.HasValue && army.ownerID.Value == localID && !army.isInCombat)
                     {
                         selectedEntityID = army.id;
-                        selectedEntityIsArmy = true;
+                        selectedEntityKind = EntityKind.Army;
                         return;
                     }
                 }
@@ -2012,9 +2146,22 @@ namespace Sporefront.Visual
                     if (group.ownerID.HasValue && group.ownerID.Value == localID)
                     {
                         selectedEntityID = group.id;
-                        selectedEntityIsArmy = false;
+                        selectedEntityKind = EntityKind.Villager;
                         return;
                     }
+                }
+            }
+
+            // Then scouts
+            var scoutID = gameState.mapData.GetScoutID(coord);
+            if (scoutID.HasValue)
+            {
+                var scout = gameState.GetScout(scoutID.Value);
+                if (scout != null && scout.ownerID.HasValue && scout.ownerID.Value == localID)
+                {
+                    selectedEntityID = scout.id;
+                    selectedEntityKind = EntityKind.Scout;
+                    return;
                 }
             }
         }
@@ -2059,7 +2206,7 @@ namespace Sporefront.Visual
                 // Attack with selected armies (villagers can't attack)
                 foreach (var entity in entities)
                 {
-                    if (entity.isArmy)
+                    if (entity.kind == EntityKind.Army)
                     {
                         var cmd = new AttackCommand(localID, entity.id, targetCoord);
                         UIManager.ExecutePlayerCommand(cmd);
@@ -2071,8 +2218,7 @@ namespace Sporefront.Visual
                 // Move each selected entity
                 foreach (var entity in entities)
                 {
-                    var cmd = new MoveCommand(localID, entity.id, targetCoord, entity.isArmy);
-                    UIManager.ExecutePlayerCommand(cmd);
+                    IssueMoveCommand(localID, entity.id, targetCoord, entity.kind);
                 }
             }
 
@@ -2095,7 +2241,7 @@ namespace Sporefront.Visual
             bool hasArmy = false, hasVillager = false;
             foreach (var e in entities)
             {
-                if (e.isArmy) hasArmy = true;
+                if (e.kind == EntityKind.Army) hasArmy = true;
                 else hasVillager = true;
             }
 
@@ -2144,18 +2290,32 @@ namespace Sporefront.Visual
         // Multi-Select Helpers
         // ================================================================
 
+        private void IssueMoveCommand(Guid playerID, Guid entityID, HexCoordinate destination, EntityKind kind)
+        {
+            if (kind == EntityKind.Scout)
+            {
+                var cmd = new MoveScoutCommand(playerID, entityID, destination);
+                UIManager.ExecutePlayerCommand(cmd);
+            }
+            else
+            {
+                var cmd = new MoveCommand(playerID, entityID, destination, kind == EntityKind.Army);
+                UIManager.ExecutePlayerCommand(cmd);
+            }
+        }
+
         private List<SelectedEntity> GetSelectedEntities()
         {
             // Focused entity takes priority (card clicked in SelectedEntitiesPanel)
             if (focusedEntityID.HasValue)
-                return new List<SelectedEntity> { new SelectedEntity { id = focusedEntityID.Value, isArmy = focusedEntityIsArmy } };
+                return new List<SelectedEntity> { new SelectedEntity { id = focusedEntityID.Value, kind = focusedEntityKind } };
 
             if (selectedEntities.Count > 0)
                 return selectedEntities;
 
             // Fall back to single selected entity
             if (selectedEntityID.HasValue)
-                return new List<SelectedEntity> { new SelectedEntity { id = selectedEntityID.Value, isArmy = selectedEntityIsArmy } };
+                return new List<SelectedEntity> { new SelectedEntity { id = selectedEntityID.Value, kind = selectedEntityKind } };
 
             return new List<SelectedEntity>();
         }
@@ -2214,7 +2374,7 @@ namespace Sporefront.Visual
 
             foreach (var entity in entities)
             {
-                if (!entity.isArmy)
+                if (entity.kind == EntityKind.Villager)
                 {
                     // Villagers get gather/hunt commands
                     if (isHuntable)
@@ -2286,7 +2446,7 @@ namespace Sporefront.Visual
                 Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
 
                 if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
-                    selectedEntities.Add(new SelectedEntity { id = army.id, isArmy = true });
+                    selectedEntities.Add(new SelectedEntity { id = army.id, kind = EntityKind.Army });
             }
 
             // Select owned villager groups
@@ -2299,7 +2459,7 @@ namespace Sporefront.Visual
                 Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
 
                 if (screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
-                    selectedEntities.Add(new SelectedEntity { id = group.id, isArmy = false });
+                    selectedEntities.Add(new SelectedEntity { id = group.id, kind = EntityKind.Villager });
             }
 
             if (selectedEntities.Count > 0)
@@ -2309,7 +2469,7 @@ namespace Sporefront.Visual
                 foreach (var entity in selectedEntities)
                 {
                     entityIDs.Add(entity.id);
-                    entityList.Add((entity.id, entity.isArmy));
+                    entityList.Add((entity.id, entity.kind == EntityKind.Army));
                 }
                 uiManager.OnMultiSelect(entityIDs);
                 uiManager.UpdateSelectedEntitiesPanel(null, false, entityList);
@@ -2389,6 +2549,14 @@ namespace Sporefront.Visual
                     if (group.ownerID.HasValue && group.ownerID.Value == localID)
                         result.Add((group.id, false));
                 }
+            }
+
+            var scoutID = gameState.mapData.GetScoutID(coord);
+            if (scoutID.HasValue)
+            {
+                var scout = gameState.GetScout(scoutID.Value);
+                if (scout != null && scout.ownerID.HasValue && scout.ownerID.Value == localID)
+                    result.Add((scout.id, false));
             }
 
             return result;

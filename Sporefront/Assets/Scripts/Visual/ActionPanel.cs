@@ -25,6 +25,7 @@ namespace Sporefront.Visual
         {
             None,
             BuildSelect,
+            RotatePreview,
             MoveTarget,
             AttackTarget
         }
@@ -36,6 +37,7 @@ namespace Sporefront.Visual
         public event Action OnCancelled;
         public event Action<HexCoordinate, List<HexCoordinate>> OnBuildPreviewChanged;
         public event Action<BuildingType, HexCoordinate, int> OnBuildTypeSelected;
+        public event Action<HexCoordinate> OnWallDrawRequested;
 
         // ================================================================
         // State
@@ -55,7 +57,7 @@ namespace Sporefront.Visual
         private bool moveIsArmy;
         private Guid attackArmyID;
         private Guid localPlayerID;
-        private Text rotationLabel;
+        // rotationLabel removed — rotation now handled in RotatePreview mode
 
         // Entrenchment confirmation state
         private bool showingEntrenchConfirm;
@@ -86,7 +88,6 @@ namespace Sporefront.Visual
             buildCoord = coord;
             CurrentMode = ActionMode.BuildSelect;
             buildRotation = 0;
-            if (rotationLabel != null) rotationLabel.text = "Rotation: 0";
             RebuildBuildMenu(gameState);
             buildBackdrop.SetActive(true);
             targetBanner.SetActive(false);
@@ -253,23 +254,13 @@ namespace Sporefront.Visual
             headerRT.offsetMin = new Vector2(12, -40);
             headerRT.offsetMax = new Vector2(-12, -6);
 
-            // Rotation label (between header and scroll)
-            rotationLabel = UIHelper.CreateLabel(buildPanel.transform, "Rotation: 0",
-                UIConstants.FontSmall, UIHelper.InkMutedText, TextAnchor.MiddleCenter);
-            var rotLabelRT = rotationLabel.GetComponent<RectTransform>();
-            rotLabelRT.anchorMin = new Vector2(0, 1);
-            rotLabelRT.anchorMax = new Vector2(1, 1);
-            rotLabelRT.pivot = new Vector2(0.5f, 1);
-            rotLabelRT.offsetMin = new Vector2(12, -58);
-            rotLabelRT.offsetMax = new Vector2(-12, -42);
-
             // Scroll area for building list
             var scroll = UIHelper.CreateScrollView(buildPanel.transform, "BuildScroll", out buildContentRT);
             var scrollRT = scroll.GetComponent<RectTransform>();
             scrollRT.anchorMin = Vector2.zero;
             scrollRT.anchorMax = Vector2.one;
             scrollRT.offsetMin = new Vector2(0, 48); // Space for close button
-            scrollRT.offsetMax = new Vector2(0, -60); // Space for header + rotation label
+            scrollRT.offsetMax = new Vector2(0, -42); // Space for header
 
             // Close button at bottom
             var closeBtn = UIHelper.CreateInkCloseButton(buildPanel.transform, Cancel);
@@ -399,23 +390,6 @@ namespace Sporefront.Visual
             var spacerLE = spacer.AddComponent<LayoutElement>();
             spacerLE.flexibleWidth = 1;
 
-            // Rotation control for multi-hex buildings (#19)
-            if (bt.HexSize() > 1 || bt.RequiresRotation())
-            {
-                var rotateBtn = UIHelper.CreateButton(btnRow.transform, "Rotate",
-                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontCaption, null);
-                var rotBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
-                rotBtnLE.preferredWidth = 62;
-
-                var capturedType = bt;
-                rotateBtn.onClick.AddListener(() =>
-                {
-                    buildRotation = (buildRotation + 1) % 6;
-                    if (rotationLabel != null) rotationLabel.text = $"Rotation: {buildRotation}";
-                    UpdateBuildPreview(capturedType);
-                });
-            }
-
             // Build button
             var buildBtn = UIHelper.CreateButton(btnRow.transform, "Build",
                 available ? SporefrontColors.SporeGreen : UIHelper.InkMutedText,
@@ -429,11 +403,24 @@ namespace Sporefront.Visual
             {
                 var capturedType = bt;
                 var capturedCoord = buildCoord.Value;
-                var capturedRotation = buildRotation;
                 buildBtn.onClick.AddListener(() =>
                 {
-                    OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, capturedRotation);
-                    HideBuildMenu();
+                    if (capturedType == BuildingType.Wall)
+                    {
+                        // Enter wall draw mode for drag-to-build
+                        OnWallDrawRequested?.Invoke(capturedCoord);
+                        HideBuildMenu();
+                    }
+                    else if (capturedType.HexSize() > 1)
+                    {
+                        // Enter rotation preview for multi-tile buildings
+                        EnterRotatePreview(capturedType, capturedCoord);
+                    }
+                    else
+                    {
+                        OnBuildTypeSelected?.Invoke(capturedType, capturedCoord, 0);
+                        HideBuildMenu();
+                    }
                 });
             }
         }
@@ -443,6 +430,45 @@ namespace Sporefront.Visual
             if (!buildCoord.HasValue) return;
             var occupied = bt.GetOccupiedCoordinates(buildCoord.Value, buildRotation);
             OnBuildPreviewChanged?.Invoke(buildCoord.Value, occupied);
+        }
+
+        // ================================================================
+        // Rotation Preview Mode (for multi-tile buildings)
+        // ================================================================
+
+        private void EnterRotatePreview(BuildingType bt, HexCoordinate coord)
+        {
+            selectedBuildingType = bt;
+            buildCoord = coord;
+            buildRotation = 0;
+            CurrentMode = ActionMode.RotatePreview;
+
+            HideBuildMenu();
+            buildBackdrop.SetActive(false);
+
+            BuildRotationBannerContent(bt);
+            targetBanner.SetActive(true);
+
+            UpdateBuildPreview(bt);
+        }
+
+        public void RotateBuilding()
+        {
+            if (CurrentMode != ActionMode.RotatePreview) return;
+            buildRotation = (buildRotation + 1) % 6;
+            BuildRotationBannerContent(selectedBuildingType);
+            UpdateBuildPreview(selectedBuildingType);
+        }
+
+        public void ConfirmRotatePreview()
+        {
+            if (CurrentMode != ActionMode.RotatePreview || !buildCoord.HasValue) return;
+            var bt = selectedBuildingType;
+            var coord = buildCoord.Value;
+            var rot = buildRotation;
+            CurrentMode = ActionMode.None;
+            targetBanner.SetActive(false);
+            OnBuildTypeSelected?.Invoke(bt, coord, rot);
         }
 
         // ================================================================
@@ -457,8 +483,8 @@ namespace Sporefront.Visual
 
             targetBanner = UIHelper.CreatePanel(canvasTransform, "TargetBanner", UIHelper.HudBg);
             var rt = targetBanner.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.3f, 1);
-            rt.anchorMax = new Vector2(0.7f, 1);
+            rt.anchorMin = new Vector2(0.2f, 1);
+            rt.anchorMax = new Vector2(0.8f, 1);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.offsetMin = new Vector2(0, -80);
             rt.offsetMax = new Vector2(0, -44);
@@ -487,14 +513,15 @@ namespace Sporefront.Visual
             rt.offsetMax = new Vector2(0, -44);
             targetBanner.GetComponent<Image>().color = UIHelper.HudBg;
 
-            var row = UIHelper.CreateHorizontalRow(targetBanner.transform, 36f, 8f);
+            var row = UIHelper.CreateHorizontalRow(targetBanner.transform, 36f, 6f);
             var rowRT = row.GetComponent<RectTransform>();
             UIHelper.StretchFull(rowRT);
-            row.padding = new RectOffset(12, 12, 0, 0);
+            row.padding = new RectOffset(10, 10, 0, 0);
             row.childAlignment = TextAnchor.MiddleCenter;
 
-            var label = UIHelper.CreateLabel(row.transform, message, 14,
+            var label = UIHelper.CreateLabel(row.transform, message, UIConstants.FontCaption,
                 UIHelper.HudTextColor, TextAnchor.MiddleCenter);
+            UIHelper.EnableAutoFit(label, 10, UIConstants.FontCaption);
             label.gameObject.name = "BannerText";
             var labelLE = label.gameObject.AddComponent<LayoutElement>();
             labelLE.flexibleWidth = 1;
@@ -502,8 +529,64 @@ namespace Sporefront.Visual
             var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
                 SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption,
                 () => Cancel());
+            var cancelLabel = UIHelper.GetButtonLabel(cancelBtn);
+            UIHelper.EnableAutoFit(cancelLabel, 10, UIConstants.FontCaption);
             var btnLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
-            btnLE.preferredWidth = 60;
+            btnLE.preferredWidth = 70;
+            btnLE.minWidth = 56;
+        }
+
+        private void BuildRotationBannerContent(BuildingType bt)
+        {
+            ClearBannerContent();
+
+            var rt = targetBanner.GetComponent<RectTransform>();
+            rt.offsetMin = new Vector2(0, -84);
+            rt.offsetMax = new Vector2(0, -44);
+            targetBanner.GetComponent<Image>().color = UIHelper.HudBg;
+
+            var row = UIHelper.CreateHorizontalRow(targetBanner.transform, 36f, 6f);
+            var rowRT = row.GetComponent<RectTransform>();
+            UIHelper.StretchFull(rowRT);
+            row.padding = new RectOffset(10, 10, 0, 0);
+            row.childAlignment = TextAnchor.MiddleCenter;
+
+            // Building name label
+            var label = UIHelper.CreateLabel(row.transform, bt.DisplayName(),
+                UIConstants.FontCaption, UIHelper.HudTextColor, TextAnchor.MiddleCenter);
+            UIHelper.EnableAutoFit(label, 10, UIConstants.FontCaption);
+            var labelLE = label.gameObject.AddComponent<LayoutElement>();
+            labelLE.flexibleWidth = 1;
+
+            // Rotate button
+            var rotateBtn = UIHelper.CreateButton(row.transform, "Rotate (R)",
+                SporefrontColors.SporeAmber, UIHelper.ButtonText, UIConstants.FontCaption,
+                () => RotateBuilding());
+            var rotateLabel = UIHelper.GetButtonLabel(rotateBtn);
+            UIHelper.EnableAutoFit(rotateLabel, 10, UIConstants.FontCaption);
+            var rotateBtnLE = rotateBtn.gameObject.AddComponent<LayoutElement>();
+            rotateBtnLE.preferredWidth = 85;
+            rotateBtnLE.minWidth = 70;
+
+            // Confirm button
+            var confirmBtn = UIHelper.CreateButton(row.transform, "Confirm",
+                SporefrontColors.SporeGreen, UIHelper.ButtonText, UIConstants.FontCaption,
+                () => ConfirmRotatePreview());
+            var confirmLabel = UIHelper.GetButtonLabel(confirmBtn);
+            UIHelper.EnableAutoFit(confirmLabel, 10, UIConstants.FontCaption);
+            var confirmBtnLE = confirmBtn.gameObject.AddComponent<LayoutElement>();
+            confirmBtnLE.preferredWidth = 75;
+            confirmBtnLE.minWidth = 60;
+
+            // Cancel button
+            var cancelBtn = UIHelper.CreateButton(row.transform, "Cancel",
+                SporefrontColors.SporeRed, UIHelper.HudTextColor, UIConstants.FontCaption,
+                () => Cancel());
+            var cancelLabel = UIHelper.GetButtonLabel(cancelBtn);
+            UIHelper.EnableAutoFit(cancelLabel, 10, UIConstants.FontCaption);
+            var cancelBtnLE = cancelBtn.gameObject.AddComponent<LayoutElement>();
+            cancelBtnLE.preferredWidth = 70;
+            cancelBtnLE.minWidth = 56;
         }
 
         private void RebuildTargetBannerDefault(string message)

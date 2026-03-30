@@ -53,8 +53,10 @@ namespace Sporefront.Data
         public int mineralDepositCount = 12;
         public int mineralDepositSizeMin = 2;
         public int mineralDepositSizeMax = 4;
-        public double hillClusterChance = 0.15;
-        public int maxElevation = 3;
+        public int ridgeCount = 4;
+        public int ridgeLengthMin = 6;
+        public int ridgeLengthMax = 12;
+        public double ridgeFoothillChance = 0.4;
 
         public MapGenerationConfig(string mapType, ulong seed, int width, int height)
         {
@@ -73,8 +75,10 @@ namespace Sporefront.Data
             config.mineralDepositCount = mineralDepositCount;
             config.mineralDepositSizeMin = mineralDepositSizeMin;
             config.mineralDepositSizeMax = mineralDepositSizeMax;
-            config.hillClusterChance = hillClusterChance;
-            config.maxElevation = maxElevation;
+            config.ridgeCount = ridgeCount;
+            config.ridgeLengthMin = ridgeLengthMin;
+            config.ridgeLengthMax = ridgeLengthMax;
+            config.ridgeFoothillChance = ridgeFoothillChance;
             return config;
         }
 
@@ -90,8 +94,10 @@ namespace Sporefront.Data
             mapConfig.mineralDepositCount = config.mineralDepositCount;
             mapConfig.mineralDepositSizeMin = config.mineralDepositSizeMin;
             mapConfig.mineralDepositSizeMax = config.mineralDepositSizeMax;
-            mapConfig.hillClusterChance = config.hillClusterChance;
-            mapConfig.maxElevation = config.maxElevation;
+            mapConfig.ridgeCount = config.ridgeCount;
+            mapConfig.ridgeLengthMin = config.ridgeLengthMin;
+            mapConfig.ridgeLengthMax = config.ridgeLengthMax;
+            mapConfig.ridgeFoothillChance = config.ridgeFoothillChance;
             return mapConfig;
         }
 
@@ -109,8 +115,10 @@ namespace Sporefront.Data
                 { "mineralDepositCount", mineralDepositCount },
                 { "mineralDepositSizeMin", mineralDepositSizeMin },
                 { "mineralDepositSizeMax", mineralDepositSizeMax },
-                { "hillClusterChance", hillClusterChance },
-                { "maxElevation", maxElevation }
+                { "ridgeCount", ridgeCount },
+                { "ridgeLengthMin", ridgeLengthMin },
+                { "ridgeLengthMax", ridgeLengthMax },
+                { "ridgeFoothillChance", ridgeFoothillChance }
             };
         }
 
@@ -136,8 +144,10 @@ namespace Sporefront.Data
             if (data.ContainsKey("mineralDepositCount")) config.mineralDepositCount = Convert.ToInt32(data["mineralDepositCount"]);
             if (data.ContainsKey("mineralDepositSizeMin")) config.mineralDepositSizeMin = Convert.ToInt32(data["mineralDepositSizeMin"]);
             if (data.ContainsKey("mineralDepositSizeMax")) config.mineralDepositSizeMax = Convert.ToInt32(data["mineralDepositSizeMax"]);
-            if (data.ContainsKey("hillClusterChance")) config.hillClusterChance = Convert.ToDouble(data["hillClusterChance"]);
-            if (data.ContainsKey("maxElevation")) config.maxElevation = Convert.ToInt32(data["maxElevation"]);
+            if (data.ContainsKey("ridgeCount")) config.ridgeCount = Convert.ToInt32(data["ridgeCount"]);
+            if (data.ContainsKey("ridgeLengthMin")) config.ridgeLengthMin = Convert.ToInt32(data["ridgeLengthMin"]);
+            if (data.ContainsKey("ridgeLengthMax")) config.ridgeLengthMax = Convert.ToInt32(data["ridgeLengthMax"]);
+            if (data.ContainsKey("ridgeFoothillChance")) config.ridgeFoothillChance = Convert.ToDouble(data["ridgeFoothillChance"]);
             return config;
         }
     }

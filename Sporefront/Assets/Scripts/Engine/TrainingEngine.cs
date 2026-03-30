@@ -54,6 +54,13 @@ namespace Sporefront.Engine
                     var villagerChanges = UpdateVillagerTraining(building, currentTime, gameState);
                     changes.AddRange(villagerChanges);
                 }
+
+                // Scout training
+                if (building.scoutTrainingQueue.Count > 0)
+                {
+                    var scoutChanges = UpdateScoutTraining(building, currentTime, gameState);
+                    changes.AddRange(scoutChanges);
+                }
             }
 
             return changes;
@@ -146,6 +153,60 @@ namespace Sporefront.Engine
                 if (entry.progress > 0 && entry.progress < 1.0)
                 {
                     changes.Add(new VillagerTrainingProgressChange
+                    {
+                        buildingID = building.id,
+                        entryIndex = index,
+                        progress = entry.progress
+                    });
+                }
+            }
+
+            return changes;
+        }
+
+        // ================================================================
+        // Scout Training
+        // ================================================================
+
+        private List<StateChange> UpdateScoutTraining(BuildingData building, double currentTime, GameState state)
+        {
+            var changes = new List<StateChange>();
+
+            var completedEntries = building.UpdateScoutTraining(currentTime);
+
+            foreach (var entry in completedEntries)
+            {
+                // Spawn scout at nearest walkable tile
+                HexCoordinate spawnCoord;
+                HexCoordinate? walkable = state.mapData.FindNearestWalkable(
+                    building.coordinate, 3, building.ownerID ?? Guid.Empty, state);
+                spawnCoord = walkable.HasValue ? walkable.Value : building.coordinate;
+
+                var scout = new ScoutData(spawnCoord, building.ownerID);
+                state.AddScout(scout);
+
+                changes.Add(new ScoutTrainingCompletedChange
+                {
+                    buildingID = building.id,
+                    scoutID = scout.id,
+                    coordinate = spawnCoord
+                });
+
+                changes.Add(new ScoutCreatedChange
+                {
+                    scoutID = scout.id,
+                    ownerID = building.ownerID ?? Guid.Empty,
+                    coordinate = spawnCoord
+                });
+            }
+
+            // Update progress for remaining entries
+            for (int index = 0; index < building.scoutTrainingQueue.Count; index++)
+            {
+                var entry = building.scoutTrainingQueue[index];
+                if (entry.progress > 0 && entry.progress < 1.0)
+                {
+                    changes.Add(new ScoutTrainingProgressChange
                     {
                         buildingID = building.id,
                         entryIndex = index,

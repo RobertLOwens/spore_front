@@ -169,6 +169,12 @@ namespace Sporefront.Engine
                 GetCoordinatesInRange(group.coordinate, range, state, visibleCoords);
             }
 
+            // Vision from scouts
+            foreach (var scout in state.GetScoutsForPlayer(playerID))
+            {
+                GetCoordinatesInRange(scout.coordinate, scout.visionRange, state, visibleCoords);
+            }
+
             // Vision from reinforcements (just their tile)
             HashSet<HexCoordinate> reinforcementCoords;
             if (state.activeReinforcementPositions != null &&

@@ -31,6 +31,7 @@ namespace Sporefront.Visual
         public event Action<Guid, bool> OnEntityFocused; // (entityID, isArmy)
         public event Action OnSurrenderRequested;
         public event Action OnRejoinGame;
+        public event Action<HexCoordinate> OnWallDrawRequested;
 
         // ================================================================
         // Core HUD Panels
@@ -143,6 +144,9 @@ namespace Sporefront.Visual
         private Guid localPlayerID;
         private HexCoordinate? selectedCoord;
         private HexCoordinate? pendingBuildCoord;
+
+        // Idle villager cycling
+        private int idleVillagerCycleIndex;
 
         // Thread-safe queue for callbacks from background threads (e.g., ArenaSimulator)
         private readonly ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
@@ -489,8 +493,11 @@ namespace Sporefront.Visual
             };
             tileInfo.OnMoveEntityToTile += (entityID, destination, isArmy) =>
             {
-                var cmd = new MoveCommand(localPlayerID, entityID, destination, isArmy);
-                ExecutePlayerCommand(cmd);
+                var scout = gameState.GetScout(entityID);
+                if (scout != null)
+                    ExecutePlayerCommand(new MoveScoutCommand(localPlayerID, entityID, destination));
+                else
+                    ExecutePlayerCommand(new MoveCommand(localPlayerID, entityID, destination, isArmy));
             };
             tileInfo.OnAttackEntityToTile += (armyID, targetCoordinate) =>
             {
@@ -510,6 +517,11 @@ namespace Sporefront.Visual
                 {
                     var vg = gameState.GetVillagerGroup(entityID);
                     if (vg != null) entityCoord = vg.coordinate;
+                    else
+                    {
+                        var sc = gameState.GetScout(entityID);
+                        if (sc != null) entityCoord = sc.coordinate;
+                    }
                 }
                 if (!entityCoord.HasValue) return;
 
@@ -559,6 +571,10 @@ namespace Sporefront.Visual
                 selectionRenderer.ClearBuildPreview();
                 ClearMultiSelectHighlights();
                 selectedEntitiesPanel?.Hide();
+            };
+            actionPanel.OnWallDrawRequested += (coord) =>
+            {
+                OnWallDrawRequested?.Invoke(coord);
             };
             actionPanel.OnBuildTypeSelected += (buildingType, coord, rotation) =>
             {
@@ -670,6 +686,7 @@ namespace Sporefront.Visual
             };
 
             // ---- ResourceBarPanel (top-right buttons) ----
+            resourceBar.OnIdleVillagerClicked += CycleToNextIdleVillager;
             resourceBar.OnNotificationClicked += () => notificationInbox.Show();
             resourceBar.OnCombatLogClicked += () => ShowCombatHistory();
             resourceBar.OnSettingsClicked += () => settings.Show();
@@ -679,6 +696,7 @@ namespace Sporefront.Visual
             };
 
             // ---- InGameMenuPanel ----
+            inGameMenu.OnCombatLog += () => ShowCombatHistory();
             inGameMenu.OnSaveGame += () =>
             {
                 saveLoad.ShowSave();
@@ -808,6 +826,11 @@ namespace Sporefront.Visual
                     armyDetail.Show(id, gameState);
                 else
                     buildingDetail.Show(id, gameState);
+            };
+
+            entitiesOverview.OnScoutSelected += (scoutID) =>
+            {
+                entitiesOverview.Hide();
             };
 
             trainingOverview.OnBuildingSelected += (id) =>
@@ -1120,6 +1143,10 @@ namespace Sporefront.Visual
         public bool IsActionModeActive => actionPanel.IsActive;
 
         public SelectionBoxRenderer SelectionBox => selectionBoxRenderer;
+        public SelectionRenderer SelectionRenderer => selectionRenderer;
+        public bool IsRotatePreviewActive => actionPanel.CurrentMode == ActionPanel.ActionMode.RotatePreview;
+        public void RotateBuilding() => actionPanel.RotateBuilding();
+        public void ConfirmRotatePreview() => actionPanel.ConfirmRotatePreview();
 
         public void OnMultiSelect(List<Guid> entityIDs)
         {
@@ -1200,6 +1227,7 @@ namespace Sporefront.Visual
             // 2. Show essential HUD immediately
             resourceBar.Show();
             resourceBar.Refresh(state, localPlayerID);
+            resourceBar.UpdateIdleVillagerBadge(CountIdleVillagers());
             tendrilWheelHUD.Show();
 
             // Show faction banner with actual player faction
@@ -1390,6 +1418,9 @@ namespace Sporefront.Visual
             if ((flags & resourceFlags) != 0)
                 resourceBar.Refresh(gameState, localPlayerID);
 
+            if ((flags & (StateChangeFlags.Villagers | StateChangeFlags.Movement)) != 0)
+                resourceBar.UpdateIdleVillagerBadge(CountIdleVillagers());
+
             // Core info panels — refresh on broad entity/building/fog changes
             const StateChangeFlags tileFlags = StateChangeFlags.Buildings | StateChangeFlags.Armies
                 | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar | StateChangeFlags.Combat
@@ -1451,7 +1482,8 @@ namespace Sporefront.Visual
             }
 
             if ((flags & (StateChangeFlags.Armies | StateChangeFlags.Buildings
-                | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar)) != 0)
+                | StateChangeFlags.Villagers | StateChangeFlags.FogOfWar
+                | StateChangeFlags.Scouts)) != 0)
                 entityRenderer.UpdateEntities(gameState);
 
             if ((flags & StateChangeFlags.Entrenchment) != 0)
@@ -1651,6 +1683,52 @@ namespace Sporefront.Visual
                     }
                 }
             }
+        }
+
+        // ================================================================
+        // Idle Villager Cycling
+        // ================================================================
+
+        public void CycleToNextIdleVillager()
+        {
+            if (gameState == null) return;
+
+            var groups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+            if (groups == null) return;
+
+            var idle = new List<VillagerGroupData>();
+            foreach (var g in groups)
+            {
+                if (g.currentTask.IsIdle && !g.HasPath() && g.HasVillagers())
+                    idle.Add(g);
+            }
+
+            if (idle.Count == 0)
+            {
+                ShowCommandFailure("No idle villagers");
+                return;
+            }
+
+            if (idleVillagerCycleIndex >= idle.Count)
+                idleVillagerCycleIndex = 0;
+
+            var target = idle[idleVillagerCycleIndex];
+            idleVillagerCycleIndex = (idleVillagerCycleIndex + 1) % idle.Count;
+
+            cameraController.FocusOn(target.coordinate, -1f, true);
+            OnEntityFocused?.Invoke(target.id, false);
+        }
+
+        private int CountIdleVillagers()
+        {
+            if (gameState == null) return 0;
+            var groups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
+            if (groups == null) return 0;
+            int count = 0;
+            foreach (var g in groups)
+                if (g.currentTask.IsIdle && !g.HasPath() && g.HasVillagers())
+                    count++;
+            return count;
         }
 
         // ================================================================

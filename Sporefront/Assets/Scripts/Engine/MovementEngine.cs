@@ -29,6 +29,7 @@ namespace Sporefront.Engine
         // Reusable snapshot lists to avoid .ToList() allocations
         private readonly List<ArmyData> armySnapshot = new List<ArmyData>();
         private readonly List<VillagerGroupData> villagerSnapshot = new List<VillagerGroupData>();
+        private readonly List<ScoutData> scoutSnapshot = new List<ScoutData>();
 
         // Setup
 
@@ -84,6 +85,15 @@ namespace Sporefront.Engine
             {
                 var groupChanges = UpdateVillagerGroupMovement(group, currentTime);
                 changes.AddRange(groupChanges);
+            }
+
+            // Update scout movements + stamina regen
+            scoutSnapshot.Clear();
+            scoutSnapshot.AddRange(gameState.scouts.Values);
+            foreach (var scout in scoutSnapshot)
+            {
+                var scoutChanges = UpdateScoutMovement(scout, currentTime);
+                changes.AddRange(scoutChanges);
             }
 
             // Reuse army snapshot for reinforcement movements (re-snapshot since armies may have been removed)
@@ -470,6 +480,72 @@ namespace Sporefront.Engine
                     {
                         group.ClearTask();
                     }
+                }
+            }
+
+            return changes;
+        }
+
+        // Scout Movement
+
+        private List<StateChange> UpdateScoutMovement(ScoutData scout, double currentTime)
+        {
+            var changes = new List<StateChange>();
+
+            // Regenerate stamina when idle
+            if (!scout.HasPath())
+            {
+                if (scout.stamina < scout.maxStamina)
+                {
+                    double regen = GameConfig.Scout.StaminaRegenPerSecond * GameConfig.EngineIntervals.MovementUpdate;
+                    scout.RegenerateStamina(regen);
+                    changes.Add(new ScoutStaminaChange { scoutID = scout.id, stamina = scout.stamina });
+                }
+                return changes;
+            }
+
+            if (gameState == null) return StateChange.EmptyChanges;
+
+            var path = scout.currentPath;
+            var targetCoord = path[scout.pathIndex];
+
+            // Calculate movement speed (scouts are faster)
+            double speed = baseMovementSpeed * GameConfig.Scout.MovementSpeedMultiplier * terrainSpeedMultiplier;
+            scout.movementSpeed = speed;
+
+            // Update progress
+            scout.movementProgress += speed * GameConfig.EngineIntervals.MovementUpdate;
+
+            // Check if we've reached the next tile
+            if (scout.movementProgress >= 1.0)
+            {
+                var fromCoord = scout.coordinate;
+
+                // Consume stamina per tile
+                scout.ConsumeStamina(GameConfig.Scout.StaminaCostPerTile);
+                changes.Add(new ScoutStaminaChange { scoutID = scout.id, stamina = scout.stamina });
+
+                // Move to next tile
+                scout.coordinate = targetCoord;
+                gameState.mapData.UpdateScoutPosition(scout.id, targetCoord);
+                scout.pathIndex += 1;
+                scout.movementProgress -= 1.0;
+
+                changes.Add(new ScoutMovedChange
+                {
+                    scoutID = scout.id,
+                    from = fromCoord,
+                    to = targetCoord,
+                    path = scout.pathIndex < path.Count
+                        ? path.GetRange(scout.pathIndex, path.Count - scout.pathIndex)
+                        : new List<HexCoordinate>()
+                });
+
+                // Check if path is complete or out of stamina
+                if (scout.pathIndex >= path.Count || !scout.HasEnoughStamina())
+                {
+                    scout.ClearPath();
+                    scout.movementSpeed = 0.0;
                 }
             }
 

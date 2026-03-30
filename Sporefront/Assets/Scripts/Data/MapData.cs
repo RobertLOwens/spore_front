@@ -32,12 +32,14 @@ namespace Sporefront.Data
         public HashSet<Guid> armyIDs = new HashSet<Guid>();
         public HashSet<Guid> villagerGroupIDs = new HashSet<Guid>();
         public HashSet<Guid> resourcePointIDs = new HashSet<Guid>();
+        public HashSet<Guid> scoutIDs = new HashSet<Guid>();
 
         // Coordinate tracking
         public Dictionary<Guid, HexCoordinate> buildingCoordinates = new Dictionary<Guid, HexCoordinate>();
         public Dictionary<Guid, HexCoordinate> armyCoordinates = new Dictionary<Guid, HexCoordinate>();
         public Dictionary<Guid, HexCoordinate> villagerGroupCoordinates = new Dictionary<Guid, HexCoordinate>();
         public Dictionary<Guid, HexCoordinate> resourcePointCoordinates = new Dictionary<Guid, HexCoordinate>();
+        public Dictionary<Guid, HexCoordinate> scoutCoordinates = new Dictionary<Guid, HexCoordinate>();
 
         // Multi-tile building support
         public Dictionary<HexCoordinate, Guid> occupiedCoordinates = new Dictionary<HexCoordinate, Guid>();
@@ -195,6 +197,44 @@ namespace Sporefront.Data
         {
             HexCoordinate coord;
             return villagerGroupCoordinates.TryGetValue(id, out coord) ? (HexCoordinate?)coord : null;
+        }
+
+        // Scout Management
+
+        // Reverse lookup: coordinate → scout ID (O(1) instead of O(N) scan)
+        private Dictionary<HexCoordinate, Guid> coordinateToScout = new Dictionary<HexCoordinate, Guid>();
+
+        public void RegisterScout(Guid id, HexCoordinate coordinate)
+        {
+            scoutIDs.Add(id);
+            scoutCoordinates[id] = coordinate;
+            coordinateToScout[coordinate] = id;
+        }
+
+        public void UnregisterScout(Guid id)
+        {
+            HexCoordinate coord;
+            if (scoutCoordinates.TryGetValue(id, out coord))
+                coordinateToScout.Remove(coord);
+            scoutIDs.Remove(id);
+            scoutCoordinates.Remove(id);
+        }
+
+        public void UpdateScoutPosition(Guid id, HexCoordinate coordinate)
+        {
+            HexCoordinate oldCoord;
+            if (scoutCoordinates.TryGetValue(id, out oldCoord))
+                coordinateToScout.Remove(oldCoord);
+            scoutCoordinates[id] = coordinate;
+            coordinateToScout[coordinate] = id;
+        }
+
+        public Guid? GetScoutID(HexCoordinate coordinate)
+        {
+            Guid id;
+            if (coordinateToScout.TryGetValue(coordinate, out id))
+                return id;
+            return null;
         }
 
         // Entity Stacking

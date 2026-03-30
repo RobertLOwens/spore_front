@@ -31,6 +31,7 @@ namespace Sporefront.Visual
         public FactionType playerFaction;
         public FactionType aiFaction;
         public bool isOnlineMode;
+        public int startingCCLevel;
 
         // Matchmaking fields (empty for offline games)
         public string matchGameID;
@@ -49,14 +50,15 @@ namespace Sporefront.Visual
             startingResources = StartingResources.Medium,
             visibilityMode = VisibilityMode.Normal,
             playerFaction = FactionType.Morel,
-            aiFaction = FactionType.Muscaria
+            aiFaction = FactionType.Muscaria,
+            startingCCLevel = 1
         };
     }
 
     public enum MapType { Arabia, MountainValley, GoldRush, Random, Arena }
     public enum MapSize { Small, Medium, Large, Huge }
     public enum ResourceDensity { Sparse, Normal, Abundant }
-    public enum StartingResources { Small, Medium, Large }
+    public enum StartingResources { Small, Medium, Large, VeryHigh }
 
     [Serializable]
     public struct ArenaConfig
@@ -123,6 +125,7 @@ namespace Sporefront.Visual
         private VisibilityMode selectedVisibility = VisibilityMode.Normal;
         private FactionType selectedFaction = FactionType.Morel;
         private FactionType selectedAIFaction = FactionType.Muscaria;
+        private int selectedCCLevel = 1;
 
         // Arena config
         private ArenaScenarioConfig arenaScenario = ArenaScenarioConfig.Default;
@@ -600,6 +603,8 @@ namespace Sporefront.Visual
             BuildMapSizeSection(leftCol.transform);
             UIHelper.CreateDivider(leftCol.transform, softDivider);
             BuildStartingResourcesSection(leftCol.transform);
+            UIHelper.CreateDivider(leftCol.transform, softDivider);
+            BuildCCLevelSection(leftCol.transform);
 
             // Right column: Resource Density, Visibility
             var rightCol = new GameObject("RightColumn", typeof(RectTransform),
@@ -1086,7 +1091,7 @@ namespace Sporefront.Visual
             var row = UIHelper.CreateHorizontalRow(parent, 40f, 4f);
             var buttons = new List<Button>();
 
-            string[] names = { "Small", "Medium", "Large" };
+            string[] names = { "Small", "Medium", "Large", "Very High" };
             for (int i = 0; i < names.Length; i++)
             {
                 int idx = i;
@@ -1096,7 +1101,7 @@ namespace Sporefront.Visual
                     UpdateSegmentSelection("startingResources", idx);
                 });
                 var btnLE = btn.gameObject.AddComponent<LayoutElement>();
-                btnLE.preferredWidth = 120;
+                btnLE.preferredWidth = 100;
                 btnLE.preferredHeight = 40;
                 buttons.Add(btn);
             }
@@ -1105,6 +1110,52 @@ namespace Sporefront.Visual
             segmentBorders["startingResources"] = AddSegmentBottomBorders(buttons);
             segmentSelections["startingResources"] = (int)selectedStartingResources;
             UpdateSegmentColors("startingResources");
+        }
+
+        // ================================================================
+        // City Center Level
+        // ================================================================
+
+        private void BuildCCLevelSection(Transform parent)
+        {
+            var sectionLabel = UIHelper.CreateLabel(parent, "Starting CC Level",
+                UIConstants.FontHeader, SporefrontColors.InkDark,
+                TextAnchor.MiddleLeft, true);
+            var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
+            sectionLE.preferredHeight = 28;
+
+            var descLabel = UIHelper.CreateLabel(parent,
+                "City Center level both players start with. Higher levels unlock more buildings and research.",
+                UIConstants.FontBody, SporefrontColors.InkLight,
+                TextAnchor.UpperLeft, false);
+            descLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var descLE = descLabel.gameObject.AddComponent<LayoutElement>();
+            descLE.preferredHeight = 32;
+
+            var row = UIHelper.CreateHorizontalRow(parent, 40f, 4f);
+            var buttons = new List<Button>();
+
+            string[] names = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int level = i + 1;
+                var btn = UIHelper.CreateButton(row.transform, names[i], null, null, UIConstants.FontBody, () =>
+                {
+                    selectedCCLevel = level;
+                    UpdateSegmentSelection("ccLevel", level - 1);
+                });
+                var label = UIHelper.GetButtonLabel(btn);
+                UIHelper.EnableAutoFit(label, 10, UIConstants.FontBody);
+                var btnLE = btn.gameObject.AddComponent<LayoutElement>();
+                btnLE.preferredWidth = 36;
+                btnLE.preferredHeight = 36;
+                buttons.Add(btn);
+            }
+
+            segmentGroups["ccLevel"] = buttons;
+            segmentBorders["ccLevel"] = AddSegmentBottomBorders(buttons);
+            segmentSelections["ccLevel"] = selectedCCLevel - 1;
+            UpdateSegmentColors("ccLevel");
         }
 
         // ================================================================
@@ -1183,7 +1234,8 @@ namespace Sporefront.Visual
                     visibilityMode = selectedVisibility,
                     playerFaction = selectedFaction,
                     aiFaction = selectedAIFaction,
-                    isOnlineMode = isOnlineMode
+                    isOnlineMode = isOnlineMode,
+                    startingCCLevel = selectedCCLevel
                 };
                 OnStartGame?.Invoke(config);
             });
@@ -1290,7 +1342,7 @@ namespace Sporefront.Visual
                 {
                     var inkDark = SporefrontColors.InkDark;
                     var inkMid = SporefrontColors.InkMid;
-                    label.color = isSel ? inkDark : new Color(inkMid.r, inkMid.g, inkMid.b, 0.5f);
+                    label.color = isSel ? inkDark : new Color(inkMid.r, inkMid.g, inkMid.b, 0.7f);
                 }
 
                 buttons[i].colors = UIHelper.CardButtonColors(Color.clear);

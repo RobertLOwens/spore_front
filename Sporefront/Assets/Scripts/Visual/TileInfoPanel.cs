@@ -269,6 +269,18 @@ namespace Sporefront.Visual
                 UIHelper.CreateDivider(contentRT);
             }
 
+            // 4b. Scouts section
+            var scoutID = gameState.mapData.GetScoutID(coord);
+            if (scoutID.HasValue)
+            {
+                var scout = gameState.GetScout(scoutID.Value);
+                if (scout != null)
+                {
+                    BuildScoutSection(scout, coord, gameState);
+                    UIHelper.CreateDivider(contentRT);
+                }
+            }
+
             // 5. Resource point section
             var rp = gameState.GetResourcePoint(coord);
             if (rp != null && !rp.IsDepleted())
@@ -486,8 +498,10 @@ namespace Sporefront.Visual
                 var trainBtn = UIHelper.CreateButton(contentRT, btnLabel,
                     SporefrontColors.SporeGreen, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnTrainVillagerRequested?.Invoke(capturedBuildingID));
+                var trainLabel = UIHelper.GetButtonLabel(trainBtn);
+                UIHelper.EnableAutoFit(trainLabel, 11, UIConstants.FontBody);
                 var trainBtnLE = trainBtn.gameObject.AddComponent<LayoutElement>();
-                trainBtnLE.preferredHeight = 34;
+                trainBtnLE.preferredHeight = 36;
             }
 
             // Quick deploy villagers button
@@ -499,8 +513,10 @@ namespace Sporefront.Visual
                     $"Deploy Villagers ({building.villagerGarrison})",
                     SporefrontColors.SporeGreen, UIHelper.ButtonText, UIConstants.FontBody,
                     () => OnDeployVillagersRequested?.Invoke(capturedBuildingID, capturedCount));
+                var deployLabel = UIHelper.GetButtonLabel(deployBtn);
+                UIHelper.EnableAutoFit(deployLabel, 11, UIConstants.FontBody);
                 var deployBtnLE = deployBtn.gameObject.AddComponent<LayoutElement>();
-                deployBtnLE.preferredHeight = 34;
+                deployBtnLE.preferredHeight = 36;
             }
 
             // Quick upgrade button (all building types)
@@ -519,8 +535,10 @@ namespace Sporefront.Visual
                     UIConstants.FontBody,
                     () => OnUpgradeBuildingRequested?.Invoke(capturedBuildingID));
                 upgradeBtn.interactable = canAfford;
+                var upgradeLabel = UIHelper.GetButtonLabel(upgradeBtn);
+                UIHelper.EnableAutoFit(upgradeLabel, 11, UIConstants.FontBody);
                 var upgradeBtnLE = upgradeBtn.gameObject.AddComponent<LayoutElement>();
-                upgradeBtnLE.preferredHeight = 34;
+                upgradeBtnLE.preferredHeight = 36;
             }
         }
 
@@ -735,6 +753,51 @@ namespace Sporefront.Visual
                         cancelLE.preferredHeight = 28;
                     }
                 }
+            }
+        }
+
+        private void BuildScoutSection(ScoutData scout, HexCoordinate coord, GameState gameState)
+        {
+            var sectionHeader = UIHelper.CreateLabel(contentRT, "Mycelium Scout",
+                UIConstants.FontSubheader, UIHelper.InkHeaderText,
+                TextAnchor.MiddleLeft, true);
+            var headerLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
+            headerLE.preferredHeight = 28;
+
+            bool isOwned = scout.ownerID.HasValue && scout.ownerID.Value == localPlayerID;
+
+            // Stats row
+            var statsRow = UIHelper.CreateHorizontalRow(contentRT, 22f, 4f);
+            var hpLabel = UIHelper.CreateLabel(statsRow.transform,
+                $"HP: {(int)scout.hp}/{(int)scout.maxHp}", UIConstants.FontCaption, UIHelper.InkBodyText);
+            var hpLE = hpLabel.gameObject.AddComponent<LayoutElement>();
+            hpLE.flexibleWidth = 1;
+
+            var staminaLabel = UIHelper.CreateLabel(statsRow.transform,
+                $"Stamina: {(int)scout.stamina}/{(int)scout.maxStamina}", UIConstants.FontCaption, UIHelper.InkBodyText);
+            var staminaLE = staminaLabel.gameObject.AddComponent<LayoutElement>();
+            staminaLE.flexibleWidth = 1;
+
+            var visionLabel = UIHelper.CreateLabel(statsRow.transform,
+                $"Vision: {scout.visionRange}", UIConstants.FontCaption, UIHelper.InkMutedText);
+            var visionLE = visionLabel.gameObject.AddComponent<LayoutElement>();
+            visionLE.preferredWidth = 60;
+
+            if (isOwned)
+            {
+                var capturedScoutID = scout.id;
+                var actionRow = UIHelper.CreateHorizontalRow(contentRT, 28f, 4f);
+                var spacer = new GameObject("Spacer");
+                spacer.transform.SetParent(actionRow.transform, false);
+                var spacerLE = spacer.AddComponent<LayoutElement>();
+                spacerLE.flexibleWidth = 1;
+
+                var moveBtn = UIHelper.CreateButton(actionRow.transform, "Move",
+                    SporefrontColors.ParchmentDeep, UIHelper.InkBodyText, UIConstants.FontBody,
+                    () => OnMoveRequested?.Invoke(capturedScoutID, coord));
+                var moveBtnLE = moveBtn.gameObject.AddComponent<LayoutElement>();
+                moveBtnLE.preferredWidth = 50;
+                moveBtnLE.preferredHeight = 28;
             }
         }
 
@@ -974,7 +1037,85 @@ namespace Sporefront.Visual
                 }
             }
 
-            if (!hasArmies && !hasVillagers)
+            // Scouts section — sorted by distance
+            var allScouts = gameState.GetScoutsForPlayer(localPlayerID);
+            bool hasScouts = false;
+            if (allScouts != null && allScouts.Count > 0)
+            {
+                var sortedScouts = new List<ScoutData>(allScouts);
+                sortedScouts.Sort((a, b) =>
+                    a.coordinate.Distance(coord).CompareTo(b.coordinate.Distance(coord)));
+
+                foreach (var scout in sortedScouts)
+                {
+                    if (!hasScouts)
+                    {
+                        if (hasArmies || hasVillagers) UIHelper.CreateDivider(contentRT);
+                        var sectionHeader = UIHelper.CreateLabel(contentRT, "Scouts",
+                            UIConstants.FontSubheader, UIHelper.InkHeaderText,
+                            TextAnchor.MiddleLeft, true);
+                        var shLE = sectionHeader.gameObject.AddComponent<LayoutElement>();
+                        shLE.preferredHeight = 28;
+                        hasScouts = true;
+                    }
+
+                    int distance = scout.coordinate.Distance(coord);
+                    bool isSelected = previewedEntityID.HasValue && previewedEntityID.Value == scout.id;
+
+                    Color rowBg = isSelected
+                        ? Color.Lerp(Color.clear, SporefrontColors.SporeTeal, 0.12f)
+                        : Color.clear;
+                    var row = UIHelper.CreatePanel(contentRT, "ScoutRow", rowBg);
+                    var rowLE = row.AddComponent<LayoutElement>();
+                    rowLE.preferredHeight = 56;
+
+                    var vlg = row.AddComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(8, 8, 2, 2);
+                    vlg.childForceExpandWidth = true;
+                    vlg.childForceExpandHeight = false;
+
+                    var nameRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                    var nameLabel = UIHelper.CreateLabel(nameRow.transform,
+                        "Mycelium Scout", UIConstants.FontBody, UIHelper.InkBodyText);
+                    var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
+                    nameLE.flexibleWidth = 1;
+
+                    var distLabel = UIHelper.CreateLabel(nameRow.transform,
+                        $"{distance} tiles", UIConstants.FontCaption, UIHelper.InkMutedText);
+                    var distLE = distLabel.gameObject.AddComponent<LayoutElement>();
+                    distLE.preferredWidth = 55;
+
+                    var infoRow = UIHelper.CreateHorizontalRow(row.transform, 20f, 4f);
+                    var staminaLabel = UIHelper.CreateLabel(infoRow.transform,
+                        $"Stamina: {(int)scout.stamina}/{(int)scout.maxStamina}", UIConstants.FontCaption, UIHelper.InkMutedText);
+                    var staminaLE = staminaLabel.gameObject.AddComponent<LayoutElement>();
+                    staminaLE.flexibleWidth = 1;
+
+                    var actionRow = UIHelper.CreateHorizontalRow(row.transform, 24f, 4f);
+                    var spacer = new GameObject("Spacer");
+                    spacer.transform.SetParent(actionRow.transform, false);
+                    var spacerLE = spacer.AddComponent<LayoutElement>();
+                    spacerLE.flexibleWidth = 1;
+
+                    var capturedID = scout.id;
+                    var selectBtn = UIHelper.CreateButton(actionRow.transform,
+                        isSelected ? "Selected" : "Select",
+                        SporefrontColors.ParchmentDeep, UIHelper.ButtonText, UIConstants.FontBody,
+                        () =>
+                        {
+                            previewedEntityID = capturedID;
+                            previewIsArmy = false;
+                            OnPreviewPathRequested?.Invoke(capturedID, coord, false, false);
+                            Rebuild(cachedGameState);
+                        });
+                    var btnLE = selectBtn.gameObject.AddComponent<LayoutElement>();
+                    btnLE.preferredWidth = 70;
+                    btnLE.preferredHeight = 24;
+                }
+            }
+
+            if (!hasArmies && !hasVillagers && !hasScouts)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT, "No movable entities",
                     UIConstants.FontBody, null, TextAnchor.MiddleCenter);

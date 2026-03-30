@@ -33,6 +33,9 @@ namespace Sporefront.Data
         // Commanders
         public Dictionary<Guid, CommanderData> commanders = new Dictionary<Guid, CommanderData>();
 
+        // Scouts (Mycelium Scouts)
+        public Dictionary<Guid, ScoutData> scouts = new Dictionary<Guid, ScoutData>();
+
         // Time
         public double currentTime;
         public double gameStartTime;
@@ -58,6 +61,8 @@ namespace Sporefront.Data
         private Dictionary<Guid, List<ArmyData>> armiesByPlayer = new Dictionary<Guid, List<ArmyData>>();
         [System.NonSerialized]
         private Dictionary<Guid, List<VillagerGroupData>> villagerGroupsByPlayer = new Dictionary<Guid, List<VillagerGroupData>>();
+        [System.NonSerialized]
+        private Dictionary<Guid, List<ScoutData>> scoutsByPlayer = new Dictionary<Guid, List<ScoutData>>();
 
         // Enemy composition analysis cache (transient)
         [System.NonSerialized]
@@ -590,6 +595,65 @@ namespace Sporefront.Data
             if (!villagerGroups.TryGetValue(groupID, out group)) return;
             group.coordinate = to;
             mapData.UpdateVillagerGroupPosition(groupID, to);
+        }
+
+        // ================================================================
+        // Scouts
+        // ================================================================
+
+        public void AddScout(ScoutData scout)
+        {
+            scouts[scout.id] = scout;
+            mapData.RegisterScout(scout.id, scout.coordinate);
+
+            if (scout.ownerID.HasValue)
+            {
+                List<ScoutData> playerScouts;
+                if (!scoutsByPlayer.TryGetValue(scout.ownerID.Value, out playerScouts))
+                {
+                    playerScouts = new List<ScoutData>();
+                    scoutsByPlayer[scout.ownerID.Value] = playerScouts;
+                }
+                playerScouts.Add(scout);
+            }
+        }
+
+        public void RemoveScout(Guid id)
+        {
+            ScoutData scout;
+            if (!scouts.TryGetValue(id, out scout)) return;
+
+            if (scout.ownerID.HasValue)
+            {
+                List<ScoutData> playerScouts;
+                if (scoutsByPlayer.TryGetValue(scout.ownerID.Value, out playerScouts))
+                    playerScouts.Remove(scout);
+            }
+
+            mapData.UnregisterScout(id);
+            scouts.Remove(id);
+        }
+
+        public ScoutData GetScout(Guid id)
+        {
+            ScoutData scout;
+            return scouts.TryGetValue(id, out scout) ? scout : null;
+        }
+
+        public List<ScoutData> GetScoutsForPlayer(Guid playerID)
+        {
+            List<ScoutData> cached;
+            if (scoutsByPlayer.TryGetValue(playerID, out cached))
+                return new List<ScoutData>(cached);
+            return new List<ScoutData>();
+        }
+
+        public void UpdateScoutPosition(Guid scoutID, HexCoordinate to)
+        {
+            ScoutData scout;
+            if (!scouts.TryGetValue(scoutID, out scout)) return;
+            scout.coordinate = to;
+            mapData.UpdateScoutPosition(scoutID, to);
         }
 
         // ================================================================
@@ -1287,6 +1351,7 @@ namespace Sporefront.Data
         public List<VillagerGroupData> villagerGroups;
         public List<ResourcePointData> resourcePoints;
         public List<CommanderData> commanders;
+        public List<ScoutData> scouts;
         public Guid? localPlayerID;
 
         // Default constructor for deserialization
@@ -1303,6 +1368,7 @@ namespace Sporefront.Data
             this.villagerGroups = new List<VillagerGroupData>(gameState.villagerGroups.Values);
             this.resourcePoints = new List<ResourcePointData>(gameState.resourcePoints.Values);
             this.commanders = new List<CommanderData>(gameState.commanders.Values);
+            this.scouts = new List<ScoutData>(gameState.scouts.Values);
             this.localPlayerID = gameState.localPlayerID;
         }
 
@@ -1337,6 +1403,8 @@ namespace Sporefront.Data
             }
             foreach (var group in villagerGroups) gameState.AddVillagerGroup(group);
             foreach (var commander in commanders) gameState.AddCommander(commander);
+            if (scouts != null)
+                foreach (var scout in scouts) gameState.AddScout(scout);
 
             return gameState;
         }

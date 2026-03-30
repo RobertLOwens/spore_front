@@ -194,6 +194,20 @@ namespace Sporefront.Data
         public string buildingID;
     }
 
+    [Serializable]
+    public class MoveScoutParams
+    {
+        public string scoutID;
+        public int destinationQ;
+        public int destinationR;
+    }
+
+    [Serializable]
+    public class TrainScoutParams
+    {
+        public string buildingID;
+    }
+
     // ================================================================
     // Player Command Registry
     // ================================================================
@@ -451,6 +465,22 @@ namespace Sporefront.Data
                 {
                     upgradeTypeRawValue = upgradeUnit.upgradeTypeRawValue,
                     buildingID = upgradeUnit.buildingID.ToString()
+                });
+            }
+            if (command is MoveScoutCommand moveScout)
+            {
+                return JsonUtility.ToJson(new MoveScoutParams
+                {
+                    scoutID = moveScout.scoutID.ToString(),
+                    destinationQ = moveScout.destination.q,
+                    destinationR = moveScout.destination.r
+                });
+            }
+            if (command is TrainScoutCommand trainScout)
+            {
+                return JsonUtility.ToJson(new TrainScoutParams
+                {
+                    buildingID = trainScout.buildingID.ToString()
                 });
             }
 
@@ -781,6 +811,25 @@ namespace Sporefront.Data
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     return new UpgradeUnitCommand(cmdId, pid, timestamp, p.upgradeTypeRawValue, bID);
+                }
+
+                case "MoveScoutCommand":
+                {
+                    var p = SafeFromJson<MoveScoutParams>(json);
+                    if (p == null) return null;
+                    Guid sID;
+                    if (!Guid.TryParse(p.scoutID, out sID)) return null;
+                    var dest = new HexCoordinate(p.destinationQ, p.destinationR);
+                    return new MoveScoutCommand(cmdId, pid, timestamp, sID, dest);
+                }
+
+                case "TrainScoutCommand":
+                {
+                    var p = SafeFromJson<TrainScoutParams>(json);
+                    if (p == null) return null;
+                    Guid bID;
+                    if (!Guid.TryParse(p.buildingID, out bID)) return null;
+                    return new TrainScoutCommand(cmdId, pid, timestamp, bID);
                 }
 
                 default:

@@ -22,6 +22,7 @@ namespace Sporefront.Data
         Commander     = 1 << 10,
         Entrenchment  = 1 << 11,
         UnitUpgrade   = 1 << 12,
+        Scouts        = 1 << 13,
     }
 
     // Base class for all state changes
@@ -146,6 +147,17 @@ namespace Sporefront.Data
                 case UnitUpgradeProgressChange _:
                 case UnitUpgradeCompletedChange _:
                     return StateChangeFlags.UnitUpgrade;
+
+                // Scouts
+                case ScoutCreatedChange _:
+                case ScoutRemovedChange _:
+                case ScoutStaminaChange _:
+                case ScoutTrainingStartedChange _:
+                case ScoutTrainingCompletedChange _:
+                case ScoutTrainingProgressChange _:
+                    return StateChangeFlags.Scouts;
+                case ScoutMovedChange _:
+                    return StateChangeFlags.Scouts | StateChangeFlags.Movement;
 
                 // Diplomacy
                 case DiplomacyChangedChange _:
@@ -417,6 +429,24 @@ namespace Sporefront.Data
             this.buildingDamage = buildingDamage;
         }
     }
+
+    // ================================================================
+    // Scout Changes
+    // ================================================================
+
+    public class ScoutCreatedChange : StateChange { public Guid scoutID; public Guid ownerID; public HexCoordinate coordinate; }
+    public class ScoutMovedChange : StateChange
+    {
+        public Guid scoutID;
+        public HexCoordinate from;
+        public HexCoordinate to;
+        public List<HexCoordinate> path;
+    }
+    public class ScoutRemovedChange : StateChange { public Guid scoutID; public HexCoordinate coordinate; }
+    public class ScoutStaminaChange : StateChange { public Guid scoutID; public double stamina; }
+    public class ScoutTrainingStartedChange : StateChange { public Guid buildingID; public double startTime; }
+    public class ScoutTrainingCompletedChange : StateChange { public Guid buildingID; public Guid scoutID; public HexCoordinate coordinate; }
+    public class ScoutTrainingProgressChange : StateChange { public Guid buildingID; public int entryIndex; public double progress; }
 
     [System.Serializable]
     public class StateChangeBatch

@@ -45,14 +45,50 @@ namespace Sporefront.Engine
                 // Check for builder arrival at planning-state buildings
                 if (building.state == BuildingState.Planning)
                 {
+                    bool hasBuilder = false;
                     foreach (var group in gameState.villagerGroups.Values)
                     {
-                        if (group.currentTask is BuildingTask bt && bt.BuildingID == building.id &&
-                            group.coordinate == building.coordinate && group.currentPath == null)
+                        if (group.currentTask is BuildingTask bt && bt.BuildingID == building.id)
                         {
-                            building.StartConstruction(currentTime, group.villagerCount);
-                            changes.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                            hasBuilder = true;
+                            if (group.coordinate == building.coordinate && group.currentPath == null)
+                            {
+                                building.StartConstruction(currentTime, group.villagerCount);
+                                changes.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                            }
                             break;
+                        }
+                    }
+
+                    // Auto-assign nearest idle villager to unattended Planning buildings
+                    if (!hasBuilder && building.ownerID.HasValue)
+                    {
+                        VillagerGroupData nearest = null;
+                        int bestDist = int.MaxValue;
+                        var playerGroups = gameState.GetVillagerGroupsForPlayer(building.ownerID.Value);
+                        if (playerGroups != null)
+                        {
+                            foreach (var g in playerGroups)
+                            {
+                                if (g.currentTask.IsIdle && !g.HasPath() && g.HasVillagers())
+                                {
+                                    int d = g.coordinate.Distance(building.coordinate);
+                                    if (d < bestDist) { bestDist = d; nearest = g; }
+                                }
+                            }
+                        }
+                        if (nearest != null)
+                        {
+                            nearest.AssignTask(new BuildingTask(building.id), building.coordinate, building.id);
+                            changes.Add(new VillagerGroupTaskChangedChange
+                            {
+                                groupID = nearest.id,
+                                task = "Building",
+                                targetCoordinate = building.coordinate
+                            });
+                            var path = gameState.mapData.FindPath(nearest.coordinate, building.coordinate,
+                                building.ownerID.Value, gameState);
+                            if (path != null) nearest.SetPath(path);
                         }
                     }
                 }

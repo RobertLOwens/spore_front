@@ -80,9 +80,10 @@ namespace Sporefront.Commands
                 if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
                     return EngineCommandResult.Failure("Assigned villager group not owned by player.");
             }
-            else
+            else if (buildingType != BuildingType.Wall)
             {
                 // No specific villager — require at least one idle villager group
+                // Walls skip this check (drag-to-build places many at once; builders chain automatically)
                 var villagers = state.GetVillagerGroupsForPlayer(PlayerID);
                 bool hasIdleVillager = villagers != null &&
                     villagers.Any(g => g.currentTask.IsIdle && g.currentPath == null);

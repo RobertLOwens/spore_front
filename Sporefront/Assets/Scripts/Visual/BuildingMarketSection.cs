@@ -54,7 +54,7 @@ namespace Sporefront.Visual
                 var row = UIHelper.CreateHorizontalRow(contentRT, 24f, 4f);
 
                 var nameLabel = UIHelper.CreateLabel(row.transform,
-                    $"{UIHelper.ResourceIcon(rt)} {rt}", UIConstants.FontCaption);
+                    $"{UIHelper.ResourceIcon(rt)} {rt}", UIConstants.FontCaption, UIHelper.InkBodyText);
                 var nameLE = nameLabel.gameObject.AddComponent<LayoutElement>();
                 nameLE.preferredWidth = 60;
 

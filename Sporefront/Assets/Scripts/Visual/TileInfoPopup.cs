@@ -54,6 +54,8 @@ namespace Sporefront.Visual
         private Text armyLabel;
         private GameObject villagerRow;
         private Text villagerLabel;
+        private GameObject scoutRow;
+        private Text scoutLabel;
         private GameObject resourceRow;
         private Text resourceLabel;
 
@@ -149,6 +151,8 @@ namespace Sporefront.Visual
             armyRow = CreateLabelRow(contentGO.transform, out armyLabel,
                 UIConstants.FontBody, false);
             villagerRow = CreateLabelRow(contentGO.transform, out villagerLabel,
+                UIConstants.FontBody, false);
+            scoutRow = CreateLabelRow(contentGO.transform, out scoutLabel,
                 UIConstants.FontBody, false);
             resourceRow = CreateLabelRow(contentGO.transform, out resourceLabel,
                 UIConstants.FontBody, false);
@@ -396,6 +400,26 @@ namespace Sporefront.Visual
             else
             {
                 villagerRow.SetActive(false);
+            }
+
+            // Scouts
+            var scoutID = gameState.mapData.GetScoutID(coord);
+            if (scoutID.HasValue)
+            {
+                var scout = gameState.GetScout(scoutID.Value);
+                if (scout != null)
+                {
+                    scoutLabel.text = $"Scout — Stamina: {(int)scout.stamina}/{(int)scout.maxStamina}";
+                    scoutRow.SetActive(true);
+                }
+                else
+                {
+                    scoutRow.SetActive(false);
+                }
+            }
+            else
+            {
+                scoutRow.SetActive(false);
             }
 
             // Resource
@@ -693,10 +717,11 @@ namespace Sporefront.Visual
             Color bgColor, out Text label, Action onClick)
         {
             var btn = UIHelper.CreateButton(parent, text,
-                bgColor, UIHelper.ButtonText, UIConstants.FontBody, onClick);
+                bgColor, UIHelper.ButtonText, UIConstants.FontCaption, onClick);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = 30f;
             label = btn.GetComponentInChildren<Text>();
+            UIHelper.EnableAutoFit(label, 10, UIConstants.FontCaption);
             var go = btn.gameObject;
             go.SetActive(false);
             return go;
@@ -707,6 +732,8 @@ namespace Sporefront.Visual
         {
             var btn = UIHelper.CreateButton(parent, text,
                 bgColor, UIHelper.HudTextColor, UIConstants.FontSmall, onClick);
+            var label = UIHelper.GetButtonLabel(btn);
+            UIHelper.EnableAutoFit(label, 9, UIConstants.FontSmall);
             var le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 82f;
             le.preferredHeight = 40f;

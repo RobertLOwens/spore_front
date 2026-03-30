@@ -93,6 +93,59 @@ namespace Sporefront.Models
             return results;
         }
 
+        /// <summary>
+        /// Returns a list of hex coordinates forming a line from this coordinate to the target.
+        /// Uses cube-coordinate lerp for accurate hex line drawing (Red Blob Games algorithm).
+        /// </summary>
+        public List<HexCoordinate> LineTo(HexCoordinate target)
+        {
+            int dist = Distance(target);
+            if (dist == 0) return new List<HexCoordinate> { this };
+
+            // Convert odd-r offset → cube coordinates
+            int ax = q - (r - (r & 1)) / 2;
+            int az = r;
+            int ay = -ax - az;
+
+            int bx = target.q - (target.r - (target.r & 1)) / 2;
+            int bz = target.r;
+            int by = -bx - bz;
+
+            var results = new List<HexCoordinate>(dist + 1);
+            for (int i = 0; i <= dist; i++)
+            {
+                double t = (double)i / dist;
+                // Lerp in cube space with nudge to avoid ambiguous rounding on edges
+                double fx = ax + (bx - ax) * t + 1e-6;
+                double fy = ay + (by - ay) * t + 1e-6;
+                double fz = az + (bz - az) * t - 2e-6;
+
+                // Round cube coordinates
+                int rx = (int)Math.Round(fx);
+                int ry = (int)Math.Round(fy);
+                int rz = (int)Math.Round(fz);
+
+                // Fix rounding errors (cube constraint: x + y + z == 0)
+                double xDiff = Math.Abs(rx - fx);
+                double yDiff = Math.Abs(ry - fy);
+                double zDiff = Math.Abs(rz - fz);
+
+                if (xDiff > yDiff && xDiff > zDiff)
+                    rx = -ry - rz;
+                else if (yDiff > zDiff)
+                    ry = -rx - rz;
+                else
+                    rz = -rx - ry;
+
+                // Convert cube → odd-r offset
+                int oq = rx + (rz - (rz & 1)) / 2;
+                int or2 = rz;
+                results.Add(new HexCoordinate(oq, or2));
+            }
+
+            return results;
+        }
+
         // IEquatable
         public bool Equals(HexCoordinate other) => q == other.q && r == other.r;
         public override bool Equals(object obj) => obj is HexCoordinate other && Equals(other);

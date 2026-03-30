@@ -87,8 +87,8 @@ namespace Sporefront.Visual
 
         public static readonly Color ButtonBg = SporefrontColors.BgSurface;
         public static readonly Color ButtonText = SporefrontColors.ParchmentMid;
-        public static readonly Color BodyTextColor = SporefrontColors.ParchmentMid;
-        public static readonly Color HeaderTextColor = SporefrontColors.ParchmentLight;
+        public static readonly Color BodyTextColor = SporefrontColors.InkDark;
+        public static readonly Color HeaderTextColor = SporefrontColors.InkBlack;
         public static readonly Color HudTextColor = SporefrontColors.ParchmentLight;
 
         // ================================================================
@@ -241,6 +241,28 @@ namespace Sporefront.Visual
             t.verticalOverflow = VerticalWrapMode.Truncate;
             t.raycastTarget = false;
             return t;
+        }
+
+        /// <summary>
+        /// Enables Best Fit on a Text component so it auto-shrinks to fit its container.
+        /// Call after CreateLabel or on the label inside CreateButton.
+        /// </summary>
+        public static void EnableAutoFit(Text text, int minSize = 10, int maxSize = -1)
+        {
+            if (text == null) return;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = minSize;
+            text.resizeTextMaxSize = maxSize > 0 ? maxSize : text.fontSize;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        }
+
+        /// <summary>
+        /// Returns the Text component of the label inside a Button created by CreateButton.
+        /// </summary>
+        public static Text GetButtonLabel(Button btn)
+        {
+            return btn != null ? btn.GetComponentInChildren<Text>() : null;
         }
 
         public static Button CreateButton(Transform parent, string text,
