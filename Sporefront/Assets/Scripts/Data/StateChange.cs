@@ -23,6 +23,7 @@ namespace Sporefront.Data
         Entrenchment  = 1 << 11,
         UnitUpgrade   = 1 << 12,
         Scouts        = 1 << 13,
+        Domination    = 1 << 14,
     }
 
     // Base class for all state changes
@@ -158,6 +159,12 @@ namespace Sporefront.Data
                     return StateChangeFlags.Scouts;
                 case ScoutMovedChange _:
                     return StateChangeFlags.Scouts | StateChangeFlags.Movement;
+
+                // Domination
+                case ZoneControlChange _:
+                case DominationScoreChange _:
+                case DominationVictoryChange _:
+                    return StateChangeFlags.Domination;
 
                 // Diplomacy
                 case DiplomacyChangedChange _:
@@ -447,6 +454,27 @@ namespace Sporefront.Data
     public class ScoutTrainingStartedChange : StateChange { public Guid buildingID; public double startTime; }
     public class ScoutTrainingCompletedChange : StateChange { public Guid buildingID; public Guid scoutID; public HexCoordinate coordinate; }
     public class ScoutTrainingProgressChange : StateChange { public Guid buildingID; public int entryIndex; public double progress; }
+
+    // ================================================================
+    // Domination Changes
+    // ================================================================
+
+    public class ZoneControlChange : StateChange
+    {
+        public string zoneLabel;
+        public Guid? oldControllerID;
+        public Guid? newControllerID;
+    }
+    public class DominationScoreChange : StateChange
+    {
+        public Guid playerID;
+        public double newScore;
+        public double delta;
+    }
+    public class DominationVictoryChange : StateChange
+    {
+        public Guid winnerID;
+    }
 
     [System.Serializable]
     public class StateChangeBatch

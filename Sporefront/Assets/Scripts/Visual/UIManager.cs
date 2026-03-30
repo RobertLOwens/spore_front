@@ -1489,11 +1489,18 @@ namespace Sporefront.Visual
             if ((flags & StateChangeFlags.Entrenchment) != 0)
                 entrenchmentRenderer?.UpdateEntrenchment(gameState, localPlayerID);
 
+            // Domination zone overlays + score refresh
+            if ((flags & StateChangeFlags.Domination) != 0)
+            {
+                gridRenderer.ApplyZoneOverlays(gameState);
+                resourceBar.Refresh(gameState, localPlayerID);
+            }
+
             // Mini map — incremental refresh
             if (miniMap.IsVisible)
             {
                 bool hasEntityChange = (flags & (StateChangeFlags.Armies | StateChangeFlags.Buildings
-                    | StateChangeFlags.Villagers)) != 0;
+                    | StateChangeFlags.Villagers | StateChangeFlags.Domination)) != 0;
                 bool hasFogChange = (flags & StateChangeFlags.FogOfWar) != 0;
                 if (hasEntityChange || hasFogChange)
                     miniMap.RefreshIncremental(gameState, hasEntityChange, hasFogChange);

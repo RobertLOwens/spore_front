@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Sporefront.Models;
 using Sporefront.Engine;
+using GameMode = Sporefront.Models.GameMode;
 
 namespace Sporefront.Data
 {
@@ -35,6 +36,13 @@ namespace Sporefront.Data
 
         // Scouts (Mycelium Scouts)
         public Dictionary<Guid, ScoutData> scouts = new Dictionary<Guid, ScoutData>();
+
+        // Game Mode
+        public GameMode gameMode = GameMode.Conquest;
+
+        // Domination Mode
+        public List<ControlZoneData> controlZones = new List<ControlZoneData>();
+        public Dictionary<Guid, double> dominationScores = new Dictionary<Guid, double>();
 
         // Time
         public double currentTime;
@@ -1353,6 +1361,9 @@ namespace Sporefront.Data
         public List<CommanderData> commanders;
         public List<ScoutData> scouts;
         public Guid? localPlayerID;
+        public GameMode gameMode;
+        public List<ControlZoneData> controlZones;
+        public Dictionary<Guid, double> dominationScores;
 
         // Default constructor for deserialization
         public GameStateSnapshot() { }
@@ -1370,6 +1381,9 @@ namespace Sporefront.Data
             this.commanders = new List<CommanderData>(gameState.commanders.Values);
             this.scouts = new List<ScoutData>(gameState.scouts.Values);
             this.localPlayerID = gameState.localPlayerID;
+            this.gameMode = gameState.gameMode;
+            this.controlZones = new List<ControlZoneData>(gameState.controlZones);
+            this.dominationScores = new Dictionary<Guid, double>(gameState.dominationScores);
         }
 
         public GameState Restore()
@@ -1405,6 +1419,13 @@ namespace Sporefront.Data
             foreach (var commander in commanders) gameState.AddCommander(commander);
             if (scouts != null)
                 foreach (var scout in scouts) gameState.AddScout(scout);
+
+            // Restore game mode and domination state
+            gameState.gameMode = gameMode;
+            if (controlZones != null)
+                gameState.controlZones = new List<ControlZoneData>(controlZones);
+            if (dominationScores != null)
+                gameState.dominationScores = new Dictionary<Guid, double>(dominationScores);
 
             return gameState;
         }

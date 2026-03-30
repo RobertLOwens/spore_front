@@ -4,11 +4,13 @@
 //          Shared meshes + MaterialPropertyBlock for SRP Batcher efficiency
 // ============================================================================
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Sporefront.Data;
 using Sporefront.Models;
+using GameMode = Sporefront.Models.GameMode;
 
 namespace Sporefront.Visual
 {
@@ -147,6 +149,73 @@ namespace Sporefront.Visual
             HexTileView view;
             if (tileViews.TryGetValue(coord, out view))
                 view.SetVisibility(level);
+        }
+
+        // ================================================================
+        // Domination Zone Overlays
+        // ================================================================
+
+        // Base zone colors for Domination / Crooked (A, B, C)
+        private static readonly Color[] ZoneBaseColors =
+        {
+            new Color(0.9f, 0.3f, 0.3f, 0.25f),   // A — warm red
+            new Color(0.3f, 0.6f, 0.9f, 0.25f),   // B — cool blue
+            new Color(0.3f, 0.9f, 0.4f, 0.25f)    // C — green
+        };
+
+        // Ring zone colors: inner (gold/amber, high-value), outer (silver/gray)
+        private static readonly Color RingInnerColor = new Color(0.95f, 0.75f, 0.2f, 0.3f);
+        private static readonly Color RingOuterColor = new Color(0.7f, 0.7f, 0.75f, 0.2f);
+
+        public void ApplyZoneOverlays(GameState gameState)
+        {
+            // Clear all existing zone overlays
+            foreach (var view in tileViews.Values)
+                view.SetZoneOverlay(null);
+
+            if (!gameState.gameMode.UsesControlZones() || gameState.controlZones == null)
+                return;
+
+            bool isRing = gameState.gameMode == GameMode.Ring;
+
+            for (int i = 0; i < gameState.controlZones.Count; i++)
+            {
+                var zone = gameState.controlZones[i];
+
+                // Pick base color depending on mode
+                Color baseColor;
+                if (isRing)
+                    baseColor = zone.pointsMultiplier > 1.0 ? RingInnerColor : RingOuterColor;
+                else
+                    baseColor = i < ZoneBaseColors.Length ? ZoneBaseColors[i] : ZoneBaseColors[0];
+
+                // Use player color if controlled, base zone color if uncontrolled
+                Color overlayColor;
+                if (zone.controllingPlayerID.HasValue)
+                {
+                    var owner = gameState.GetPlayer(zone.controllingPlayerID.Value);
+                    if (owner != null)
+                    {
+                        var pColor = SporefrontColors.ParsePlayerColor(owner.colorHex);
+                        overlayColor = new Color(pColor.r, pColor.g, pColor.b, 0.25f);
+                    }
+                    else
+                    {
+                        overlayColor = baseColor;
+                    }
+                }
+                else
+                {
+                    overlayColor = baseColor;
+                }
+
+                foreach (var tile in zone.tiles)
+                {
+                    HexTileView view;
+                    if (tileViews.TryGetValue(tile, out view))
+                        view.SetZoneOverlay(overlayColor);
+                }
+            }
         }
 
         // ================================================================

@@ -6,7 +6,8 @@ namespace Sporefront.Models
         Resignation,
         Conquest,
         CityCenterDestroyed,
-        Disconnected
+        Disconnected,
+        DominationVictory
     }
 
     public static class GameOverReasonExtensions
@@ -38,6 +39,10 @@ namespace Sporefront.Models
                     return isVictory
                         ? "Your opponent has abandoned the game."
                         : "You have been disconnected from the game.";
+                case GameOverReason.DominationVictory:
+                    return isVictory
+                        ? "You have achieved domination!\nYour forces control the map."
+                        : "Your opponent has achieved domination.\nThey control the map.";
                 default:
                     return "";
             }
