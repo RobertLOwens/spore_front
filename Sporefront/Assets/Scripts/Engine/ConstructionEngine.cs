@@ -60,8 +60,10 @@ namespace Sporefront.Engine
                         }
                     }
 
-                    // Auto-assign nearest idle villager to unattended Planning buildings
-                    if (!hasBuilder && building.ownerID.HasValue)
+                    // Auto-assign nearest idle villager to unattended Planning buildings (human players only)
+                    // AI players handle their own villager assignment via AIBuildCommand
+                    var buildingOwner = building.ownerID.HasValue ? gameState.GetPlayer(building.ownerID.Value) : null;
+                    if (!hasBuilder && buildingOwner != null && !buildingOwner.isAI)
                     {
                         VillagerGroupData nearest = null;
                         int bestDist = int.MaxValue;

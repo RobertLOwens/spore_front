@@ -34,7 +34,7 @@ namespace Sporefront.Engine
                     armyPositions[army.coordinate] = list;
                 }
                 int totalUnits = 0;
-                foreach (var count in army.composition.Values)
+                foreach (var count in army.militaryComposition.Values)
                     totalUnits += count;
                 list.Add((army.ownerID.Value, totalUnits));
             }

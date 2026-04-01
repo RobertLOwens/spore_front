@@ -312,18 +312,26 @@ namespace Sporefront.Visual
             }
             var tile = tileNullable.Value;
 
-            // Terrain
-            terrainLabel.text = $"{tile.terrain} ({coord.q},{coord.r})";
+            // Terrain + Building header
+            var building = gameState.GetBuilding(coord);
+            if (building != null)
+            {
+                // Show building name and level as primary header
+                terrainLabel.text = $"{building.buildingType.DisplayName()} Lv.{building.level}";
+            }
+            else
+            {
+                terrainLabel.text = $"{tile.terrain} ({coord.q},{coord.r})";
+            }
             terrainRow.SetActive(true);
 
-            // Building
-            var building = gameState.GetBuilding(coord);
+            // Building detail row
             if (building != null)
             {
                 string status = building.state == BuildingState.Completed
                     ? "Completed"
                     : building.state.ToString();
-                buildingLabel.text = $"{building.buildingType.DisplayName()} Lv.{building.level} — {status}";
+                buildingLabel.text = $"{tile.terrain} ({coord.q},{coord.r}) — {status}";
                 buildingRow.SetActive(true);
 
                 bool isOwned = building.ownerID.HasValue && building.ownerID.Value == localPlayerID;
