@@ -12,7 +12,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class SaveLoadPanel : MonoBehaviour
+    public class SaveLoadPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -26,7 +26,6 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
         private Transform slotContainer;
         private InputField saveNameInput;
@@ -79,12 +78,10 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Build Content

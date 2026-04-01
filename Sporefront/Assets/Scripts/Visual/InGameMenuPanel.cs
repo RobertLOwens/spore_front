@@ -12,7 +12,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class InGameMenuPanel : MonoBehaviour
+    public class InGameMenuPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -30,11 +30,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
-        private CanvasGroup backdropCG;
         private GameObject panel;
-        private Coroutine fadeCoroutine;
-        private Guid localPlayerID;
         private bool isOnlineGame;
         private GameObject surrenderButton;
         private GameObject surrenderConfirmGroup;
@@ -84,11 +80,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         public void SetOnlineMode(bool online)
         {
             isOnlineGame = online;
@@ -104,10 +95,8 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-
             // Reset surrender confirmation state on each open
             if (surrenderConfirmGroup != null)
                 surrenderConfirmGroup.SetActive(false);
@@ -116,23 +105,19 @@ namespace Sporefront.Visual
 
             backdrop.SetActive(true);
             backdrop.transform.SetAsLastSibling(); // render above minimap & all HUD
-            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
+            FadeIn();
         }
 
         public void Close()
         {
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
+            FadeOut();
             OnResumeGame?.Invoke();
         }
 
-        public void Hide()
+        public override void Hide()
         {
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(false);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Build Content

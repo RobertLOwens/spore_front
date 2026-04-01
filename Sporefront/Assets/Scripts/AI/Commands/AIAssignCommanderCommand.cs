@@ -37,12 +37,8 @@ namespace Sporefront.AI.Commands
             if (!commander.ownerID.HasValue || commander.ownerID.Value != PlayerID)
                 return EngineCommandResult.Failure("Commander not owned by player");
 
-            var targetArmy = state.GetArmy(targetArmyID);
-            if (targetArmy == null)
-                return EngineCommandResult.Failure("Target army not found");
-
-            if (!targetArmy.ownerID.HasValue || targetArmy.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Target army not owned by player");
+            var fail = ValidateOwnedArmy(state, targetArmyID, out var targetArmy);
+            if (fail != null) return fail;
 
             if (commander.assignedArmyID.HasValue && commander.assignedArmyID.Value == targetArmyID)
                 return EngineCommandResult.Failure("Commander already assigned to target army");
@@ -59,9 +55,8 @@ namespace Sporefront.AI.Commands
             if (commander == null)
                 return EngineCommandResult.Failure("Commander not found");
 
-            var targetArmy = state.GetArmy(targetArmyID);
-            if (targetArmy == null)
-                return EngineCommandResult.Failure("Target army not found");
+            var fail = ValidateArmy(state, targetArmyID, out var targetArmy);
+            if (fail != null) return fail;
 
             // Unlink commander from their current army (if any)
             if (commander.assignedArmyID.HasValue)
@@ -83,8 +78,7 @@ namespace Sporefront.AI.Commands
             commander.assignedArmyID = targetArmyID;
             targetArmy.commanderID = commanderID;
 
-            DebugLog.Log(string.Format("AI reassigned commander {0} to army at ({1},{2})",
-                commander.name, targetArmy.coordinate.q, targetArmy.coordinate.r));
+            DebugLog.Log($"AI reassigned commander {commander.name} to army at ({targetArmy.coordinate.q},{targetArmy.coordinate.r})");
 
             return EngineCommandResult.Success(new List<StateChange>());
         }

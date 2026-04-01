@@ -82,7 +82,7 @@ namespace Sporefront.Visual
     // Panel
     // ================================================================
 
-    public partial class GameSetupPanel : MonoBehaviour
+    public partial class GameSetupPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -108,7 +108,6 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
 
         // Two-screen containers
         private GameObject modeSelectContainer;
@@ -415,12 +414,12 @@ namespace Sporefront.Visual
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         public RectTransform PanelRT => panel?.GetComponent<RectTransform>();
 

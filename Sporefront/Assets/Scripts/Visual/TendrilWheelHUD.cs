@@ -61,7 +61,6 @@ namespace Sporefront.Visual
         // Active tracking
         private WheelButton activeRightButton;
         private WheelButton activeLeftButton;
-        private bool keyBadgesVisible;
 
         // Button → external event mapping
         private readonly Dictionary<WheelButton, Action> buttonEventMap
@@ -374,12 +373,10 @@ namespace Sporefront.Visual
             // Tab hold — show/hide key badges
             if (kb.tabKey.wasPressedThisFrame)
             {
-                keyBadgesVisible = true;
                 SetAllKeyBadges(true);
             }
             if (kb.tabKey.wasReleasedThisFrame)
             {
-                keyBadgesVisible = false;
                 SetAllKeyBadges(false);
             }
 

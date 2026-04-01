@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class GenomeSelectionPanel : MonoBehaviour
+    public class GenomeSelectionPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,9 +28,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
 
         private List<AIGenome> genomes = new List<AIGenome>();
         private AIGenome selectedGenome1;
@@ -78,7 +76,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             selectedGenome1 = null;
             selectedGenome2 = null;
@@ -88,12 +86,10 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Build Content
@@ -292,8 +288,7 @@ namespace Sporefront.Visual
             nameLE.preferredHeight = 20;
 
             // Detail line
-            string detail = string.Format("Gen {0} | Fitness: {1:F2} | WR: {2}%",
-                genome.generation, genome.fitness, genome.WinRatePercent);
+            string detail = $"Gen {genome.generation} | Fitness: {genome.fitness:F2} | WR: {genome.WinRatePercent}%";
             var detailLabel = UIHelper.CreateLabel(rowVLG.transform, detail,
                 11, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();

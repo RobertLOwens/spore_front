@@ -95,20 +95,7 @@ namespace Sporefront.Commands
 
             // Deduct resources
             var cost = researchType.Cost();
-            foreach (var kvp in cost)
-            {
-                int oldAmount = player.GetResource(kvp.Key);
-                player.RemoveResource(kvp.Key, kvp.Value);
-                int newAmount = player.GetResource(kvp.Key);
-
-                changeBuilder.Add(new ResourcesChangedChange
-                {
-                    playerID = PlayerID,
-                    resourceType = kvp.Key.ToString(),
-                    oldAmount = oldAmount,
-                    newAmount = newAmount
-                });
-            }
+            DeductResourcesWithChanges(player, cost, changeBuilder);
 
             // Start research on player
             player.StartResearch(researchTypeRawValue, state.currentTime);

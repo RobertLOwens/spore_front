@@ -582,7 +582,7 @@ namespace Sporefront.Visual
             {
                 if (!success)
                 {
-                    Debug.LogError(string.Format("[GameSceneManager] Failed to create matchmaking game: {0}", error));
+                    Debug.LogError($"[GameSceneManager] Failed to create matchmaking game: {error}");
                     // Roll back local state — game was never created on the server
                     gameState = null;
                     isOnlineGame = false;
@@ -635,7 +635,7 @@ namespace Sporefront.Visual
                 ResetOnlineFlags();
                 gameStarted = true;
 
-                Debug.Log(string.Format("[GameSceneManager] Online game started as HOST — ID: {0}", onlineGameID));
+                Debug.Log($"[GameSceneManager] Online game started as HOST — ID: {onlineGameID}");
             });
         }
 
@@ -656,7 +656,7 @@ namespace Sporefront.Visual
             onlineGameID = config.matchGameID;
             isOnlineGame = true;
 
-            Debug.Log(string.Format("[GameSceneManager] Joining game as JOINER — ID: {0}", onlineGameID));
+            Debug.Log($"[GameSceneManager] Joining game as JOINER — ID: {onlineGameID}");
 
             // Show loading status
             uiManager?.SetMainMenuStatus("Joining game...");
@@ -675,7 +675,7 @@ namespace Sporefront.Visual
 
                 if (snapshot == null)
                 {
-                    Debug.LogError(string.Format("[GameSceneManager] Failed to load snapshot for join: {0}", error ?? "no snapshot"));
+                    Debug.LogError($"[GameSceneManager] Failed to load snapshot for join: {error ?? "no snapshot"}");
                     // Retry after a short delay — host may still be saving
                     StartCoroutine(RetryJoinAfterDelay(config, 2.0f));
                     return;
@@ -702,7 +702,7 @@ namespace Sporefront.Visual
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError(string.Format("[GameSceneManager] Failed to restore game state: {0}", e.Message));
+                    Debug.LogError($"[GameSceneManager] Failed to restore game state: {e.Message}");
                     return;
                 }
 
@@ -773,7 +773,7 @@ namespace Sporefront.Visual
                 gameStarted = true;
                 joinRetryCount = 0;
 
-                Debug.Log(string.Format("[GameSceneManager] Online game joined — ID: {0}", onlineGameID));
+                Debug.Log($"[GameSceneManager] Online game joined — ID: {onlineGameID}");
             });
         }
 
@@ -952,7 +952,7 @@ namespace Sporefront.Visual
             {
                 if (!success)
                 {
-                    Debug.LogError(string.Format("[GameSceneManager] Failed to create online game: {0}", error));
+                    Debug.LogError($"[GameSceneManager] Failed to create online game: {error}");
                     // Roll back local state
                     gameState = null;
                     isOnlineGame = false;
@@ -1008,7 +1008,7 @@ namespace Sporefront.Visual
                 ResetOnlineFlags();
                 gameStarted = true;
 
-                Debug.Log(string.Format("[GameSceneManager] Online game started — ID: {0}, seed: {1}", onlineGameID, seed));
+                Debug.Log($"[GameSceneManager] Online game started — ID: {onlineGameID}, seed: {seed}");
             });
         }
 #endif
@@ -1226,9 +1226,8 @@ namespace Sporefront.Visual
                 int seconds = Mathf.Max(0, Mathf.CeilToInt(disconnectTimer));
                 int minutes = seconds / 60;
                 int secs = seconds % 60;
-                disconnectTimerLabel.text = string.Format(
-                    "Opponent disconnected. Waiting for reconnection... ({0}:{1:D2})",
-                    minutes, secs);
+                disconnectTimerLabel.text =
+                    $"Opponent disconnected. Waiting for reconnection... ({minutes}:{secs:D2})";
             }
 
             // Timer expired — opponent abandoned the game
@@ -1304,7 +1303,7 @@ namespace Sporefront.Visual
                 {
                     pendingRejoinSession = session;
                     uiManager?.SetRejoinVisible(true);
-                    Debug.Log(string.Format("[GameSceneManager] Active game found — ID: {0}", session.gameID));
+                    Debug.Log($"[GameSceneManager] Active game found — ID: {session.gameID}");
                 }
                 else
                 {
@@ -1340,8 +1339,7 @@ namespace Sporefront.Visual
             onlineGameID = session.gameID;
             isOnlineGame = true;
 
-            Debug.Log(string.Format("[GameSceneManager] Rejoining game — ID: {0}, attempt: {1}",
-                onlineGameID, attempt));
+            Debug.Log($"[GameSceneManager] Rejoining game — ID: {onlineGameID}, attempt: {attempt}");
 
             // Load the latest snapshot + any pending commands
             Engine.GameSessionService.Instance.LoadLatestSnapshot(onlineGameID, (snapshot, pendingCommands, error) =>
@@ -1350,16 +1348,14 @@ namespace Sporefront.Visual
                 {
                     if (attempt < GameConfig.Online.MaxJoinRetries)
                     {
-                        Debug.LogWarning(string.Format(
-                            "[GameSceneManager] Rejoin snapshot not available (attempt {0}/{1}), retrying...",
-                            attempt + 1, GameConfig.Online.MaxJoinRetries));
+                        Debug.LogWarning(
+                            $"[GameSceneManager] Rejoin snapshot not available (attempt {attempt + 1}/{GameConfig.Online.MaxJoinRetries}), retrying...");
                         StartCoroutine(RetryRejoinAfterDelay(session, attempt + 1));
                     }
                     else
                     {
-                        Debug.LogError(string.Format(
-                            "[GameSceneManager] Rejoin failed after {0} attempts: {1}",
-                            GameConfig.Online.MaxJoinRetries, error ?? "no snapshot"));
+                        Debug.LogError(
+                            $"[GameSceneManager] Rejoin failed after {GameConfig.Online.MaxJoinRetries} attempts: {error ?? "no snapshot"}");
                         isOnlineGame = false;
                         onlineGameID = null;
                     }
@@ -1373,7 +1369,7 @@ namespace Sporefront.Visual
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError(string.Format("[GameSceneManager] Rejoin state restore failed: {0}", e.Message));
+                    Debug.LogError($"[GameSceneManager] Rejoin state restore failed: {e.Message}");
                     isOnlineGame = false;
                     onlineGameID = null;
                     return;
@@ -1468,8 +1464,7 @@ namespace Sporefront.Visual
                 pendingRejoinSession = null;
                 uiManager?.SetRejoinVisible(false);
 
-                Debug.Log(string.Format("[GameSceneManager] Rejoined online game — ID: {0}, isHost: {1}",
-                    onlineGameID, isHost));
+                Debug.Log($"[GameSceneManager] Rejoined online game — ID: {onlineGameID}, isHost: {isHost}");
             });
 #endif
         }
@@ -1477,7 +1472,7 @@ namespace Sporefront.Visual
         private System.Collections.IEnumerator RetryRejoinAfterDelay(Data.GameSession session, int attempt)
         {
             yield return new WaitForSeconds(GameConfig.Online.JoinRetryDelaySeconds);
-            Debug.Log(string.Format("[GameSceneManager] Retrying rejoin (attempt {0})...", attempt));
+            Debug.Log($"[GameSceneManager] Retrying rejoin (attempt {attempt})...");
             RejoinOnlineGame(session, attempt);
         }
 

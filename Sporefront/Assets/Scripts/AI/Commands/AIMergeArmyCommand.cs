@@ -31,17 +31,11 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var source = state.GetArmy(sourceArmyID);
-            var target = state.GetArmy(targetArmyID);
+            var fail = ValidateOwnedArmy(state, sourceArmyID, out var source);
+            if (fail != null) return fail;
 
-            if (source == null || target == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!source.ownerID.HasValue || source.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Source army not owned by player");
-
-            if (!target.ownerID.HasValue || target.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Target army not owned by player");
+            fail = ValidateOwnedArmy(state, targetArmyID, out var target);
+            if (fail != null) return fail;
 
             if (source.isInCombat || target.isInCombat)
                 return EngineCommandResult.Failure("Cannot merge armies in combat");
@@ -58,11 +52,11 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var source = state.GetArmy(sourceArmyID);
-            var target = state.GetArmy(targetArmyID);
+            var fail = ValidateArmy(state, sourceArmyID, out var source);
+            if (fail != null) return fail;
 
-            if (source == null || target == null)
-                return EngineCommandResult.Failure("Army not found");
+            fail = ValidateArmy(state, targetArmyID, out var target);
+            if (fail != null) return fail;
 
             // Merge source units into target
             target.Merge(source);
@@ -77,9 +71,7 @@ namespace Sporefront.AI.Commands
             // Remove the source army from state
             state.RemoveArmy(sourceArmyID);
 
-            DebugLog.Log(string.Format("AI merged army ({0} units) into army ({1} units) at ({2},{3})",
-                source.GetTotalUnits(), target.GetTotalUnits(),
-                target.coordinate.q, target.coordinate.r));
+            DebugLog.Log($"AI merged army ({source.GetTotalUnits()} units) into army ({target.GetTotalUnits()} units) at ({target.coordinate.q},{target.coordinate.r})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

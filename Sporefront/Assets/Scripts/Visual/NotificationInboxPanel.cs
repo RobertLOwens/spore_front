@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class NotificationInboxPanel : MonoBehaviour
+    public class NotificationInboxPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -46,10 +46,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
-        private Guid localPlayerID;
 
         private List<InboxEntry> entries = new List<InboxEntry>();
 
@@ -134,22 +131,17 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             Rebuild();
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
             OnClose?.Invoke();
@@ -160,8 +152,6 @@ namespace Sporefront.Visual
             if (!backdrop.activeSelf) return;
             Rebuild();
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Notification Management

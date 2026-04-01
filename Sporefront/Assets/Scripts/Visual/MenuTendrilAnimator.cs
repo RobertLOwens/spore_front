@@ -273,8 +273,6 @@ namespace Sporefront.Visual
 
             float limX = canvasW * 0.48f;
             float limY = canvasH * 0.48f;
-            bool hitEdge = false;
-
             for (int i = 1; i < pointCount; i++)
             {
                 float t = (float)i / (pointCount - 1);
@@ -290,7 +288,6 @@ namespace Sporefront.Visual
                 {
                     point = ClampToScreen(point);
                     pts.Add(point);
-                    hitEdge = true;
                     break;
                 }
                 pts.Add(point);

@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace Sporefront.Visual
 {
-    public class AboutPanel : MonoBehaviour
+    public class AboutPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -22,7 +22,6 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
 
         // ================================================================
@@ -54,17 +53,10 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             backdrop.SetActive(true);
         }
-
-        public void Hide()
-        {
-            backdrop.SetActive(false);
-        }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Build Content

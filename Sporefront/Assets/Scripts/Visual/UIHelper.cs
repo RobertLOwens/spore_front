@@ -556,16 +556,20 @@ namespace Sporefront.Visual
         /// Rich-text color-coded army status: [E] teal, [C] red, [R] amber.
         /// Returns empty string if no status flags are active.
         /// </summary>
+        private static readonly string HexAmber = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber);
+        private static readonly string HexTeal = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeTeal);
+        private static readonly string HexRed = ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed);
+
         public static string FormatArmyStatus(ArmyData army)
         {
             if (army.isEntrenching)
-                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[E...]</color>";
+                return $" <color=#{HexAmber}>[E...]</color>";
             if (army.isEntrenched)
-                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeTeal)}>[E]</color>";
+                return $" <color=#{HexTeal}>[E]</color>";
             if (army.isInCombat)
-                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeRed)}>[C]</color>";
+                return $" <color=#{HexRed}>[C]</color>";
             if (army.isRetreating)
-                return $" <color=#{ColorUtility.ToHtmlStringRGB(SporefrontColors.SporeAmber)}>[R]</color>";
+                return $" <color=#{HexAmber}>[R]</color>";
             return "";
         }
 

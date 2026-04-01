@@ -17,7 +17,7 @@ using Sporefront.Models.Combat;
 
 namespace Sporefront.Visual
 {
-    public class CombatDetailPanel : MonoBehaviour
+    public class CombatDetailPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -29,10 +29,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
-        private Guid localPlayerID;
 
         // ================================================================
         // Initialization
@@ -76,11 +73,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -107,7 +99,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
             OnClose?.Invoke();
@@ -118,8 +110,6 @@ namespace Sporefront.Visual
             if (!backdrop.activeSelf) return;
             Rebuild(record);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild from DetailedCombatRecord

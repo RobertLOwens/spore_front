@@ -305,12 +305,21 @@ namespace Sporefront.Engine
                 public const double RandomizationWeight = 0.2;
             }
 
+            public static class Hunting
+            {
+                public const double VillagerAttackPower = 25.0;      // Damage per villager per hunt tick
+                public const double VillagerDefenseFactor = 0.5;     // Defense per villager against animal
+                public const double VillagerDeathThreshold = 5.0;    // Damage per villager lost
+                public const int MaxScoutCandidateUnits = 5;         // Max units in early scout army
+            }
+
             public static class Scouting
             {
                 public const int MaxScouts = 2;
                 public const int PatrolRadius = 6;
                 public const double EarlyGameThreshold = 300.0;
                 public const double EarlyScoutTime = 30.0;             // Send first scout by 30s
+                public const double EarlyScoutWindow = 120.0;           // Stop trying early scout after this time
                 public const double ExplorationUpdateInterval = 10.0;   // How often to recalc exploration %
                 public const double MinExplorationBeforeAttack = 0.3;   // 30% explored before attacking blind
             }

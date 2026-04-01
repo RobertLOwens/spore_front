@@ -12,7 +12,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class NotificationPanel : MonoBehaviour
+    public class NotificationPanel : SporefrontPanel
     {
         // ================================================================
         // Types

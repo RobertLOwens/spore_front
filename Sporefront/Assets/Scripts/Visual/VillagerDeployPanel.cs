@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class VillagerDeployPanel : MonoBehaviour
+    public class VillagerDeployPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -41,13 +41,10 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
         private Guid? currentBuildingID;
-        private Guid localPlayerID;
 
         private TabMode currentTab = TabMode.DeployNew;
         private int deployCount = 1;
-        private Guid? selectedGroupID;
 
         // Merge sub-panel state
         private bool showMergePanel;
@@ -93,10 +90,7 @@ namespace Sporefront.Visual
             panel.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
+        // UpdateLocalPlayerID inherited from SporefrontPanel
 
         // ================================================================
         // Public API
@@ -107,7 +101,6 @@ namespace Sporefront.Visual
             currentBuildingID = buildingID;
             currentTab = TabMode.DeployNew;
             deployCount = 1;
-            selectedGroupID = null;
             showMergePanel = false;
             mergeGroupA = null;
             mergeGroupB = null;
@@ -115,7 +108,7 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             currentBuildingID = null;
             showMergePanel = false;
@@ -129,7 +122,7 @@ namespace Sporefront.Visual
             Rebuild(gameState);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Rebuild
@@ -286,8 +279,8 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 22;
 
-            var groups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-            if (groups == null || groups.Count == 0)
+            var groups = new List<VillagerGroupData>(gameState.GetVillagerGroupsForPlayer(localPlayerID));
+            if (groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
                     "  No villager groups available", 12, UIHelper.InkMutedText);

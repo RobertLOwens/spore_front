@@ -34,23 +34,15 @@ namespace Sporefront.Commands
             if (quantity <= 0)
                 return EngineCommandResult.Failure("Quantity must be greater than zero");
 
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
+            var fail = ValidateOperationalBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (!building.CanTrain(unitType))
-                return EngineCommandResult.Failure(string.Format("Building cannot train {0}", unitType.DisplayName()));
+                return EngineCommandResult.Failure($"Building cannot train {unitType.DisplayName()}");
 
             // Check player can afford the training cost
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var unitCost = unitType.TrainingCost();
             var totalCost = new Dictionary<ResourceType, int>();
@@ -73,13 +65,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources
             var unitCost = unitType.TrainingCost();
@@ -98,8 +88,7 @@ namespace Sporefront.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("TrainMilitaryCommand: Started training {0}x {1} at building {2}",
-                quantity, unitType.DisplayName(), buildingID));
+            DebugLog.Log($"TrainMilitaryCommand: Started training {quantity}x {unitType.DisplayName()} at building {buildingID}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
@@ -133,23 +122,15 @@ namespace Sporefront.Commands
             if (quantity <= 0)
                 return EngineCommandResult.Failure("Quantity must be greater than zero");
 
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
+            var fail = ValidateOperationalBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (!building.CanTrainVillagers())
                 return EngineCommandResult.Failure("Building cannot train villagers (must be City Center or Neighborhood)");
 
             // Check player can afford
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var totalCost = new Dictionary<ResourceType, int>();
             foreach (var kvp in VillagerCost)
@@ -170,13 +151,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources
             foreach (var kvp in VillagerCost)
@@ -193,8 +172,7 @@ namespace Sporefront.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("TrainVillagerCommand: Started training {0} villager(s) at building {1}",
-                quantity, buildingID));
+            DebugLog.Log($"TrainVillagerCommand: Started training {quantity} villager(s) at building {buildingID}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

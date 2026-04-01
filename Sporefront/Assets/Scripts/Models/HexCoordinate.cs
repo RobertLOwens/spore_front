@@ -9,6 +9,13 @@ namespace Sporefront.Models
         public int q; // column
         public int r; // row
 
+        // Static offset tables for odd-r hex grid (zero allocation)
+        // Direction order (clockwise from East): 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE
+        private static readonly int[] EvenDQ = { 1, 0, -1, -1, -1, 0 };
+        private static readonly int[] EvenDR = { 0, 1, 1, 0, -1, -1 };
+        private static readonly int[] OddDQ  = { 1, 1, 0, -1, 0, 1 };
+        private static readonly int[] OddDR  = { 0, 1, 1, 0, -1, -1 };
+
         public HexCoordinate(int q, int r)
         {
             this.q = q;
@@ -31,20 +38,8 @@ namespace Sporefront.Models
 
         public List<HexCoordinate> Neighbors()
         {
-            int[] dq, dr;
-
-            if (r % 2 == 0)
-            {
-                // Even rows
-                dq = new int[] { 1, 0, -1, -1, -1, 0 };
-                dr = new int[] { 0, 1, 1, 0, -1, -1 };
-            }
-            else
-            {
-                // Odd rows (shifted right)
-                dq = new int[] { 1, 1, 0, -1, 0, 1 };
-                dr = new int[] { 0, 1, 1, 0, -1, -1 };
-            }
+            var dq = (r % 2 == 0) ? EvenDQ : OddDQ;
+            var dr = (r % 2 == 0) ? EvenDR : OddDR;
 
             var neighbors = new List<HexCoordinate>(6);
             for (int i = 0; i < 6; i++)
@@ -57,9 +52,10 @@ namespace Sporefront.Models
         /// Direction order (clockwise from East): 0=East, 1=Southeast, 2=Southwest, 3=West, 4=Northwest, 5=Northeast
         public HexCoordinate Neighbor(int direction)
         {
-            var allNeighbors = Neighbors();
             int normalizedDir = ((direction % 6) + 6) % 6;
-            return allNeighbors[normalizedDir];
+            var dq = (r % 2 == 0) ? EvenDQ : OddDQ;
+            var dr = (r % 2 == 0) ? EvenDR : OddDR;
+            return new HexCoordinate(q + dq[normalizedDir], r + dr[normalizedDir]);
         }
 
         public List<HexCoordinate> CoordinatesInRing(int distance)

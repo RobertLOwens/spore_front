@@ -52,306 +52,227 @@ namespace Sporefront.Models
         FalseMorel
     }
 
+    // ================================================================
+    // Data record for BuildingType lookup table
+    // ================================================================
+
+    public class BuildingTypeData
+    {
+        public string DisplayName;
+        public string Icon;
+        public BuildingCategory Category;
+        public int PopulationCapacity;
+        public int PopulationCapacityPerLevel;
+        public int RequiredCityCenterLevel;
+        public Dictionary<ResourceType, int> BuildCost;
+        public double BuildTime;
+        public int HexSize;
+        public string Description;
+        public Dictionary<ResourceType, double> ResourceBonus;
+        public int MaxLevel;
+        public int BaseStorageCapacityPerResource;
+        public int StorageCapacityPerLevelPerResource;
+
+        public BuildingTypeData(
+            string displayName, string icon, BuildingCategory category,
+            Dictionary<ResourceType, int> buildCost, double buildTime,
+            string description,
+            int requiredCCLevel = 1, int hexSize = 1, int maxLevel = 5,
+            int popCap = 0, int popCapPerLevel = 0,
+            Dictionary<ResourceType, double> resourceBonus = null,
+            int baseStorage = 0, int storagePerLevel = 0)
+        {
+            DisplayName = displayName;
+            Icon = icon;
+            Category = category;
+            BuildCost = buildCost;
+            BuildTime = buildTime;
+            Description = description;
+            RequiredCityCenterLevel = requiredCCLevel;
+            HexSize = hexSize;
+            MaxLevel = maxLevel;
+            PopulationCapacity = popCap;
+            PopulationCapacityPerLevel = popCapPerLevel;
+            ResourceBonus = resourceBonus;
+            BaseStorageCapacityPerResource = baseStorage;
+            StorageCapacityPerLevelPerResource = storagePerLevel;
+        }
+    }
+
+    // ================================================================
+    // Extension methods — data-driven via static lookup table
+    // ================================================================
+
     public static class BuildingTypeExtensions
     {
-        public static string DisplayName(this BuildingType type)
+        private static readonly Dictionary<BuildingType, BuildingTypeData> Data =
+            new Dictionary<BuildingType, BuildingTypeData>
         {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return "City Center";
-                case BuildingType.Farm: return "Farm";
-                case BuildingType.Neighborhood: return "Neighborhood";
-                case BuildingType.Blacksmith: return "Blacksmith";
-                case BuildingType.Market: return "Market";
-                case BuildingType.MiningCamp: return "Mining Camp";
-                case BuildingType.LumberCamp: return "Lumber Camp";
-                case BuildingType.Warehouse: return "Warehouse";
-                case BuildingType.University: return "University";
-                case BuildingType.Library: return "Library";
-                case BuildingType.Mill: return "Mill";
-                case BuildingType.Road: return "Road";
-                case BuildingType.Castle: return "Castle";
-                case BuildingType.Barracks: return "Barracks";
-                case BuildingType.ArcheryRange: return "Archery Range";
-                case BuildingType.Stable: return "Stable";
-                case BuildingType.SiegeWorkshop: return "Siege Workshop";
-                case BuildingType.Tower: return "Tower";
-                case BuildingType.WoodenFort: return "Wooden Fort";
-                case BuildingType.Wall: return "Wall";
-                case BuildingType.Gate: return "Gate";
-                case BuildingType.FalseMorel: return "False Morel";
-                default: return type.ToString();
-            }
-        }
+            // ---- Economic Buildings ----
+            { BuildingType.CityCenter, new BuildingTypeData(
+                "City Center", "city_center", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 200 }, { ResourceType.Stone, 150 }, { ResourceType.Ore, 50 } },
+                60.0, "Main hub for economy and villagers",
+                maxLevel: 10, popCap: 10, popCapPerLevel: 5, baseStorage: 1200, storagePerLevel: 100) },
 
-        public static string Icon(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return "city_center";
-                case BuildingType.Farm: return "farm";
-                case BuildingType.Neighborhood: return "neighborhood";
-                case BuildingType.Blacksmith: return "blacksmith";
-                case BuildingType.Market: return "market";
-                case BuildingType.MiningCamp: return "mining_camp";
-                case BuildingType.LumberCamp: return "lumber_camp";
-                case BuildingType.Warehouse: return "warehouse";
-                case BuildingType.University: return "university";
-                case BuildingType.Library: return "library";
-                case BuildingType.Mill: return "mill";
-                case BuildingType.Road: return "road";
-                case BuildingType.Castle: return "castle";
-                case BuildingType.Barracks: return "barracks";
-                case BuildingType.ArcheryRange: return "archery_range";
-                case BuildingType.Stable: return "stable";
-                case BuildingType.SiegeWorkshop: return "siege_workshop";
-                case BuildingType.Tower: return "tower";
-                case BuildingType.WoodenFort: return "wooden_fort";
-                case BuildingType.Wall: return "wall";
-                case BuildingType.Gate: return "gate";
-                case BuildingType.FalseMorel: return "false_morel";
-                default: return "";
-            }
-        }
+            { BuildingType.Farm, new BuildingTypeData(
+                "Farm", "farm", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 50 }, { ResourceType.Stone, 20 } },
+                20.0, "Produces food resources",
+                resourceBonus: new Dictionary<ResourceType, double> { { ResourceType.Food, 2.0 } }) },
 
-        public static BuildingCategory Category(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter:
-                case BuildingType.Farm:
-                case BuildingType.Neighborhood:
-                case BuildingType.Blacksmith:
-                case BuildingType.Market:
-                case BuildingType.MiningCamp:
-                case BuildingType.LumberCamp:
-                case BuildingType.Warehouse:
-                case BuildingType.University:
-                case BuildingType.Library:
-                case BuildingType.Road:
-                case BuildingType.Mill:
-                case BuildingType.FalseMorel:
-                    return BuildingCategory.Economic;
-                default:
-                    return BuildingCategory.Military;
-            }
-        }
+            { BuildingType.Neighborhood, new BuildingTypeData(
+                "Neighborhood", "neighborhood", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 80 } },
+                35.0, "Houses population",
+                popCap: 5, popCapPerLevel: 3) },
 
-        public static int PopulationCapacity(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 10;
-                case BuildingType.Neighborhood: return 5;
-                default: return 0;
-            }
-        }
+            { BuildingType.Blacksmith, new BuildingTypeData(
+                "Blacksmith", "blacksmith", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 60 }, { ResourceType.Ore, 40 } },
+                40.0, "Upgrades units and tools",
+                requiredCCLevel: 3) },
 
-        public static int PopulationCapacityPerLevel(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 5;
-                case BuildingType.Neighborhood: return 3;
-                default: return 0;
-            }
-        }
+            { BuildingType.Market, new BuildingTypeData(
+                "Market", "market", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 50 } },
+                30.0, "Trade resources",
+                requiredCCLevel: 3) },
+
+            { BuildingType.MiningCamp, new BuildingTypeData(
+                "Mining Camp", "mining_camp", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 30 } },
+                25.0, "Increases ore collection",
+                resourceBonus: new Dictionary<ResourceType, double> { { ResourceType.Ore, 1.5 } }) },
+
+            { BuildingType.LumberCamp, new BuildingTypeData(
+                "Lumber Camp", "lumber_camp", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 20 } },
+                25.0, "Increases wood collection",
+                resourceBonus: new Dictionary<ResourceType, double> { { ResourceType.Wood, 1.5 } }) },
+
+            { BuildingType.Warehouse, new BuildingTypeData(
+                "Warehouse", "warehouse", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 80 } },
+                30.0, "Stores extra resources",
+                baseStorage: 150, storagePerLevel: 75) },
+
+            { BuildingType.University, new BuildingTypeData(
+                "University", "university", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 150 }, { ResourceType.Stone, 120 }, { ResourceType.Ore, 60 } },
+                50.0, "Research technologies",
+                requiredCCLevel: 3) },
+
+            { BuildingType.Library, new BuildingTypeData(
+                "Library", "library", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 100 }, { ResourceType.Ore, 40 } },
+                45.0, "Boosts research speed and unlocks advanced research",
+                requiredCCLevel: 3) },
+
+            { BuildingType.Mill, new BuildingTypeData(
+                "Mill", "mill", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 40 } },
+                25.0, "Boosts adjacent farm gather rates by 25%",
+                requiredCCLevel: 2) },
+
+            // ---- Infrastructure ----
+            { BuildingType.Road, new BuildingTypeData(
+                "Road", "road", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Stone, 10 } },
+                5.0, "Increases movement speed for units",
+                maxLevel: 1) },
+
+            // ---- Military Buildings ----
+            { BuildingType.Castle, new BuildingTypeData(
+                "Castle", "castle", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 300 }, { ResourceType.Stone, 400 }, { ResourceType.Ore, 150 } },
+                90.0, "Defensive stronghold and military hub",
+                hexSize: 3) },
+
+            { BuildingType.Barracks, new BuildingTypeData(
+                "Barracks", "barracks", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 150 }, { ResourceType.Stone, 100 } },
+                4.0, "Trains infantry units") },
+
+            { BuildingType.ArcheryRange, new BuildingTypeData(
+                "Archery Range", "archery_range", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 80 } },
+                35.0, "Trains ranged units",
+                requiredCCLevel: 2) },
+
+            { BuildingType.Stable, new BuildingTypeData(
+                "Stable", "stable", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 140 }, { ResourceType.Stone, 90 } },
+                35.0, "Trains cavalry units",
+                requiredCCLevel: 2) },
+
+            { BuildingType.SiegeWorkshop, new BuildingTypeData(
+                "Siege Workshop", "siege_workshop", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 180 }, { ResourceType.Stone, 120 }, { ResourceType.Ore, 80 } },
+                45.0, "Builds siege weapons",
+                requiredCCLevel: 5) },
+
+            { BuildingType.Tower, new BuildingTypeData(
+                "Tower", "tower", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 120 } },
+                30.0, "Defensive structure",
+                requiredCCLevel: 3) },
+
+            { BuildingType.WoodenFort, new BuildingTypeData(
+                "Wooden Fort", "wooden_fort", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 200 }, { ResourceType.Stone, 100 } },
+                50.0, "Basic defensive structure",
+                hexSize: 3) },
+
+            { BuildingType.Wall, new BuildingTypeData(
+                "Wall", "wall", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 30 }, { ResourceType.Stone, 50 } },
+                15.0, "Blocks all movement",
+                requiredCCLevel: 2, maxLevel: 1) },
+
+            { BuildingType.Gate, new BuildingTypeData(
+                "Gate", "gate", BuildingCategory.Military,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 40 } },
+                20.0, "Allows passage for owner and allies",
+                requiredCCLevel: 2, maxLevel: 1) },
+
+            // ---- Faction-Exclusive ----
+            { BuildingType.FalseMorel, new BuildingTypeData(
+                "False Morel", "false_morel", BuildingCategory.Economic,
+                new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 20 } },
+                20.0, "A decoy structure that appears as an army to enemies until they are adjacent",
+                requiredCCLevel: 2, maxLevel: 1) },
+        };
+
+        // ================================================================
+        // One-liner data lookups
+        // ================================================================
+
+        public static string DisplayName(this BuildingType type) => Data[type].DisplayName;
+        public static string Icon(this BuildingType type) => Data[type].Icon;
+        public static BuildingCategory Category(this BuildingType type) => Data[type].Category;
+        public static int PopulationCapacity(this BuildingType type) => Data[type].PopulationCapacity;
+        public static int PopulationCapacityPerLevel(this BuildingType type) => Data[type].PopulationCapacityPerLevel;
+        public static int RequiredCityCenterLevel(this BuildingType type) => Data[type].RequiredCityCenterLevel;
+        public static Dictionary<ResourceType, int> BuildCost(this BuildingType type) => Data[type].BuildCost;
+        public static double BuildTime(this BuildingType type) => Data[type].BuildTime;
+        public static int HexSize(this BuildingType type) => Data[type].HexSize;
+        public static string Description(this BuildingType type) => Data[type].Description;
+        public static Dictionary<ResourceType, double> ResourceBonus(this BuildingType type) => Data[type].ResourceBonus;
+        public static int MaxLevel(this BuildingType type) => Data[type].MaxLevel;
+        public static int BaseStorageCapacityPerResource(this BuildingType type) => Data[type].BaseStorageCapacityPerResource;
+        public static int StorageCapacityPerLevelPerResource(this BuildingType type) => Data[type].StorageCapacityPerLevelPerResource;
+
+        // ================================================================
+        // Computed methods (derive from base data)
+        // ================================================================
 
         public static int PopulationCapacityForLevel(this BuildingType type, int level)
         {
             return type.PopulationCapacity() + type.PopulationCapacityPerLevel() * (level - 1);
         }
 
-        public static int RequiredCityCenterLevel(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 1;
-                case BuildingType.Neighborhood:
-                case BuildingType.Warehouse:
-                case BuildingType.Farm:
-                case BuildingType.Barracks:
-                case BuildingType.Road:
-                case BuildingType.WoodenFort:
-                case BuildingType.Castle:
-                case BuildingType.MiningCamp:
-                case BuildingType.LumberCamp:
-                    return 1;
-                case BuildingType.ArcheryRange:
-                case BuildingType.Stable:
-                case BuildingType.Mill:
-                case BuildingType.Wall:
-                case BuildingType.Gate:
-                case BuildingType.FalseMorel:
-                    return 2;
-                case BuildingType.Market:
-                case BuildingType.Blacksmith:
-                case BuildingType.Tower:
-                case BuildingType.University:
-                case BuildingType.Library:
-                    return 3;
-                case BuildingType.SiegeWorkshop:
-                    return 5;
-                default: return 1;
-            }
-        }
-
-        public static Dictionary<ResourceType, int> BuildCost(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 200 }, { ResourceType.Stone, 150 }, { ResourceType.Ore, 50 } };
-                case BuildingType.Farm:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 50 }, { ResourceType.Stone, 20 } };
-                case BuildingType.Neighborhood:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 80 } };
-                case BuildingType.Blacksmith:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 60 }, { ResourceType.Ore, 40 } };
-                case BuildingType.Market:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 50 } };
-                case BuildingType.MiningCamp:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 100 }, { ResourceType.Stone, 30 } };
-                case BuildingType.LumberCamp:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 20 } };
-                case BuildingType.Warehouse:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 80 } };
-                case BuildingType.University:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 150 }, { ResourceType.Stone, 120 }, { ResourceType.Ore, 60 } };
-                case BuildingType.Library:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 100 }, { ResourceType.Ore, 40 } };
-                case BuildingType.Road:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Stone, 10 } };
-                case BuildingType.Castle:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 300 }, { ResourceType.Stone, 400 }, { ResourceType.Ore, 150 } };
-                case BuildingType.Barracks:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 150 }, { ResourceType.Stone, 100 } };
-                case BuildingType.ArcheryRange:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 120 }, { ResourceType.Stone, 80 } };
-                case BuildingType.Stable:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 140 }, { ResourceType.Stone, 90 } };
-                case BuildingType.SiegeWorkshop:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 180 }, { ResourceType.Stone, 120 }, { ResourceType.Ore, 80 } };
-                case BuildingType.Tower:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 120 } };
-                case BuildingType.WoodenFort:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 200 }, { ResourceType.Stone, 100 } };
-                case BuildingType.Mill:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 80 }, { ResourceType.Stone, 40 } };
-                case BuildingType.Wall:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 30 }, { ResourceType.Stone, 50 } };
-                case BuildingType.Gate:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 40 } };
-                case BuildingType.FalseMorel:
-                    return new Dictionary<ResourceType, int> { { ResourceType.Wood, 60 }, { ResourceType.Stone, 20 } };
-                default:
-                    return new Dictionary<ResourceType, int>();
-            }
-        }
-
-        public static double BuildTime(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 60.0;
-                case BuildingType.Farm: return 20.0;
-                case BuildingType.Neighborhood: return 35.0;
-                case BuildingType.Blacksmith: return 40.0;
-                case BuildingType.Market: return 30.0;
-                case BuildingType.MiningCamp: return 25.0;
-                case BuildingType.LumberCamp: return 25.0;
-                case BuildingType.Warehouse: return 30.0;
-                case BuildingType.University: return 50.0;
-                case BuildingType.Library: return 45.0;
-                case BuildingType.Road: return 5.0;
-                case BuildingType.Castle: return 90.0;
-                case BuildingType.Barracks: return 4.0;
-                case BuildingType.ArcheryRange: return 35.0;
-                case BuildingType.Stable: return 35.0;
-                case BuildingType.SiegeWorkshop: return 45.0;
-                case BuildingType.Tower: return 30.0;
-                case BuildingType.WoodenFort: return 50.0;
-                case BuildingType.Mill: return 25.0;
-                case BuildingType.Wall: return 15.0;
-                case BuildingType.Gate: return 20.0;
-                case BuildingType.FalseMorel: return 20.0;
-                default: return 30.0;
-            }
-        }
-
-        public static int HexSize(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.Castle:
-                case BuildingType.WoodenFort:
-                    return 3;
-                default: return 1;
-            }
-        }
-
-        public static bool RequiresRotation(this BuildingType type)
-        {
-            return type.HexSize() > 1;
-        }
-
-        public static string Description(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return "Main hub for economy and villagers";
-                case BuildingType.Farm: return "Produces food resources";
-                case BuildingType.Neighborhood: return "Houses population";
-                case BuildingType.Blacksmith: return "Upgrades units and tools";
-                case BuildingType.Market: return "Trade resources";
-                case BuildingType.MiningCamp: return "Increases ore collection";
-                case BuildingType.LumberCamp: return "Increases wood collection";
-                case BuildingType.Warehouse: return "Stores extra resources";
-                case BuildingType.University: return "Research technologies";
-                case BuildingType.Library: return "Boosts research speed and unlocks advanced research";
-                case BuildingType.Road: return "Increases movement speed for units";
-                case BuildingType.Castle: return "Defensive stronghold and military hub";
-                case BuildingType.Barracks: return "Trains infantry units";
-                case BuildingType.ArcheryRange: return "Trains ranged units";
-                case BuildingType.Stable: return "Trains cavalry units";
-                case BuildingType.SiegeWorkshop: return "Builds siege weapons";
-                case BuildingType.Tower: return "Defensive structure";
-                case BuildingType.WoodenFort: return "Basic defensive structure";
-                case BuildingType.Mill: return "Boosts adjacent farm gather rates by 25%";
-                case BuildingType.Wall: return "Blocks all movement";
-                case BuildingType.Gate: return "Allows passage for owner and allies";
-                case BuildingType.FalseMorel: return "A decoy structure that appears as an army to enemies until they are adjacent";
-                default: return "";
-            }
-        }
-
-        public static Dictionary<ResourceType, double> ResourceBonus(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.Farm:
-                    return new Dictionary<ResourceType, double> { { ResourceType.Food, 2.0 } };
-                case BuildingType.MiningCamp:
-                    return new Dictionary<ResourceType, double> { { ResourceType.Ore, 1.5 } };
-                case BuildingType.LumberCamp:
-                    return new Dictionary<ResourceType, double> { { ResourceType.Wood, 1.5 } };
-                default: return null;
-            }
-        }
-
-        public static int MaxLevel(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 10;
-                case BuildingType.Road:
-                case BuildingType.Wall:
-                case BuildingType.Gate:
-                case BuildingType.FalseMorel:
-                    return 1;
-                default: return 5;
-            }
-        }
+        public static bool RequiresRotation(this BuildingType type) => type.HexSize() > 1;
 
         public static bool IsRoad(this BuildingType type) => type == BuildingType.Road;
 
@@ -386,35 +307,19 @@ namespace Sporefront.Models
             return type.BuildTime() * multiplier * 0.8;
         }
 
+        public static int StorageCapacityPerResource(this BuildingType type, int level)
+        {
+            return type.BaseStorageCapacityPerResource() + type.StorageCapacityPerLevelPerResource() * (level - 1);
+        }
+
+        // ================================================================
+        // Static helpers (not extension methods)
+        // ================================================================
+
         public static int MaxCastleLevel(int cityCenterLevel)
         {
             if (cityCenterLevel < 6) return 0;
             return System.Math.Min(cityCenterLevel - 5, 5);
-        }
-
-        public static int BaseStorageCapacityPerResource(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 1200;
-                case BuildingType.Warehouse: return 150;
-                default: return 0;
-            }
-        }
-
-        public static int StorageCapacityPerLevelPerResource(this BuildingType type)
-        {
-            switch (type)
-            {
-                case BuildingType.CityCenter: return 100;
-                case BuildingType.Warehouse: return 75;
-                default: return 0;
-            }
-        }
-
-        public static int StorageCapacityPerResource(this BuildingType type, int level)
-        {
-            return type.BaseStorageCapacityPerResource() + type.StorageCapacityPerLevelPerResource() * (level - 1);
         }
 
         public static int MaxWarehousesAllowed(int cityCenterLevel)

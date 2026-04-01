@@ -28,14 +28,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            // Villager group must exist
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
-
-            // Must be owned by this player
-            if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Villager group is not owned by this player");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             // Resource point must exist
             var resourcePoint = state.GetResourcePoint(resourcePointID);
@@ -55,9 +49,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             var resourcePoint = state.GetResourcePoint(resourcePointID);
             if (resourcePoint == null)
@@ -69,8 +62,7 @@ namespace Sporefront.Commands
                 bool success = GameEngine.Instance.resourceEngine.StartGathering(villagerGroupID, resourcePointID);
                 if (!success)
                 {
-                    DebugLog.Log(string.Format("GatherCommand: StartGathering failed for group {0} at resource {1}",
-                        villagerGroupID, resourcePointID));
+                    DebugLog.Log($"GatherCommand: StartGathering failed for group {villagerGroupID} at resource {resourcePointID}");
                     return EngineCommandResult.Failure("Failed to start gathering");
                 }
 
@@ -81,8 +73,7 @@ namespace Sporefront.Commands
                     targetCoordinate = resourcePoint.coordinate
                 });
 
-                DebugLog.Log(string.Format("GatherCommand: Villager group {0} now gathering at {1}",
-                    group.name, resourcePoint.coordinate));
+                DebugLog.Log($"GatherCommand: Villager group {group.name} now gathering at {resourcePoint.coordinate}");
             }
             else
             {
@@ -102,8 +93,7 @@ namespace Sporefront.Commands
                     targetCoordinate = resourcePoint.coordinate
                 });
 
-                DebugLog.Log(string.Format("GatherCommand: Villager group {0} moving to gather at {1}",
-                    group.name, resourcePoint.coordinate));
+                DebugLog.Log($"GatherCommand: Villager group {group.name} moving to gather at {resourcePoint.coordinate}");
             }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
@@ -129,14 +119,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            // Villager group must exist
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
-
-            // Must be owned by this player
-            if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Villager group is not owned by this player");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             // Must be currently gathering
             if (!group.IsGathering())
@@ -147,9 +131,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             // Stop gathering via ResourceEngine
             GameEngine.Instance.resourceEngine.StopGathering(villagerGroupID);
@@ -162,8 +145,7 @@ namespace Sporefront.Commands
                 targetCoordinate = null
             });
 
-            DebugLog.Log(string.Format("StopGatheringCommand: Villager group {0} stopped gathering, now idle",
-                group.name));
+            DebugLog.Log($"StopGatheringCommand: Villager group {group.name} stopped gathering, now idle");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

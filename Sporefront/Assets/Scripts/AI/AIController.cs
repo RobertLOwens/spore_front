@@ -72,8 +72,7 @@ namespace Sporefront.AI
             if (evolvedGenome != null)
             {
                 genome = evolvedGenome;
-                DebugLog.Log(string.Format("AI Controller loaded evolved genome (gen {0}, fitness {1:F2})",
-                    evolvedGenome.generation, evolvedGenome.fitness));
+                DebugLog.Log($"AI Controller loaded evolved genome (gen {evolvedGenome.generation}, fitness {evolvedGenome.fitness:F2})");
             }
             else
             {
@@ -83,8 +82,7 @@ namespace Sporefront.AI
             DebugLog.Log("AI Controller setup - checking all players:");
             foreach (var player in gameState.players.Values)
             {
-                DebugLog.Log(string.Format("   Player: {0} (ID: {1}) - isAI: {2}",
-                    player.name, player.id, player.isAI));
+                DebugLog.Log($"   Player: {player.name} (ID: {player.id}) - isAI: {player.isAI}");
             }
 
             foreach (var player in gameState.GetAIPlayers())
@@ -94,22 +92,20 @@ namespace Sporefront.AI
                 var cityCenter = gameState.GetCityCenter(player.id);
                 if (cityCenter != null)
                 {
-                    DebugLog.Log(string.Format("AI Controller initialized for player: {0}", player.name));
-                    DebugLog.Log(string.Format("   City center at: ({0}, {1})", cityCenter.coordinate.q, cityCenter.coordinate.r));
+                    DebugLog.Log($"AI Controller initialized for player: {player.name}");
+                    DebugLog.Log($"   City center at: ({cityCenter.coordinate.q}, {cityCenter.coordinate.r})");
                 }
                 else
                 {
-                    DebugLog.Log(string.Format("WARNING: AI player {0} has NO city center!", player.name));
+                    DebugLog.Log($"WARNING: AI player {player.name} has NO city center!");
                     var allBuildings = gameState.GetBuildingsForPlayer(player.id);
-                    DebugLog.Log(string.Format("   Buildings owned: {0}", allBuildings.Count));
+                    DebugLog.Log($"   Buildings owned: {allBuildings.Count}");
                 }
 
-                DebugLog.Log(string.Format("   Resources: food={0}, wood={1}, stone={2}, ore={3}",
-                    player.GetResource(ResourceType.Food), player.GetResource(ResourceType.Wood),
-                    player.GetResource(ResourceType.Stone), player.GetResource(ResourceType.Ore)));
+                DebugLog.Log($"   Resources: food={player.GetResource(ResourceType.Food)}, wood={player.GetResource(ResourceType.Wood)}, stone={player.GetResource(ResourceType.Stone)}, ore={player.GetResource(ResourceType.Ore)}");
             }
 
-            DebugLog.Log(string.Format("Total AI players registered: {0}", aiPlayers.Count));
+            DebugLog.Log($"Total AI players registered: {aiPlayers.Count}");
         }
 
         public void Reset()
@@ -134,73 +130,7 @@ namespace Sporefront.AI
 
         public void ProcessHuntArrivals(GameState state)
         {
-            // Collect groups to process (avoid modifying collection during iteration)
-            var groups = state.villagerGroups.Values.ToList();
-
-            foreach (var group in groups)
-            {
-                var huntTask = group.currentTask as HuntingTask;
-                if (huntTask == null) continue;
-                if (group.currentPath != null) continue; // Still en route
-
-                var resourcePointID = huntTask.ResourcePointID;
-                var resource = state.GetResourcePoint(resourcePointID);
-                if (resource == null)
-                {
-                    group.ClearTask();
-                    continue;
-                }
-
-                if (!group.coordinate.Equals(resource.coordinate)) continue;
-
-                // At target — execute hunt combat
-                double villagerAttack = group.villagerCount * 25.0;
-                double damageToAnimal = Math.Max(1.0, villagerAttack - resource.resourceType.DefensePower());
-                resource.TakeDamage(damageToAnimal);
-
-                double animalAttack = resource.resourceType.AttackPower();
-                double damageToVillagers = Math.Max(0.0, animalAttack - group.villagerCount * 0.5);
-                int villagersLost = (int)(damageToVillagers / 5.0);
-                if (villagersLost > 0) group.RemoveVillagers(villagersLost);
-
-                if (resource.currentHealth <= 0)
-                {
-                    // Animal killed — create carcass and start gathering
-                    var carcass = resource.CreateCarcassData();
-                    if (carcass != null)
-                    {
-                        state.RemoveResourcePoint(resource.id);
-                        state.AddResourcePoint(carcass);
-
-                        bool registered = GameEngine.Instance.resourceEngine.StartGathering(
-                            group.id, carcass.id);
-                        if (registered)
-                        {
-                            GameEngine.Instance.resourceEngine.UpdateCollectionRates(
-                                group.ownerID ?? Guid.Empty);
-                        }
-                        else
-                        {
-                            group.ClearTask();
-                        }
-                    }
-                    else
-                    {
-                        group.ClearTask();
-                    }
-                }
-                else
-                {
-                    // Animal survived — clear task, AI will retry next cycle
-                    group.ClearTask();
-                }
-
-                if (group.villagerCount <= 0)
-                {
-                    GameEngine.Instance.resourceEngine.StopGathering(group.id);
-                    state.RemoveVillagerGroup(group.id);
-                }
-            }
+            AIHelper.ProcessHuntArrivals(state, GameEngine.Instance.resourceEngine);
         }
 
         // ================================================================
@@ -230,9 +160,7 @@ namespace Sporefront.AI
                 var cityCenter = gameState.GetCityCenter(playerID);
                 int villagerCount = gameState.GetVillagerCount(playerID);
                 int buildingCount = gameState.GetBuildingsForPlayer(playerID).Count;
-                DebugLog.Log(string.Format("AI Decision cycle: state={0}, cityCenter={1}, buildings={2}, villagers={3}, food={4}",
-                    aiState.currentState, cityCenter != null, buildingCount, villagerCount,
-                    player.GetResource(ResourceType.Food)));
+                DebugLog.Log($"AI Decision cycle: state={aiState.currentState}, cityCenter={cityCenter != null}, buildings={buildingCount}, villagers={villagerCount}, food={player.GetResource(ResourceType.Food)}");
 
                 // One-time strategic map analysis (chokepoints + map strategy)
                 if (!aiState.mapAnalyzed)
@@ -249,20 +177,16 @@ namespace Sporefront.AI
                         if (dipStatus == DiplomacyStatus.Enemy)
                         {
                             aiState.factionStrategy = AIStrategicAnalysis.GetFactionCounterStrategy(otherPlayer.faction);
-                            DebugLog.Log(string.Format("AI {0}: Faction counter-strategy — {1}",
-                                player.name, aiState.factionStrategy.Value.description));
+                            DebugLog.Log($"AI {player.name}: Faction counter-strategy — {aiState.factionStrategy.Value.description}");
                             break;
                         }
                     }
 
                     aiState.mapAnalyzed = true;
-                    DebugLog.Log(string.Format("AI {0}: Map analysis complete — strategy={1}, chokepoints={2}",
-                        player.name, AIStrategicAnalysis.DescribeStrategy(aiState.mapStrategy),
-                        aiState.cachedChokepoints.Count));
+                    DebugLog.Log($"AI {player.name}: Map analysis complete — strategy={AIStrategicAnalysis.DescribeStrategy(aiState.mapStrategy)}, chokepoints={aiState.cachedChokepoints.Count}");
                     foreach (var cp in aiState.cachedChokepoints)
                     {
-                        DebugLog.Log(string.Format("   Chokepoint at ({0},{1}), width={2}",
-                            cp.center.q, cp.center.r, cp.width));
+                        DebugLog.Log($"   Chokepoint at ({cp.center.q},{cp.center.r}), width={cp.width}");
                     }
                 }
 
@@ -284,23 +208,21 @@ namespace Sporefront.AI
                 militaryPlanner.UpdateEnemyAnalysis(aiState, gameState, currentTime);
 
                 // Feature 2: Analyze enemy strategy (greed detection) every 15 seconds
-                if (currentTime - aiState.lastEnemyStrategyTime >= 15.0)
+                if (AIHelper.ShouldExecute(ref aiState.lastEnemyStrategyTime, currentTime, 15.0))
                 {
                     var prevStrategy = aiState.enemyStrategy;
                     aiState.enemyStrategy = AIStrategicAnalysis.AnalyzeEnemyStrategy(gameState, playerID);
-                    aiState.lastEnemyStrategyTime = currentTime;
                     if (aiState.enemyStrategy != prevStrategy && aiState.enemyStrategy != EnemyStrategyRead.Unknown)
-                        DebugLog.Log(string.Format("AI {0}: Enemy strategy detected — {1}", player.name, aiState.enemyStrategy));
+                        DebugLog.Log($"AI {player.name}: Enemy strategy detected — {aiState.enemyStrategy}");
                 }
 
                 // Feature 4: Assess game position (comeback mechanics) every 15 seconds
-                if (currentTime - aiState.lastPositionAssessTime >= 15.0)
+                if (AIHelper.ShouldExecute(ref aiState.lastPositionAssessTime, currentTime, 15.0))
                 {
                     var prevPosition = aiState.gamePosition;
                     aiState.gamePosition = AIStrategicAnalysis.AssessGamePosition(gameState, playerID);
-                    aiState.lastPositionAssessTime = currentTime;
                     if (aiState.gamePosition != prevPosition)
-                        DebugLog.Log(string.Format("AI {0}: Game position — {1}", player.name, aiState.gamePosition));
+                        DebugLog.Log($"AI {player.name}: Game position — {aiState.gamePosition}");
                 }
 
                 // Round 4: Update exploration percentage
@@ -333,8 +255,7 @@ namespace Sporefront.AI
                 // Generate commands based on current state
                 var commands = GenerateCommands(aiState, gameState, currentTime);
 
-                DebugLog.Log(string.Format("AI {0}: Generated {1} commands in state {2}",
-                    player.name, commands.Count, aiState.currentState));
+                DebugLog.Log($"AI {player.name}: Generated {commands.Count} commands in state {aiState.currentState}");
 
                 allCommands.AddRange(commands);
 
@@ -400,7 +321,7 @@ namespace Sporefront.AI
                 aiState.attackStateEnteredTime = currentTime;
                 aiState.lastAttackProgressTime = currentTime;
                 aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
-                DebugLog.Log(string.Format("AI {0}: -> Attack (PUNISHING GREEDY PLAY — enemy has no military)", playerID));
+                DebugLog.Log($"AI {playerID}: -> Attack (PUNISHING GREEDY PLAY — enemy has no military)");
             }
 
             // Feature 4: CriticallyBehind — force defensive posture
@@ -409,7 +330,7 @@ namespace Sporefront.AI
             {
                 aiState.currentState = AIState.Retreat;
                 aiState.persistentAttackTargetID = null;
-                DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (critically behind — conserving forces)", playerID));
+                DebugLog.Log($"AI {playerID}: Attack -> Retreat (critically behind — conserving forces)");
             }
 
             switch (aiState.currentState)
@@ -418,12 +339,12 @@ namespace Sporefront.AI
                     if (nearbyEnemies.Count > 0)
                     {
                         aiState.currentState = AIState.Defense;
-                        DebugLog.Log(string.Format("AI {0}: Peace -> Defense (enemies nearby)", playerID));
+                        DebugLog.Log($"AI {playerID}: Peace -> Defense (enemies nearby)");
                     }
                     else if (threatLevel > aiState.difficulty.AlertThreshold())
                     {
                         aiState.currentState = AIState.Alert;
-                        DebugLog.Log(string.Format("AI {0}: Peace -> Alert (threat detected)", playerID));
+                        DebugLog.Log($"AI {playerID}: Peace -> Alert (threat detected)");
                     }
                     else if (ShouldAttack(aiState, gameState, ourStrength))
                     {
@@ -431,7 +352,7 @@ namespace Sporefront.AI
                         aiState.attackStateEnteredTime = currentTime;
                         aiState.lastAttackProgressTime = currentTime;
                         aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
-                        DebugLog.Log(string.Format("AI {0}: Peace -> Attack (strong enough)", playerID));
+                        DebugLog.Log($"AI {playerID}: Peace -> Attack (strong enough)");
                     }
                     break;
 
@@ -439,12 +360,12 @@ namespace Sporefront.AI
                     if (nearbyEnemies.Count > 0)
                     {
                         aiState.currentState = AIState.Defense;
-                        DebugLog.Log(string.Format("AI {0}: Alert -> Defense (enemies nearby)", playerID));
+                        DebugLog.Log($"AI {playerID}: Alert -> Defense (enemies nearby)");
                     }
                     else if (threatLevel < aiState.difficulty.AlertThreshold() * 0.5)
                     {
                         aiState.currentState = AIState.Peace;
-                        DebugLog.Log(string.Format("AI {0}: Alert -> Peace (threat reduced)", playerID));
+                        DebugLog.Log($"AI {playerID}: Alert -> Peace (threat reduced)");
                     }
                     else if (ShouldAttack(aiState, gameState, ourStrength))
                     {
@@ -452,7 +373,7 @@ namespace Sporefront.AI
                         aiState.attackStateEnteredTime = currentTime;
                         aiState.lastAttackProgressTime = currentTime;
                         aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
-                        DebugLog.Log(string.Format("AI {0}: Alert -> Attack (strong enough)", playerID));
+                        DebugLog.Log($"AI {playerID}: Alert -> Attack (strong enough)");
                     }
                     break;
 
@@ -467,12 +388,12 @@ namespace Sporefront.AI
                             aiState.attackStateEnteredTime = currentTime;
                             aiState.lastAttackProgressTime = currentTime;
                             aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
-                            DebugLog.Log(string.Format("AI {0}: Defense -> Attack (counter-attack)", playerID));
+                            DebugLog.Log($"AI {playerID}: Defense -> Attack (counter-attack)");
                         }
                         else
                         {
                             aiState.currentState = AIState.Alert;
-                            DebugLog.Log(string.Format("AI {0}: Defense -> Alert (enemies gone)", playerID));
+                            DebugLog.Log($"AI {playerID}: Defense -> Alert (enemies gone)");
                         }
                     }
                     else if (ourWeightedStrength < 500 || armyNeedsRetreat)
@@ -488,7 +409,7 @@ namespace Sporefront.AI
                                 defeatCoord, nearbyEnemies[0].ownerID ?? Guid.Empty,
                                 enemyStrength, currentTime, true);
                         }
-                        DebugLog.Log(string.Format("AI {0}: Defense -> Retreat (too weak or outnumbered)", playerID));
+                        DebugLog.Log($"AI {playerID}: Defense -> Retreat (too weak or outnumbered)");
                     }
                     break;
 
@@ -506,20 +427,20 @@ namespace Sporefront.AI
                     {
                         aiState.currentState = AIState.Retreat;
                         aiState.persistentAttackTargetID = null;
-                        DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (attack timeout, no progress)", playerID));
+                        DebugLog.Log($"AI {playerID}: Attack -> Retreat (attack timeout, no progress)");
                         break;
                     }
 
                     if (nearbyEnemies.Count > 0)
                     {
                         aiState.currentState = AIState.Defense;
-                        DebugLog.Log(string.Format("AI {0}: Attack -> Defense (base under attack)", playerID));
+                        DebugLog.Log($"AI {playerID}: Attack -> Defense (base under attack)");
                     }
                     else if (ourWeightedStrength < 1000)
                     {
                         aiState.currentState = AIState.Peace;
                         aiState.persistentAttackTargetID = null;
-                        DebugLog.Log(string.Format("AI {0}: Attack -> Peace (army depleted)", playerID));
+                        DebugLog.Log($"AI {playerID}: Attack -> Peace (army depleted)");
                     }
                     else if (armyNeedsRetreat)
                     {
@@ -530,7 +451,7 @@ namespace Sporefront.AI
                             aiState.threatMemory[aiState.lastAttackTarget.Value] = new ThreatMemoryEntry(
                                 aiState.lastAttackTarget.Value, Guid.Empty, 0, currentTime, true);
                         }
-                        DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (army in danger)", playerID));
+                        DebugLog.Log($"AI {playerID}: Attack -> Retreat (army in danger)");
                     }
                     break;
 
@@ -539,7 +460,7 @@ namespace Sporefront.AI
                     {
                         aiState.currentState = AIState.Alert;
                         aiState.pendingArmyConvergence = null;
-                        DebugLog.Log(string.Format("AI {0}: Retreat -> Alert (regrouped)", playerID));
+                        DebugLog.Log($"AI {playerID}: Retreat -> Alert (regrouped)");
                     }
                     break;
             }
@@ -568,8 +489,7 @@ namespace Sporefront.AI
             var opportunity = militaryPlanner.FindOpportunityWindow(aiState, gameState, gameState.currentTime);
             if (opportunity.HasValue && ourWeightedStrength >= 1500)
             {
-                DebugLog.Log(string.Format("AI {0}: Opportunity window detected at ({1},{2}) — enemy moved away",
-                    playerID, opportunity.Value.q, opportunity.Value.r));
+                DebugLog.Log($"AI {playerID}: Opportunity window detected at ({opportunity.Value.q},{opportunity.Value.r}) — enemy moved away");
                 return true; // Attack even at lower threshold when enemy is out of position
             }
 
@@ -667,9 +587,8 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastUnitUpgradeCheckTime < GameConfig.AI.Intervals.UnitUpgradeCheck)
+            if (!AIHelper.ShouldExecute(ref aiState.lastUnitUpgradeCheckTime, currentTime, GameConfig.AI.Intervals.UnitUpgradeCheck))
                 return new List<IEngineCommand>();
-            aiState.lastUnitUpgradeCheckTime = currentTime;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -715,7 +634,7 @@ namespace Sporefront.AI
 
             if (building == null) return new List<IEngineCommand>();
 
-            DebugLog.Log(string.Format("AI starting unit upgrade: {0}", best.Value.DisplayName()));
+            DebugLog.Log($"AI starting unit upgrade: {best.Value.DisplayName()}");
             return new List<IEngineCommand> { new AIUpgradeUnitCommand(playerID, best.Value, building.id) };
         }
 

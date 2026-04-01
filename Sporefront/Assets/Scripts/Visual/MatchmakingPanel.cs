@@ -13,7 +13,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class MatchmakingPanel : MonoBehaviour
+    public class MatchmakingPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -395,7 +395,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             panel.SetActive(true);
             ShowScreen(MatchmakingScreen.FactionSelect);
@@ -404,7 +404,7 @@ namespace Sporefront.Visual
             pendingMatch = null;
         }
 
-        public void Hide()
+        public override void Hide()
         {
             // Clean up if we're still in queue
             if (MatchmakingService.Instance.IsInQueue || MatchmakingService.Instance.IsMatched)
@@ -415,7 +415,7 @@ namespace Sporefront.Visual
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Update
@@ -434,7 +434,7 @@ namespace Sporefront.Visual
                 int minutes = (int)(elapsed / 60f);
                 int seconds = (int)(elapsed % 60f);
                 if (searchTimerLabel != null)
-                    searchTimerLabel.text = string.Format("{0}:{1:00}", minutes, seconds);
+                    searchTimerLabel.text = $"{minutes}:{seconds:00}";
             }
             else if (currentScreen == MatchmakingScreen.MatchFound && !localReady)
             {
@@ -477,7 +477,7 @@ namespace Sporefront.Visual
                 }
                 else
                 {
-                    Debug.LogWarning(string.Format("[MatchmakingPanel] Failed to enter queue: {0}", error));
+                    Debug.LogWarning($"[MatchmakingPanel] Failed to enter queue: {error}");
                 }
             });
 #else
@@ -557,7 +557,7 @@ namespace Sporefront.Visual
             if (opponentNameLabel != null)
                 opponentNameLabel.text = result.opponentDisplayName;
             if (opponentFactionLabel != null)
-                opponentFactionLabel.text = string.Format("Faction: {0}", result.opponentFaction);
+                opponentFactionLabel.text = $"Faction: {result.opponentFaction}";
 
             UpdateReadyStatus();
             ShowScreen(MatchmakingScreen.MatchFound);

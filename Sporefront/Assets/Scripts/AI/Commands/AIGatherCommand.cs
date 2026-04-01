@@ -28,12 +28,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
-
-            if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your villagers");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             if (!group.currentTask.IsIdle)
                 return EngineCommandResult.Failure("Villager is busy");
@@ -87,7 +83,7 @@ namespace Sporefront.AI.Commands
                 targetCoordinate = resource.coordinate
             });
 
-            DebugLog.Log(string.Format("AI villagers assigned to gather {0}", resource.resourceType));
+            DebugLog.Log($"AI villagers assigned to gather {resource.resourceType}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

@@ -13,7 +13,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class AccountPanel : MonoBehaviour
+    public class AccountPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -27,9 +27,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
 
         // Inline editing state
         private bool isChangingName;
@@ -113,7 +111,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             isChangingName = false;
             isChangingPassword = false;
@@ -122,13 +120,11 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
             OnClose?.Invoke();
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Update — name availability debounce

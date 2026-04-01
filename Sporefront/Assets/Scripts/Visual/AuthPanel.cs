@@ -13,7 +13,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class AuthPanel : MonoBehaviour
+    public class AuthPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -69,7 +69,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             isRegisterMode = false;
             isProcessing = false;
@@ -78,12 +78,12 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Build Content

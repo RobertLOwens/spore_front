@@ -15,7 +15,7 @@ using Sporefront.Commands;
 
 namespace Sporefront.Visual
 {
-    public class BuildingDetailPanel : MonoBehaviour
+    public class BuildingDetailPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -31,10 +31,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private GameObject backdrop;
-        private RectTransform contentRT;
         private Guid? currentBuildingID;
-        private Guid localPlayerID;
 
         // Cached references for incremental refresh
         private Image hpFill;
@@ -45,10 +42,6 @@ namespace Sporefront.Visual
         // Extracted section state
         private BuildingTrainingSection.State trainingState;
         private BuildingMarketSection.State marketState;
-
-        // Fade animation
-        private CanvasGroup backdropCG;
-        private Coroutine fadeCoroutine;
 
         // Structural fingerprint — only full-rebuild when these change
         private BuildingState cachedState;
@@ -107,11 +100,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -121,9 +109,8 @@ namespace Sporefront.Visual
             currentBuildingID = buildingID;
             hasCachedFingerprint = false;
             Rebuild(gameState);
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
+            FadeIn();
         }
 
         public void Close()
@@ -132,8 +119,7 @@ namespace Sporefront.Visual
             hasCachedFingerprint = false;
             constructionProgressFill = null;
             upgradeProgressFill = null;
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
+            FadeOut();
         }
 
         public void Refresh(GameState gameState)
@@ -277,7 +263,6 @@ namespace Sporefront.Visual
             return (constructionProgressFill, upgradeProgressFill);
         }
 
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
         public Guid? CurrentBuildingID => currentBuildingID;
 
         // ================================================================

@@ -25,42 +25,32 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your building");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (!building.CanUpgrade)
                 return EngineCommandResult.Failure("Building cannot be upgraded");
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var cost = building.GetUpgradeCost();
             if (cost == null)
                 return EngineCommandResult.Failure("No upgrade available");
 
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value))
-                    return EngineCommandResult.Failure("Insufficient resources");
-            }
+            var fail2 = ValidateCanAfford(player, cost);
+            if (fail2 != null) return fail2;
 
             return EngineCommandResult.Success(null);
         }
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var cost = building.GetUpgradeCost();
             if (cost == null)
@@ -128,8 +118,7 @@ namespace Sporefront.AI.Commands
                 });
             }
 
-            DebugLog.Log(string.Format("AIUpgradeBuildingCommand: AI upgrading {0} to level {1}",
-                building.buildingType, newLevel));
+            DebugLog.Log($"AIUpgradeBuildingCommand: AI upgrading {building.buildingType} to level {newLevel}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

@@ -32,7 +32,7 @@ namespace Sporefront.Visual
     // Panel
     // ================================================================
 
-    public class GameOverPanel : MonoBehaviour
+    public class GameOverPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -44,9 +44,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
 
         // ================================================================
         // Initialization
@@ -97,12 +95,10 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild Content

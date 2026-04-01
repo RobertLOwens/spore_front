@@ -34,17 +34,12 @@ namespace Sporefront.Commands
                 return EngineCommandResult.Failure("Invalid upgrade type");
 
             // Player exists
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Building exists and owned by player
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
+            fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Building is completed
             if (building.state != BuildingState.Completed)
@@ -53,22 +48,19 @@ namespace Sporefront.Commands
             // Building type matches required building type
             BuildingType requiredBuildingType = upgradeType.RequiredBuildingType();
             if (building.buildingType != requiredBuildingType)
-                return EngineCommandResult.Failure(string.Format("Building type {0} does not match required type {1}",
-                    building.buildingType, requiredBuildingType));
+                return EngineCommandResult.Failure($"Building type {building.buildingType} does not match required type {requiredBuildingType}");
 
             // Building level sufficient
             int requiredLevel = upgradeType.RequiredBuildingLevel();
             if (building.level < requiredLevel)
-                return EngineCommandResult.Failure(string.Format("Building level {0} is below required level {1}",
-                    building.level, requiredLevel));
+                return EngineCommandResult.Failure($"Building level {building.level} is below required level {requiredLevel}");
 
             // Prerequisite completed
             UnitUpgradeType? prerequisite = upgradeType.Prerequisite();
             if (prerequisite.HasValue)
             {
                 if (!player.HasCompletedUnitUpgrade(prerequisite.Value.ToString()))
-                    return EngineCommandResult.Failure(string.Format("Prerequisite upgrade {0} not completed",
-                        prerequisite.Value));
+                    return EngineCommandResult.Failure($"Prerequisite upgrade {prerequisite.Value} not completed");
             }
 
             // Not already completed
@@ -94,9 +86,8 @@ namespace Sporefront.Commands
             if (!Enum.TryParse<UnitUpgradeType>(upgradeTypeRawValue, out upgradeType))
                 return EngineCommandResult.Failure("Invalid upgrade type");
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources
             var cost = upgradeType.Cost();
@@ -118,8 +109,7 @@ namespace Sporefront.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("UpgradeUnitCommand: Player {0} started {1} (tier {2}) at building {3}",
-                PlayerID, upgradeTypeRawValue, upgradeType.Tier(), buildingID));
+            DebugLog.Log($"UpgradeUnitCommand: Player {PlayerID} started {upgradeTypeRawValue} (tier {upgradeType.Tier()}) at building {buildingID}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

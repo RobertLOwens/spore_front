@@ -37,12 +37,8 @@ namespace Sporefront.Commands
 
             if (isArmy)
             {
-                var army = state.GetArmy(entityID);
-                if (army == null)
-                    return EngineCommandResult.Failure("Army not found");
-
-                if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                    return EngineCommandResult.Failure("Army is not owned by this player");
+                var fail = ValidateOwnedArmy(state, entityID, out var army);
+                if (fail != null) return fail;
 
                 if (army.isInCombat)
                     return EngineCommandResult.Failure("Army is currently in combat");
@@ -72,12 +68,8 @@ namespace Sporefront.Commands
             }
             else
             {
-                var group = state.GetVillagerGroup(entityID);
-                if (group == null)
-                    return EngineCommandResult.Failure("Villager group not found");
-
-                if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                    return EngineCommandResult.Failure("Villager group is not owned by this player");
+                var fail = ValidateVillagerGroup(state, entityID, out var group);
+                if (fail != null) return fail;
             }
 
             return EngineCommandResult.Success(null);
@@ -87,9 +79,8 @@ namespace Sporefront.Commands
         {
             if (isArmy)
             {
-                var army = state.GetArmy(entityID);
-                if (army == null)
-                    return EngineCommandResult.Failure("Army not found");
+                var fail = ValidateArmy(state, entityID, out var army);
+                if (fail != null) return fail;
 
                 // Consume commander stamina
                 if (army.commanderID.HasValue)
@@ -138,7 +129,7 @@ namespace Sporefront.Commands
                         armyID = army.id,
                         coordinate = fromCoordinate
                     });
-                    DebugLog.Log(string.Format("MoveCommand: Cancelled entrenchment for army {0}", army.name));
+                    DebugLog.Log($"MoveCommand: Cancelled entrenchment for army {army.name}");
                 }
 
                 // Find path from army's current position to destination
@@ -161,14 +152,12 @@ namespace Sporefront.Commands
                     path = path
                 });
 
-                DebugLog.Log(string.Format("MoveCommand: Army {0} moving from {1} to {2} ({3} steps)",
-                    army.name, fromCoordinate, destination, path.Count));
+                DebugLog.Log($"MoveCommand: Army {army.name} moving from {fromCoordinate} to {destination} ({path.Count} steps)");
             }
             else
             {
-                var group = state.GetVillagerGroup(entityID);
-                if (group == null)
-                    return EngineCommandResult.Failure("Villager group not found");
+                var fail = ValidateVillagerGroup(state, entityID, out var group);
+                if (fail != null) return fail;
 
                 HexCoordinate fromCoordinate = group.coordinate;
 
@@ -190,8 +179,7 @@ namespace Sporefront.Commands
                     path = path
                 });
 
-                DebugLog.Log(string.Format("MoveCommand: Villager group {0} moving from {1} to {2} ({3} steps)",
-                    group.name, fromCoordinate, destination, path.Count));
+                DebugLog.Log($"MoveCommand: Villager group {group.name} moving from {fromCoordinate} to {destination} ({path.Count} steps)");
             }
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);

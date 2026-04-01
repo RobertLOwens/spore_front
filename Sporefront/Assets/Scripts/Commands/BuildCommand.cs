@@ -142,13 +142,7 @@ namespace Sporefront.Commands
             }
             else
             {
-                var idleVillagers = state.GetVillagerGroupsForPlayer(PlayerID)
-                    .Where(g => g.currentTask.IsIdle && g.currentPath == null)
-                    .OrderBy(g => g.coordinate.Distance(coordinate))
-                    .ToList();
-
-                if (idleVillagers.Count > 0)
-                    builder = idleVillagers[0];
+                builder = BuildHelper.FindNearestIdleVillager(state, PlayerID, coordinate);
             }
 
             if (builder != null)
@@ -204,24 +198,7 @@ namespace Sporefront.Commands
 
         private Dictionary<ResourceType, int> GetEffectiveBuildCost(GameState state, PlayerState player)
         {
-            var baseCost = buildingType.BuildCost();
-
-            // Apply faction mountain building cost reduction
-            var tileTerrain = state.mapData.GetTerrain(coordinate);
-            if (tileTerrain.HasValue &&
-                (tileTerrain.Value == TerrainType.Mountain || tileTerrain.Value == TerrainType.Hill))
-            {
-                double reduction = player.faction.MountainBuildCostReduction();
-                if (reduction > 0)
-                {
-                    var reducedCost = new Dictionary<ResourceType, int>();
-                    foreach (var kvp in baseCost)
-                        reducedCost[kvp.Key] = Math.Max(1, (int)(kvp.Value * (1.0 - reduction)));
-                    return reducedCost;
-                }
-            }
-
-            return baseCost;
+            return BuildHelper.GetEffectiveBuildCost(state, buildingType, coordinate, rotation, PlayerID);
         }
     }
 }

@@ -26,12 +26,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your building");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (building.villagerGarrison < quantity)
                 return EngineCommandResult.Failure("Not enough villagers in garrison");
@@ -41,9 +37,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Remove villagers from garrison
             building.villagerGarrison -= quantity;
@@ -71,8 +66,7 @@ namespace Sporefront.AI.Commands
                 quantity = quantity
             });
 
-            DebugLog.Log(string.Format("AI deployed {0} villagers at ({1}, {2})",
-                quantity, spawnCoord.q, spawnCoord.r));
+            DebugLog.Log($"AI deployed {quantity} villagers at ({spawnCoord.q}, {spawnCoord.r})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

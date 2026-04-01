@@ -125,10 +125,8 @@ namespace Sporefront.Engine
                 double baseRate = 0.1;
                 double civilianRate = consumptionInfo.civilian * baseRate;
                 double militaryRate = consumptionInfo.military * baseRate;
-                double civMultiplier = player.GetResearchBonusMultiplier(
-                    ResearchBonusType.FoodConsumption.ToString());
-                double milMultiplier = player.GetResearchBonusMultiplier(
-                    ResearchBonusType.MilitaryFoodConsumption.ToString());
+                double civMultiplier = player.GetResearchBonusMultiplier(ResearchBonusType.FoodConsumption);
+                double milMultiplier = player.GetResearchBonusMultiplier(ResearchBonusType.MilitaryFoodConsumption);
                 double adjustedRate = (civilianRate * civMultiplier + militaryRate * milMultiplier)
                     * (1.0 - rationingReduction);
 
@@ -328,22 +326,9 @@ namespace Sporefront.Engine
             if (owner != null)
             {
                 ResearchBonusType bonusType;
-                switch (resourceType)
-                {
-                    case ResourcePointType.Farmland:
-                        bonusType = ResearchBonusType.FarmGatheringRate;
-                        break;
-                    case ResourcePointType.Trees:
-                        bonusType = ResearchBonusType.LumberCampGatheringRate;
-                        break;
-                    case ResourcePointType.OreMine:
-                    case ResourcePointType.StoneQuarry:
-                        bonusType = ResearchBonusType.MiningCampGatheringRate;
-                        break;
-                    default:
-                        return rate;
-                }
-                rate *= owner.GetResearchBonusMultiplier(bonusType.ToString());
+                if (!EnumMappings.ResourceToResearchBonus.TryGetValue(resourceType, out bonusType))
+                    return rate;
+                rate *= owner.GetResearchBonusMultiplier(bonusType);
 
                 // Apply faction wood gathering bonus
                 if (resourceType == ResourcePointType.Trees && owner.faction.WoodGatheringBonus() > 0)
@@ -557,8 +542,8 @@ namespace Sporefront.Engine
 
         public bool HasCampCoverage(HexCoordinate coordinate, ResourcePointType resourceType, GameState state)
         {
-            string requiredCampType = GetRequiredCampType(resourceType);
-            if (requiredCampType == null)
+            BuildingType? requiredCampType = GetRequiredCampType(resourceType);
+            if (!requiredCampType.HasValue)
             {
                 return true; // No camp required
             }
@@ -567,7 +552,7 @@ namespace Sporefront.Engine
             var matchingCamps = new List<BuildingData>();
             foreach (var building in state.buildings.Values)
             {
-                if (building.buildingType.ToString() == requiredCampType && building.IsOperational)
+                if (building.buildingType == requiredCampType.Value && building.IsOperational)
                 {
                     matchingCamps.Add(building);
                 }
@@ -587,17 +572,17 @@ namespace Sporefront.Engine
         }
 
         /// <summary>
-        /// Returns the required camp type string for a resource point type, or null if no camp is required.
+        /// Returns the required camp type for a resource point type, or null if no camp is required.
         /// </summary>
-        private string GetRequiredCampType(ResourcePointType resourceType)
+        private BuildingType? GetRequiredCampType(ResourcePointType resourceType)
         {
             switch (resourceType)
             {
                 case ResourcePointType.Trees:
-                    return BuildingType.LumberCamp.ToString();
+                    return BuildingType.LumberCamp;
                 case ResourcePointType.OreMine:
                 case ResourcePointType.StoneQuarry:
-                    return BuildingType.MiningCamp.ToString();
+                    return BuildingType.MiningCamp;
                 default:
                     return null;
             }

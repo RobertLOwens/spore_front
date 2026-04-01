@@ -10,6 +10,13 @@ namespace Sporefront.Engine
     {
         private GameState gameState;
 
+        // Reusable collections to avoid per-tick allocations
+        private Dictionary<HexCoordinate, List<(Guid ownerID, int unitCount)>> _armyPositions
+            = new Dictionary<HexCoordinate, List<(Guid ownerID, int unitCount)>>();
+        private Dictionary<Guid, int> _playerTroops = new Dictionary<Guid, int>();
+        private Dictionary<Guid, double> _multiplierPerPlayer = new Dictionary<Guid, double>();
+        private List<List<(Guid, int)>> _listPool = new List<List<(Guid, int)>>();
+
         public void Setup(GameState gameState)
         {
             this.gameState = gameState;
@@ -22,16 +29,24 @@ namespace Sporefront.Engine
 
             var changes = new List<StateChange>();
 
+            // Return pooled lists from last tick
+            foreach (var list in _armyPositions.Values)
+            {
+                list.Clear();
+                _listPool.Add(list);
+            }
+            _armyPositions.Clear();
+
             // Build a lookup of army coordinate → (ownerID, unit count) for fast zone checking
-            var armyPositions = new Dictionary<HexCoordinate, List<(Guid ownerID, int unitCount)>>();
             foreach (var army in gameState.armies.Values)
             {
                 if (!army.ownerID.HasValue) continue;
                 List<(Guid, int)> list;
-                if (!armyPositions.TryGetValue(army.coordinate, out list))
+                if (!_armyPositions.TryGetValue(army.coordinate, out list))
                 {
-                    list = new List<(Guid, int)>();
-                    armyPositions[army.coordinate] = list;
+                    list = _listPool.Count > 0 ? _listPool[_listPool.Count - 1] : new List<(Guid, int)>();
+                    if (_listPool.Count > 0) _listPool.RemoveAt(_listPool.Count - 1);
+                    _armyPositions[army.coordinate] = list;
                 }
                 int totalUnits = 0;
                 foreach (var count in army.militaryComposition.Values)
@@ -43,28 +58,28 @@ namespace Sporefront.Engine
             foreach (var zone in gameState.controlZones)
             {
                 // Count troops per player in this zone
-                var playerTroops = new Dictionary<Guid, int>();
+                _playerTroops.Clear();
                 foreach (var tile in zone.tiles)
                 {
                     List<(Guid ownerID, int unitCount)> armiesOnTile;
-                    if (armyPositions.TryGetValue(tile, out armiesOnTile))
+                    if (_armyPositions.TryGetValue(tile, out armiesOnTile))
                     {
                         foreach (var entry in armiesOnTile)
                         {
                             int existing;
-                            playerTroops.TryGetValue(entry.ownerID, out existing);
-                            playerTroops[entry.ownerID] = existing + entry.unitCount;
+                            _playerTroops.TryGetValue(entry.ownerID, out existing);
+                            _playerTroops[entry.ownerID] = existing + entry.unitCount;
                         }
                     }
                 }
 
-                zone.presenceCount = playerTroops;
+                zone.presenceCount = new Dictionary<Guid, int>(_playerTroops);
 
                 // Determine controller: player with strictly more troops
                 Guid? newController = null;
                 int maxTroops = 0;
                 bool tied = false;
-                foreach (var kvp in playerTroops)
+                foreach (var kvp in _playerTroops)
                 {
                     if (kvp.Value > maxTroops)
                     {
@@ -92,18 +107,18 @@ namespace Sporefront.Engine
             }
 
             // Award points for controlled zones (using per-zone pointsMultiplier)
-            var multiplierPerPlayer = new Dictionary<Guid, double>();
+            _multiplierPerPlayer.Clear();
             foreach (var zone in gameState.controlZones)
             {
                 if (zone.controllingPlayerID.HasValue)
                 {
                     double current;
-                    multiplierPerPlayer.TryGetValue(zone.controllingPlayerID.Value, out current);
-                    multiplierPerPlayer[zone.controllingPlayerID.Value] = current + zone.pointsMultiplier;
+                    _multiplierPerPlayer.TryGetValue(zone.controllingPlayerID.Value, out current);
+                    _multiplierPerPlayer[zone.controllingPlayerID.Value] = current + zone.pointsMultiplier;
                 }
             }
 
-            foreach (var kvp in multiplierPerPlayer)
+            foreach (var kvp in _multiplierPerPlayer)
             {
                 double delta = GameConfig.Domination.PointsPerSecond * kvp.Value * GameConfig.Domination.UpdateInterval;
                 double oldScore;

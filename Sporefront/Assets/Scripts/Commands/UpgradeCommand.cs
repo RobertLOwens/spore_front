@@ -29,12 +29,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (building.state != BuildingState.Completed)
                 return EngineCommandResult.Failure("Building is not completed");
@@ -45,9 +41,8 @@ namespace Sporefront.Commands
             if (building.level >= building.MaxLevel)
                 return EngineCommandResult.Failure("Building is already at max level");
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var cost = building.GetUpgradeCost();
             if (!player.CanAfford(cost))
@@ -56,11 +51,8 @@ namespace Sporefront.Commands
             // Validate assigned villager if specified
             if (assignedVillagerGroupID.HasValue)
             {
-                var group = state.GetVillagerGroup(assignedVillagerGroupID.Value);
-                if (group == null)
-                    return EngineCommandResult.Failure("Assigned villager group not found.");
-                if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                    return EngineCommandResult.Failure("Assigned villager group not owned by player.");
+                fail = ValidateVillagerGroup(state, assignedVillagerGroupID.Value, out _);
+                if (fail != null) return fail;
             }
 
             return EngineCommandResult.Success(null);
@@ -68,13 +60,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources
             var cost = building.GetUpgradeCost();
@@ -169,8 +159,7 @@ namespace Sporefront.Commands
                 });
             }
 
-            DebugLog.Log(string.Format("UpgradeCommand: Building {0} ({1}) upgrading to level {2}",
-                buildingID, building.buildingType, toLevel));
+            DebugLog.Log($"UpgradeCommand: Building {buildingID} ({building.buildingType}) upgrading to level {toLevel}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
@@ -195,12 +184,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (building.state != BuildingState.Upgrading)
                 return EngineCommandResult.Failure("Building is not upgrading");
@@ -210,13 +195,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Cancel upgrade and get full cost for refund calculation
             var fullCost = building.CancelUpgrade();
@@ -236,8 +219,7 @@ namespace Sporefront.Commands
                 }
             }
 
-            DebugLog.Log(string.Format("CancelUpgradeCommand: Cancelled upgrade for building {0} ({1})",
-                buildingID, building.buildingType));
+            DebugLog.Log($"CancelUpgradeCommand: Cancelled upgrade for building {buildingID} ({building.buildingType})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

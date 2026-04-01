@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class ReinforcePanel : MonoBehaviour
+    public class ReinforcePanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,11 +28,8 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject modalPanel;
-        private RectTransform contentRT;
         private Guid? currentArmyID;
-        private Guid localPlayerID;
 
         // Per-building selection state: buildingID -> (unitType -> selected count)
         private Dictionary<Guid, Dictionary<MilitaryUnitType, int>> selections =
@@ -97,11 +94,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -115,7 +107,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             currentArmyID = null;
             selections.Clear();
@@ -129,8 +121,6 @@ namespace Sporefront.Visual
             if (!currentArmyID.HasValue || !backdrop.activeSelf) return;
             Rebuild(gameState);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild
@@ -197,7 +187,7 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var buildings = gameState.GetBuildingsForPlayer(localPlayerID);
+            var buildings = new List<BuildingData>(gameState.GetBuildingsForPlayer(localPlayerID));
             bool anyGarrisoned = false;
 
             // Sort by distance to army

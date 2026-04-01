@@ -31,23 +31,12 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
-
-            if (building.buildingType != BuildingType.CityCenter)
-                return EngineCommandResult.Failure("Scouts can only be trained at the City Center");
+            var fail = ValidateOperationalBuilding(state, buildingID, out var building, BuildingType.CityCenter);
+            if (fail != null) return fail;
 
             // Check player can afford
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             var cost = new Dictionary<ResourceType, int> { { ResourceType.Food, GameConfig.Scout.FoodCost } };
             if (!player.CanAfford(cost))
@@ -58,13 +47,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources
             player.RemoveResource(ResourceType.Food, GameConfig.Scout.FoodCost);
@@ -79,7 +66,7 @@ namespace Sporefront.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("TrainScoutCommand: Started training scout at building {0}", buildingID));
+            DebugLog.Log($"TrainScoutCommand: Started training scout at building {buildingID}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

@@ -12,7 +12,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class DisplayNamePanel : MonoBehaviour
+    public class DisplayNamePanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -63,7 +63,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             isClaiming = false;
             isAvailable = false;
@@ -76,12 +76,12 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Update — debounced availability check

@@ -24,9 +24,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             if (player.IsResearchActive())
                 return EngineCommandResult.Failure("Research already in progress");
@@ -72,25 +71,20 @@ namespace Sporefront.AI.Commands
                     }
                 }
                 if (!hasBuilding)
-                    return EngineCommandResult.Failure(string.Format("Requires {0}", buildingReq.Value.buildingType));
+                    return EngineCommandResult.Failure($"Requires {buildingReq.Value.buildingType}");
             }
 
             // Check affordability
-            var cost = researchType.Cost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value))
-                    return EngineCommandResult.Failure("Insufficient resources");
-            }
+            var fail2 = ValidateCanAfford(player, researchType.Cost());
+            if (fail2 != null) return fail2;
 
             return EngineCommandResult.Success(null);
         }
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             string rawValue = researchType.ToString();
 
@@ -112,8 +106,7 @@ namespace Sporefront.AI.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("AIStartResearchCommand: AI started research: {0}",
-                researchType.DisplayName()));
+            DebugLog.Log($"AIStartResearchCommand: AI started research: {researchType.DisplayName()}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

@@ -14,7 +14,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class SelectedEntitiesPanel : MonoBehaviour
+    public class SelectedEntitiesPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -44,11 +44,10 @@ namespace Sporefront.Visual
         private GameObject panelRoot;
         private RectTransform contentParent;
         private List<RowInfo> rows = new List<RowInfo>();
-        private Guid localPlayerID;
         private bool initialized;
         private Guid? highlightedEntityID;
 
-        public bool IsVisible => panelRoot != null && panelRoot.activeSelf;
+        public new bool IsVisible => panelRoot != null && panelRoot.activeSelf;
 
         // ================================================================
         // Initialization
@@ -89,10 +88,7 @@ namespace Sporefront.Visual
             initialized = true;
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
+        // UpdateLocalPlayerID inherited from SporefrontPanel
 
         // ================================================================
         // Public API
@@ -132,7 +128,7 @@ namespace Sporefront.Visual
             UpdateRowHighlights();
         }
 
-        public void Hide()
+        public override void Hide()
         {
             if (panelRoot != null) panelRoot.SetActive(false);
         }

@@ -25,12 +25,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Army is not owned by this player");
+            var fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             if (army.isRetreating)
                 return EngineCommandResult.Failure("Army is already retreating");
@@ -40,9 +36,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
+            var fail = ValidateArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             // Find nearest home base
             BuildingData homeBase = null;
@@ -65,7 +60,7 @@ namespace Sporefront.Commands
 
             if (homeBase == null)
             {
-                DebugLog.Log(string.Format("RetreatCommand: No home base available for army {0} to retreat to", army.name));
+                DebugLog.Log($"RetreatCommand: No home base available for army {army.name} to retreat to");
                 return EngineCommandResult.Failure("No home base available for retreat");
             }
 
@@ -73,8 +68,7 @@ namespace Sporefront.Commands
             var path = state.mapData.FindPath(army.coordinate, homeBase.coordinate, PlayerID, state);
             if (path == null || path.Count == 0)
             {
-                DebugLog.Log(string.Format("RetreatCommand: No valid path found for army {0} to retreat to {1}",
-                    army.name, homeBase.coordinate));
+                DebugLog.Log($"RetreatCommand: No valid path found for army {army.name} to retreat to {homeBase.coordinate}");
                 return EngineCommandResult.Failure("No valid path found to home base");
             }
 
@@ -87,14 +81,14 @@ namespace Sporefront.Commands
                     armyID = army.id,
                     coordinate = army.coordinate
                 });
-                DebugLog.Log(string.Format("RetreatCommand: Cancelled entrenchment for army {0}", army.name));
+                DebugLog.Log($"RetreatCommand: Cancelled entrenchment for army {army.name}");
             }
 
             // Disengage from combat if in combat
             if (army.isInCombat)
             {
                 GameEngine.Instance.combatEngine.RetreatFromCombat(armyID);
-                DebugLog.Log(string.Format("RetreatCommand: Disengaged army {0} from combat", army.name));
+                DebugLog.Log($"RetreatCommand: Disengaged army {army.name} from combat");
             }
 
             // Clear any pending attack and set army path as retreating
@@ -111,8 +105,7 @@ namespace Sporefront.Commands
                 to = homeBase.coordinate
             });
 
-            DebugLog.Log(string.Format("RetreatCommand: Army {0} retreating from {1} to {2} ({3})",
-                army.name, army.coordinate, homeBase.coordinate, homeBase.buildingType));
+            DebugLog.Log($"RetreatCommand: Army {army.name} retreating from {army.coordinate} to {homeBase.coordinate} ({homeBase.buildingType})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

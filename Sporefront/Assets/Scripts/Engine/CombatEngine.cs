@@ -135,6 +135,13 @@ namespace Sporefront.Engine
         // MARK: - Stack Combats (multi-army engagement)
         public Dictionary<Guid, StackCombat> stackCombats { get; private set; } = new Dictionary<Guid, StackCombat>();
 
+        // Reusable key snapshots to avoid dictionary copies during iteration
+        private readonly List<Guid> combatKeySnapshot = new List<Guid>();
+        private readonly List<Guid> buildingCombatKeySnapshot = new List<Guid>();
+        private readonly List<Guid> villagerCombatKeySnapshot = new List<Guid>();
+        private readonly List<Guid> stackCombatKeySnapshot = new List<Guid>();
+        private readonly List<ArmyData> poisonArmySnapshot = new List<ArmyData>();
+
         // MARK: - Garrison Defense
         public GarrisonDefenseEngine garrisonDefenseEngine = new GarrisonDefenseEngine();
 
@@ -247,10 +254,11 @@ namespace Sporefront.Engine
             var completedCombats = new List<Guid>();
             var combatsToClean = new List<ActiveCombat>();
 
-            foreach (var kvp in new Dictionary<Guid, ActiveCombat>(activeCombats))
+            combatKeySnapshot.Clear();
+            combatKeySnapshot.AddRange(activeCombats.Keys);
+            foreach (var combatID in combatKeySnapshot)
             {
-                Guid combatID = kvp.Key;
-                ActiveCombat combat = kvp.Value;
+                if (!activeCombats.TryGetValue(combatID, out var combat)) continue;
 
                 if (combat.phase == CombatPhase.Ended)
                 {
@@ -277,8 +285,7 @@ namespace Sporefront.Engine
 
                 if (combat.phase != previousPhase)
                 {
-                    DebugLog.Log(string.Format("Combat phase changed: {0} -> {1}",
-                        previousPhase.DisplayName(), combat.phase.DisplayName()));
+                    DebugLog.Log($"Combat phase changed: {previousPhase.DisplayName()} -> {combat.phase.DisplayName()}");
                     changes.Add(new CombatPhaseCompletedChange
                     {
                         attackerID = combat.attackerArmies.Count > 0 ? combat.attackerArmies[0].armyID : Guid.Empty,
@@ -364,7 +371,7 @@ namespace Sporefront.Engine
                         ArmyData loserArmy = state.GetArmy(loserID);
                         if (loserArmy != null && !loserArmy.isRetreating)
                         {
-                            DebugLog.Log(string.Format("{0} is surrounded with no retreat — army destroyed", loserArmy.name));
+                            DebugLog.Log($"{loserArmy.name} is surrounded with no retreat — army destroyed");
                             changes.Add(new ArmyDestroyedChange { armyID = loserID, coordinate = loserArmy.coordinate });
                             state.RemoveArmy(loserID);
                         }
@@ -429,13 +436,13 @@ namespace Sporefront.Engine
             ArmyData attacker = gameState.GetArmy(attackerArmyID);
             if (attacker == null)
             {
-                DebugLog.Log(string.Format("CombatEngine: Attacker army not found in GameState (ID: {0})", attackerArmyID));
+                DebugLog.Log($"CombatEngine: Attacker army not found in GameState (ID: {attackerArmyID})");
                 return null;
             }
             ArmyData defender = gameState.GetArmy(defenderArmyID);
             if (defender == null)
             {
-                DebugLog.Log(string.Format("CombatEngine: Defender army not found in GameState (ID: {0})", defenderArmyID));
+                DebugLog.Log($"CombatEngine: Defender army not found in GameState (ID: {defenderArmyID})");
                 return null;
             }
 
@@ -486,8 +493,7 @@ namespace Sporefront.Engine
             if (defender.isEntrenched)
             {
                 combat.entrenchmentDefenseBonus = GameConfig.Entrenchment.DefenseBonus;
-                DebugLog.Log(string.Format("   Defender is entrenched: +{0}% defense bonus",
-                    (int)(GameConfig.Entrenchment.DefenseBonus * 100)));
+                DebugLog.Log($"   Defender is entrenched: +{(int)(GameConfig.Entrenchment.DefenseBonus * 100)}% defense bonus");
             }
 
             // Store with combat's own ID
@@ -500,15 +506,15 @@ namespace Sporefront.Engine
             defender.combatTargetID = attackerArmyID;
 
             // Debug logging for terrain bonuses
-            DebugLog.Log(string.Format("Combat started: Phase {0} at {1}", combat.phase.DisplayName(), defender.coordinate));
-            DebugLog.Log(string.Format("   Terrain: {0}", terrain.DisplayName()));
+            DebugLog.Log($"Combat started: Phase {combat.phase.DisplayName()} at {defender.coordinate}");
+            DebugLog.Log($"   Terrain: {terrain.DisplayName()}");
             if (combat.terrainDefenseBonus > 0)
             {
-                DebugLog.Log(string.Format("   Defender defense bonus: +{0}%", (int)(combat.terrainDefenseBonus * 100)));
+                DebugLog.Log($"   Defender defense bonus: +{(int)(combat.terrainDefenseBonus * 100)}%");
             }
             if (combat.terrainAttackPenalty > 0)
             {
-                DebugLog.Log(string.Format("   Attacker attack penalty: -{0}%", (int)(combat.terrainAttackPenalty * 100)));
+                DebugLog.Log($"   Attacker attack penalty: -{(int)(combat.terrainAttackPenalty * 100)}%");
             }
             if (combat.terrainDefenseBonus == 0 && combat.terrainAttackPenalty == 0)
             {
@@ -678,8 +684,7 @@ namespace Sporefront.Engine
             attacker.isInCombat = true;
             attacker.combatTargetID = defenderVillagerGroupID;
 
-            DebugLog.Log(string.Format("Army vs Villagers combat started: {0} attacking {1} villagers",
-                attacker.name, villagerGroup.villagerCount));
+            DebugLog.Log($"Army vs Villagers combat started: {attacker.name} attacking {villagerGroup.villagerCount} villagers");
 
             return new CombatStartedChange
             {
@@ -947,6 +952,20 @@ namespace Sporefront.Engine
 
         /// <summary>
         /// Automatically starts combat against an enemy building at the given location.
+        private Guid? FindFirstSurvivingAttacker(StackCombat stackCombat)
+        {
+            foreach (var p in stackCombat.activePairings)
+            {
+                if (p.winnerArmyID.HasValue &&
+                    !stackCombat.defeatedArmyIDs.Contains(p.winnerArmyID.Value) &&
+                    !stackCombat.retreatedArmyIDs.Contains(p.winnerArmyID.Value))
+                {
+                    return p.winnerArmyID.Value;
+                }
+            }
+            return null;
+        }
+
         /// Called after winning army vs army combat.
         /// </summary>
         private void AutoStartBuildingCombat(Guid armyID, HexCoordinate location, GameState state, double currentTime, List<StateChange> changes)
@@ -963,8 +982,7 @@ namespace Sporefront.Engine
             if (!building.IsOperational) return;
 
             // Start building combat
-            DebugLog.Log(string.Format("Auto-starting building attack: {0} vs {1}",
-                army.name, building.buildingType.DisplayName()));
+            DebugLog.Log($"Auto-starting building attack: {army.name} vs {building.buildingType.DisplayName()}");
 
             StateChange combatChange = StartBuildingCombat(armyID, building.id, currentTime);
             if (combatChange != null)
@@ -982,10 +1000,11 @@ namespace Sporefront.Engine
             var changes = new List<StateChange>();
             var completedCombats = new List<Guid>();
 
-            foreach (var kvp in new Dictionary<Guid, ActiveCombatData>(buildingCombats))
+            buildingCombatKeySnapshot.Clear();
+            buildingCombatKeySnapshot.AddRange(buildingCombats.Keys);
+            foreach (var combatID in buildingCombatKeySnapshot)
             {
-                Guid combatID = kvp.Key;
-                ActiveCombatData combat = kvp.Value;
+                if (!buildingCombats.TryGetValue(combatID, out var combat)) continue;
 
                 if (combat.isComplete)
                 {
@@ -1178,7 +1197,7 @@ namespace Sporefront.Engine
                 BuildingData newHomeBase = state.FindHomeBaseWithCapacity(buildingOwnerID, army.coordinate, building.id);
                 if (newHomeBase == null)
                 {
-                    DebugLog.Log(string.Format("No home base available for retreat - {0} has nowhere to go", army.name));
+                    DebugLog.Log($"No home base available for retreat - {army.name} has nowhere to go");
                     continue;
                 }
 
@@ -1189,7 +1208,7 @@ namespace Sporefront.Engine
                 List<HexCoordinate> path = state.mapData.FindPath(army.coordinate, newHomeBase.coordinate, buildingOwnerID, state);
                 if (path == null || path.Count == 0)
                 {
-                    DebugLog.Log(string.Format("{0} cannot find retreat path from destroyed building", army.name));
+                    DebugLog.Log($"{army.name} cannot find retreat path from destroyed building");
                     continue;
                 }
 
@@ -1199,8 +1218,7 @@ namespace Sporefront.Engine
                 army.pathIndex = 0;
                 army.movementProgress = 0.0;
 
-                DebugLog.Log(string.Format("{0} retreating from destroyed {1} to {2}",
-                    army.name, building.buildingType.DisplayName(), newHomeBase.buildingType.DisplayName()));
+                DebugLog.Log($"{army.name} retreating from destroyed {building.buildingType.DisplayName()} to {newHomeBase.buildingType.DisplayName()}");
             }
         }
 
@@ -1211,10 +1229,11 @@ namespace Sporefront.Engine
             var changes = new List<StateChange>();
             var completedCombats = new List<Guid>();
 
-            foreach (var kvp in new Dictionary<Guid, VillagerCombatData>(villagerCombats))
+            villagerCombatKeySnapshot.Clear();
+            villagerCombatKeySnapshot.AddRange(villagerCombats.Keys);
+            foreach (var combatID in villagerCombatKeySnapshot)
             {
-                Guid combatID = kvp.Key;
-                VillagerCombatData combat = kvp.Value;
+                if (!villagerCombats.TryGetValue(combatID, out var combat)) continue;
 
                 if (combat.isComplete)
                 {
@@ -1335,7 +1354,7 @@ namespace Sporefront.Engine
                     combat.isComplete = true;
                     completedCombats.Add(combatID);
 
-                    DebugLog.Log(string.Format("Villager group destroyed: {0} villagers killed", combat.villagersKilled));
+                    DebugLog.Log($"Villager group destroyed: {combat.villagersKilled} villagers killed");
 
                     // Save combat record before removing villager group
                     CombatRecord record = CreateVillagerCombatRecord(combat, currentTime, state);
@@ -1886,7 +1905,7 @@ namespace Sporefront.Engine
 
             if (defensiveStack.IsEmpty)
             {
-                DebugLog.Log(string.Format("Stack combat: No defenders at {0}", coordinate));
+                DebugLog.Log($"Stack combat: No defenders at {coordinate}");
                 return StateChange.EmptyChanges;
             }
 
@@ -1937,7 +1956,7 @@ namespace Sporefront.Engine
                             pairingCombat.AddReinforcement(attackerArmy, true);
                             attackerArmy.isInCombat = true;
                             attackerArmy.combatTargetID = firstPairing.defenderArmyID;
-                            DebugLog.Log(string.Format("Stack: Attacker {0} joining as reinforcement", attackerArmy.name));
+                            DebugLog.Log($"Stack: Attacker {attackerArmy.name} joining as reinforcement");
                         }
                     }
                 }
@@ -1957,8 +1976,7 @@ namespace Sporefront.Engine
                 defenderArmyIDs = defenderArmyIDs
             });
 
-            DebugLog.Log(string.Format("Stack combat started at {0}: {1} attackers vs {2} defenders ({3} villager groups)",
-                coordinate, attackerArmyIDs.Count, defensiveStack.entries.Count, defensiveStack.villagerGroupIDs.Count));
+            DebugLog.Log($"Stack combat started at {coordinate}: {attackerArmyIDs.Count} attackers vs {defensiveStack.entries.Count} defenders ({defensiveStack.villagerGroupIDs.Count} villager groups)");
 
             return changes;
         }
@@ -2035,8 +2053,7 @@ namespace Sporefront.Engine
             var pairing = new CombatPairing(attackerID, defenderEntry.armyID, combat.id);
             stackCombat.activePairings.Add(pairing);
 
-            DebugLog.Log(string.Format("Stack pairing: {0} vs {1} (Tier: {2}, Cross-tile: {3})",
-                attacker.name, defender.name, defenderEntry.tier.DisplayName(), defenderEntry.isCrossTile));
+            DebugLog.Log($"Stack pairing: {attacker.name} vs {defender.name} (Tier: {defenderEntry.tier.DisplayName()}, Cross-tile: {defenderEntry.isCrossTile})");
 
             return new CombatStartedChange
             {
@@ -2053,10 +2070,11 @@ namespace Sporefront.Engine
             var changes = new List<StateChange>();
             var completedStacks = new List<Guid>();
 
-            foreach (var stackKvp in new Dictionary<Guid, StackCombat>(stackCombats))
+            stackCombatKeySnapshot.Clear();
+            stackCombatKeySnapshot.AddRange(stackCombats.Keys);
+            foreach (var stackID in stackCombatKeySnapshot)
             {
-                Guid stackID = stackKvp.Key;
-                StackCombat stackCombat = stackKvp.Value;
+                if (!stackCombats.TryGetValue(stackID, out var stackCombat)) continue;
 
                 if (stackCombat.isComplete)
                 {
@@ -2139,7 +2157,7 @@ namespace Sporefront.Engine
                                     ? loserArmy.currentPath[loserArmy.currentPath.Count - 1]
                                     : loserArmy.coordinate;
                                 changes.Add(new ArmyForcedRetreatChange { armyID = loserID, from = fromCoord, to = toCoord });
-                                DebugLog.Log(string.Format("Stack: Cross-tile defender {0} forced to retreat (not destroyed)", loserArmy.name));
+                                DebugLog.Log($"Stack: Cross-tile defender {loserArmy.name} forced to retreat (not destroyed)");
                             }
                         }
                         else
@@ -2178,11 +2196,7 @@ namespace Sporefront.Engine
                     CleanupCombatFlags(combat, state);
                     activeCombats.Remove(pairing.activeCombatID);
 
-                    DebugLog.Log(string.Format("Stack pairing ended: winner={0} loser={1} defenderQueue={2} attackerQueue={3}",
-                        result.winnerID.HasValue ? result.winnerID.Value.ToString().Substring(0, 8) : "nil",
-                        result.loserID.HasValue ? result.loserID.Value.ToString().Substring(0, 8) : "nil",
-                        stackCombat.defenderQueue.Count,
-                        stackCombat.attackerQueue.Count));
+                    DebugLog.Log($"Stack pairing ended: winner={( result.winnerID.HasValue ? result.winnerID.Value.ToString().Substring(0, 8) : "nil")} loser={(result.loserID.HasValue ? result.loserID.Value.ToString().Substring(0, 8) : "nil")} defenderQueue={stackCombat.defenderQueue.Count} attackerQueue={stackCombat.attackerQueue.Count}");
 
                     // Chain: Winner engages next fresh enemy or reinforces an ally
                     if (result.winnerID.HasValue)
@@ -2192,10 +2206,7 @@ namespace Sporefront.Engine
 
                         bool winnerIsAttacker = pairing.attackerArmyID == winnerID;
                         ArmyData winnerArmy = state.GetArmy(winnerID);
-                        DebugLog.Log(string.Format("Stack chain: winnerIsAttacker={0} winnerUnits={1} winnerExists={2}",
-                            winnerIsAttacker,
-                            winnerArmy != null ? winnerArmy.GetTotalUnits() : -1,
-                            winnerArmy != null));
+                        DebugLog.Log($"Stack chain: winnerIsAttacker={winnerIsAttacker} winnerUnits={(winnerArmy != null ? winnerArmy.GetTotalUnits() : -1)} winnerExists={winnerArmy != null}");
 
                         if (winnerIsAttacker)
                         {
@@ -2203,15 +2214,12 @@ namespace Sporefront.Engine
                             DefensiveStackEntry? nextDefender = stackCombat.DequeueNextDefender();
                             if (nextDefender.HasValue)
                             {
-                                DebugLog.Log(string.Format("Stack chain: dequeued next defender {0} exists={1}",
-                                    nextDefender.Value.armyID.ToString().Substring(0, 8),
-                                    state.GetArmy(nextDefender.Value.armyID) != null));
+                                DebugLog.Log($"Stack chain: dequeued next defender {nextDefender.Value.armyID.ToString().Substring(0, 8)} exists={state.GetArmy(nextDefender.Value.armyID) != null}");
                                 StateChange combatChange = CreateStackPairing(stackCombat, winnerID, nextDefender.Value, currentTime, state);
                                 if (combatChange != null)
                                 {
                                     changes.Add(combatChange);
-                                    DebugLog.Log(string.Format("Stack chain: {0} engages next defender - NEW pairing created",
-                                        state.GetArmy(winnerID)?.name ?? "Winner"));
+                                    DebugLog.Log($"Stack chain: {state.GetArmy(winnerID)?.name ?? "Winner"} engages next defender - NEW pairing created");
                                 }
                                 else
                                 {
@@ -2229,7 +2237,7 @@ namespace Sporefront.Engine
                                         // No more defenders in queue -- reinforce an ally's fight
                                         allyCombat.AddReinforcement(winnerArmy, true);
                                         winnerArmy.isInCombat = true;
-                                        DebugLog.Log(string.Format("Stack chain: {0} reinforcing ally", winnerArmy.name));
+                                        DebugLog.Log($"Stack chain: {winnerArmy.name} reinforcing ally");
                                     }
                                 }
                                 else
@@ -2265,9 +2273,7 @@ namespace Sporefront.Engine
 
                 // Check for tier advancement
                 int activePairingsRemaining = stackCombat.activePairings.Count(p => !p.isComplete);
-                DebugLog.Log(string.Format("Stack status: totalPairings={0} active={1} defenderQueue={2} attackerQueue={3}",
-                    stackCombat.activePairings.Count, activePairingsRemaining,
-                    stackCombat.defenderQueue.Count, stackCombat.attackerQueue.Count));
+                DebugLog.Log($"Stack status: totalPairings={stackCombat.activePairings.Count} active={activePairingsRemaining} defenderQueue={stackCombat.defenderQueue.Count} attackerQueue={stackCombat.attackerQueue.Count}");
 
                 if (activePairingsRemaining == 0 && stackCombat.defenderQueue.Count == 0)
                 {
@@ -2283,17 +2289,13 @@ namespace Sporefront.Engine
                         });
 
                         // Start villager combats for remaining attackers
-                        var survivingAttackers = stackCombat.activePairings
-                            .Where(p => p.winnerArmyID.HasValue)
-                            .Select(p => p.winnerArmyID.Value)
-                            .Where(id => !stackCombat.defeatedArmyIDs.Contains(id) && !stackCombat.retreatedArmyIDs.Contains(id))
-                            .ToList();
+                        Guid? firstSurvivingAttacker = FindFirstSurvivingAttacker(stackCombat);
 
                         foreach (Guid villagerGroupID in stackCombat.villagerGroupIDs)
                         {
-                            if (survivingAttackers.Count > 0)
+                            if (firstSurvivingAttacker.HasValue)
                             {
-                                Guid attackerID = survivingAttackers[0];
+                                Guid attackerID = firstSurvivingAttacker.Value;
                                 StateChange villagerChange = StartVillagerCombat(attackerID, villagerGroupID, currentTime);
                                 if (villagerChange != null)
                                 {
@@ -2311,24 +2313,20 @@ namespace Sporefront.Engine
                         completedStacks.Add(stackID);
 
                         // Auto-attack building at location if attackers won
-                        var survivingAttackers = stackCombat.activePairings
-                            .Where(p => p.winnerArmyID.HasValue)
-                            .Select(p => p.winnerArmyID.Value)
-                            .Where(id => !stackCombat.defeatedArmyIDs.Contains(id) && !stackCombat.retreatedArmyIDs.Contains(id))
-                            .ToList();
+                        Guid? survivingAttacker = FindFirstSurvivingAttacker(stackCombat);
 
-                        if (survivingAttackers.Count > 0)
+                        if (survivingAttacker.HasValue)
                         {
-                            AutoStartBuildingCombat(survivingAttackers[0], stackCombat.coordinate, state, currentTime, changes);
+                            AutoStartBuildingCombat(survivingAttacker.Value, stackCombat.coordinate, state, currentTime, changes);
                         }
 
                         var overallResult = new CombatResultData(
-                            winnerID: survivingAttackers.Count > 0 ? (Guid?)survivingAttackers[0] : null,
+                            winnerID: survivingAttacker,
                             loserID: null,
                             combatDuration: currentTime - stackCombat.startTime
                         );
                         changes.Add(new StackCombatEndedChange { coordinate = stackCombat.coordinate, result = overallResult });
-                        DebugLog.Log(string.Format("Stack combat completed at {0}", stackCombat.coordinate));
+                        DebugLog.Log($"Stack combat completed at {stackCombat.coordinate}");
                     }
                 }
             }
@@ -2485,7 +2483,7 @@ namespace Sporefront.Engine
                 if (combatChange != null)
                 {
                     changes.Add(combatChange);
-                    DebugLog.Log(string.Format("Stack reinforcement: {0} paired with queued attacker", army.name));
+                    DebugLog.Log($"Stack reinforcement: {army.name} paired with queued attacker");
                 }
             }
             // Priority 2: Reinforce an outnumbered active fight
@@ -2512,14 +2510,14 @@ namespace Sporefront.Engine
                     army.isInCombat = true;
                     army.combatTargetID = outnumberedPairing.attackerArmyID;
                     stackCombat.AddFront(armyID);
-                    DebugLog.Log(string.Format("Stack reinforcement: {0} reinforcing outnumbered defender", army.name));
+                    DebugLog.Log($"Stack reinforcement: {army.name} reinforcing outnumbered defender");
                 }
                 // Priority 3: Queue for later chain combat pickup
                 else
                 {
                     stackCombat.AddDefender(defenderEntry);
                     army.isInCombat = true;
-                    DebugLog.Log(string.Format("Stack reinforcement: {0} queued as reserve defender", army.name));
+                    DebugLog.Log($"Stack reinforcement: {army.name} queued as reserve defender");
                 }
             }
 
@@ -2713,18 +2711,17 @@ namespace Sporefront.Engine
             ArmyData army = state.GetArmy(armyID);
             if (army == null || !army.ownerID.HasValue)
             {
-                DebugLog.Log(string.Format("DEBUG: InitiateAutoRetreat - Army {0} not found in GameState or has no owner", armyID));
+                DebugLog.Log($"DEBUG: InitiateAutoRetreat - Army {armyID} not found in GameState or has no owner");
                 return null; // Army doesn't exist - nothing to retreat
             }
             Guid ownerID = army.ownerID.Value;
-            DebugLog.Log(string.Format("DEBUG: InitiateAutoRetreat - Processing army {0} at {1}, homeBaseID: {2}",
-                army.name, army.coordinate, army.homeBaseID.HasValue ? army.homeBaseID.Value.ToString() : "null"));
+            DebugLog.Log($"DEBUG: InitiateAutoRetreat - Processing army {army.name} at {army.coordinate}, homeBaseID: {(army.homeBaseID.HasValue ? army.homeBaseID.Value.ToString() : "null")}");
 
             // Clear entrenchment when retreating from combat loss
             if (army.isEntrenching || army.isEntrenched)
             {
                 army.ClearEntrenchment();
-                DebugLog.Log(string.Format("Army {0} entrenchment cancelled due to combat loss", army.name));
+                DebugLog.Log($"Army {army.name} entrenchment cancelled due to combat loss");
             }
 
             // Check if army is currently at their home base (lost a fight defending it)
@@ -2734,7 +2731,7 @@ namespace Sporefront.Engine
                 BuildingData homeBase = state.GetBuilding(army.homeBaseID.Value);
                 if (homeBase != null && homeBase.OccupiedCoordinates.Contains(army.coordinate))
                 {
-                    DebugLog.Log(string.Format("{0} staying to defend {1}", army.name, homeBase.buildingType.DisplayName()));
+                    DebugLog.Log($"{army.name} staying to defend {homeBase.buildingType.DisplayName()}");
                     return null;
                 }
             }
@@ -2764,8 +2761,7 @@ namespace Sporefront.Engine
                     retreatDestination = nearestBase.coordinate;
                     // Update army's home base reference
                     army.homeBaseID = nearestBase.id;
-                    DebugLog.Log(string.Format("{0} home base reassigned to {1}",
-                        army.name, nearestBase.buildingType.DisplayName()));
+                    DebugLog.Log($"{army.name} home base reassigned to {nearestBase.buildingType.DisplayName()}");
                 }
             }
 
@@ -2788,14 +2784,14 @@ namespace Sporefront.Engine
                     if (enemiesNearby.Count > 0) continue;
                     retreatDestination = neighbor;
                     path = new List<HexCoordinate> { neighbor };
-                    DebugLog.Log(string.Format("{0} scatter-retreating to {1}", army.name, neighbor));
+                    DebugLog.Log($"{army.name} scatter-retreating to {neighbor}");
                     break;
                 }
             }
 
             if (path == null || path.Count == 0)
             {
-                DebugLog.Log(string.Format("{0} cannot find any retreat path - surrounded", army.name));
+                DebugLog.Log($"{army.name} cannot find any retreat path - surrounded");
                 return null;
             }
 
@@ -2806,7 +2802,7 @@ namespace Sporefront.Engine
             army.movementProgress = 0.0;
 
             string buildingName = retreatBuilding != null ? retreatBuilding.buildingType.DisplayName() : "scatter";
-            DebugLog.Log(string.Format("{0} retreating to {1}", army.name, buildingName));
+            DebugLog.Log($"{army.name} retreating to {buildingName}");
 
             return path;
         }
@@ -3018,11 +3014,18 @@ namespace Sporefront.Engine
             var changes = new List<StateChange>();
             double deltaTime = GameConfig.EngineIntervals.CombatUpdate;
 
-            // Collect all poisoned armies (use ToList for safe iteration)
-            var allArmies = state.armies.Values;
-            if (allArmies == null) return changes;
+            // Check if any armies are poisoned before creating defensive copy
+            bool hasPoisoned = false;
+            foreach (var army in state.armies.Values)
+            {
+                if (army.activePoisonState != null) { hasPoisoned = true; break; }
+            }
+            if (!hasPoisoned) return changes;
 
-            foreach (var army in allArmies.ToList())
+            // Defensive copy needed: RemoveArmy modifies state.armies during iteration
+            poisonArmySnapshot.Clear();
+            poisonArmySnapshot.AddRange(state.armies.Values);
+            foreach (var army in poisonArmySnapshot)
             {
                 if (army.activePoisonState == null) continue;
                 if (army.isInCombat) continue; // Don't double-dip during active combat
@@ -3078,7 +3081,7 @@ namespace Sporefront.Engine
             if (damage <= 0) return;
 
             // Distribute damage across all unit types proportionally
-            var composition = army.militaryComposition.ToList();
+            var composition = army.militaryComposition;
             int totalUnits = army.GetTotalUnits();
             if (totalUnits <= 0) return;
 

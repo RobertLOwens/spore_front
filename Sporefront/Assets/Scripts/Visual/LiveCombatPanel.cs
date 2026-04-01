@@ -16,7 +16,7 @@ using Sporefront.Models.Combat;
 
 namespace Sporefront.Visual
 {
-    public class LiveCombatPanel : MonoBehaviour
+    public class LiveCombatPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -30,8 +30,6 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
-        private Guid localPlayerID;
         private Guid? trackedCombatID;
 
         // Cached UI references for rapid updates
@@ -88,10 +86,7 @@ namespace Sporefront.Visual
             panel.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
+        // UpdateLocalPlayerID inherited from SporefrontPanel
 
         // ================================================================
         // Public API
@@ -104,7 +99,7 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             trackedCombatID = null;
             panel.SetActive(false);
@@ -117,7 +112,7 @@ namespace Sporefront.Visual
             Rebuild(gameState);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Rebuild

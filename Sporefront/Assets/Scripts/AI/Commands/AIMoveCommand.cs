@@ -30,24 +30,16 @@ namespace Sporefront.AI.Commands
         {
             if (isArmy)
             {
-                var army = state.GetArmy(entityID);
-                if (army == null)
-                    return EngineCommandResult.Failure("Army not found");
-
-                if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                    return EngineCommandResult.Failure("Not your army");
+                var fail = ValidateOwnedArmy(state, entityID, out var army);
+                if (fail != null) return fail;
 
                 if (army.isInCombat)
                     return EngineCommandResult.Failure("Cannot move during combat");
             }
             else
             {
-                var group = state.GetVillagerGroup(entityID);
-                if (group == null)
-                    return EngineCommandResult.Failure("Villager group not found");
-
-                if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                    return EngineCommandResult.Failure("Not your villagers");
+                var fail = ValidateVillagerGroup(state, entityID, out _);
+                if (fail != null) return fail;
             }
 
             if (!state.mapData.IsValidCoordinate(destination))
@@ -84,8 +76,7 @@ namespace Sporefront.AI.Commands
                     path = path
                 });
 
-                DebugLog.Log(string.Format("AIMoveCommand: Army moving to ({0}, {1})",
-                    destination.q, destination.r));
+                DebugLog.Log($"AIMoveCommand: Army moving to ({destination.q}, {destination.r})");
             }
             else
             {

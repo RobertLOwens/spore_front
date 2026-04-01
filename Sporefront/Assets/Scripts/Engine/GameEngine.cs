@@ -84,7 +84,6 @@ namespace Sporefront.Engine
         // ================================================================
 
         private double lastTickTime;
-        private readonly double tickInterval = GameConfig.EngineIntervals.Tick;
 
         // ================================================================
         // Update Intervals
@@ -652,20 +651,24 @@ namespace Sporefront.Engine
             double elapsed = currentTime - gameState.gameStartTime;
             if (elapsed < GameConfig.Online.WinConditionGracePeriod) return StateChange.EmptyChanges;
 
-            var allPlayers = gameState.players.Values.ToList();
+            var allPlayers = gameState.players.Values;
 
             // Need at least 2 players for win conditions
             if (allPlayers.Count < 2) return StateChange.EmptyChanges;
 
-            // --- City Center Destroyed (Conquest mode only) ---
-            if (gameState.gameMode == GameMode.Conquest)
+            // Single pass over all players: check city center, update starvation, emit warnings
+            double checkInterval = winConditionCheckInterval;
+            var warnings = new List<StateChange>();
+            PlayerState starvationLoser = null;
+
+            foreach (var player in allPlayers)
             {
-                foreach (var player in allPlayers)
+                // --- City Center Destroyed (Conquest mode only) ---
+                if (gameState.gameMode == GameMode.Conquest)
                 {
                     var cityCenter = gameState.GetCityCenter(player.id);
                     if (cityCenter == null)
                     {
-                        // This player's city center is destroyed — find the opponent
                         var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
                         if (opponent != null)
                         {
@@ -682,12 +685,8 @@ namespace Sporefront.Engine
                         }
                     }
                 }
-            }
 
-            // --- Starvation (zero food for starvationThreshold seconds) ---
-            double checkInterval = winConditionCheckInterval;
-            foreach (var player in allPlayers)
-            {
+                // --- Starvation timer update ---
                 if (player.GetResource(Models.ResourceType.Food) <= 0)
                 {
                     if (!starvationTimers.ContainsKey(player.id))
@@ -698,52 +697,50 @@ namespace Sporefront.Engine
                 {
                     starvationTimers[player.id] = 0;
                 }
-            }
 
-            // Emit starvation warnings for players approaching the threshold
-            var warnings = new List<StateChange>();
-            foreach (var player in allPlayers)
-            {
+                // --- Starvation warnings and threshold check ---
                 double timer;
-                if (starvationTimers.TryGetValue(player.id, out timer) && timer > 0 && timer < starvationThreshold)
+                if (starvationTimers.TryGetValue(player.id, out timer) && timer > 0)
                 {
-                    double remaining = starvationThreshold - timer;
-                    // Warn at 45s, 30s, 15s, 10s, 5s marks (every check interval)
-                    if (remaining <= 45)
+                    if (timer < starvationThreshold)
                     {
-                        warnings.Add(new StarvationWarningChange
+                        double remaining = starvationThreshold - timer;
+                        if (remaining <= 45)
                         {
-                            playerID = player.id,
-                            secondsRemaining = remaining
-                        });
+                            warnings.Add(new StarvationWarningChange
+                            {
+                                playerID = player.id,
+                                secondsRemaining = remaining
+                            });
+                        }
+                    }
+                    else if (starvationLoser == null)
+                    {
+                        starvationLoser = player;
                     }
                 }
             }
 
-            foreach (var player in allPlayers)
+            // --- Resolve starvation game over (only if opponent is NOT also past threshold) ---
+            if (starvationLoser != null)
             {
-                double timer;
-                if (starvationTimers.TryGetValue(player.id, out timer) && timer >= starvationThreshold)
+                var opponent = allPlayers.FirstOrDefault(p => p.id != starvationLoser.id);
+                if (opponent != null)
                 {
-                    // Check that the opponent is NOT also starving past threshold
-                    var opponent = allPlayers.FirstOrDefault(p => p.id != player.id);
-                    if (opponent != null)
+                    double opponentTimer;
+                    starvationTimers.TryGetValue(opponent.id, out opponentTimer);
+                    if (opponentTimer < starvationThreshold)
                     {
-                        double opponentTimer;
-                        starvationTimers.TryGetValue(opponent.id, out opponentTimer);
-                        if (opponentTimer < starvationThreshold)
+                        gameState.isGameOver = true;
+                        return new List<StateChange>
                         {
-                            gameState.isGameOver = true;
-                            return new List<StateChange>
+                            new GameOverChange
                             {
-                                new GameOverChange
-                                {
-                                    reason = GameOverReason.Starvation.DisplayMessage(),
-                                    winnerID = opponent.id,
-                                    reasonType = GameOverReason.Starvation
-                                }
-                            };
-                        }
+                                reason = GameOverReason.Starvation.DisplayMessage(),
+                                winnerID = opponent.id,
+                                reasonType = GameOverReason.Starvation
+                            }
+                        };
                     }
                 }
             }

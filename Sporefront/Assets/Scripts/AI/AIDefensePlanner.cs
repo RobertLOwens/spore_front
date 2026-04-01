@@ -59,8 +59,7 @@ namespace Sporefront.AI
             aiState.previousThreatLevel = threatLevel;
 
             int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
-            bool hasBarracks = gameState.GetBuildingsForPlayer(playerID)
-                .Any(b => b.buildingType == BuildingType.Barracks && b.IsOperational);
+            bool hasBarracks = gameState.HasBuilding(playerID, BuildingType.Barracks, operationalOnly: true);
 
             // Comeback mechanic: CriticallyBehind lowers all thresholds and forces tower building
             bool isCriticallyBehind = aiState.gamePosition == GamePosition.CriticallyBehind;
@@ -158,18 +157,13 @@ namespace Sporefront.AI
             int ccLevel = cityCenter.level;
             if (ccLevel < buildingType.RequiredCityCenterLevel()) return null;
 
-            var cost = buildingType.BuildCost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (!player.CanAfford(buildingType.BuildCost())) return null;
 
             int maxDistance = buildingType == BuildingType.Tower ? 4 : 5;
             var location = FindDefenseBuildLocation(cityCenter.coordinate, maxDistance, gameState, playerID, buildingType, aiState.cachedChokepoints);
             if (!location.HasValue) return null;
 
-            DebugLog.Log(string.Format("AI building {0} at ({1}, {2}) for defense",
-                buildingType.DisplayName(), location.Value.q, location.Value.r));
+            DebugLog.Log($"AI building {buildingType.DisplayName()} at ({location.Value.q}, {location.Value.r}) for defense");
             return new AIBuildCommand(playerID, buildingType, location.Value, 0);
         }
 
@@ -177,6 +171,7 @@ namespace Sporefront.AI
         {
             var rng = new System.Random();
             var faction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
+            var defConfig = FactionAIConfig.Get(faction);
 
             for (int distance = 2; distance <= maxDistance; distance++)
             {
@@ -207,18 +202,16 @@ namespace Sporefront.AI
                     // Chokepoint bonus: defensive buildings near chokepoints are much more effective
                     score += AIStrategicAnalysis.GetChokepointBonus(coord, chokepoints);
 
-                    // Faction terrain preferences for defensive buildings
-                    if (faction == FactionType.Muscaria)
-                    {
-                        var terrain = gameState.mapData.GetTerrain(coord);
-                        if (terrain == TerrainType.Mountain) score += 2.0;
-                        else if (terrain == TerrainType.Hill) score += 1.5;
-                    }
-                    else if (faction == FactionType.Morel)
+                    // Faction terrain preferences for defensive buildings (data-driven)
+                    var terrain = gameState.mapData.GetTerrain(coord);
+                    double terrainBonus;
+                    if (terrain.HasValue && defConfig.TowerTerrainBonus.TryGetValue(terrain.Value, out terrainBonus))
+                        score += terrainBonus;
+                    if (defConfig.TowerForestBonus)
                     {
                         var rp = gameState.GetResourcePoint(coord);
                         if (rp != null && rp.resourceType == ResourcePointType.Trees)
-                            score += 1.5; // Towers near forests support camouflaged armies
+                            score += 1.5;
                     }
 
                     valid.Add((coord, score));
@@ -242,8 +235,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastGarrisonCheckTime < garrisonCheckInterval) return commands;
-            aiState.lastGarrisonCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastGarrisonCheckTime, currentTime, garrisonCheckInterval)) return commands;
 
             var defensiveTypes = new HashSet<BuildingType>
             {
@@ -259,8 +251,7 @@ namespace Sporefront.AI
             if (ungarrisonedDefenses.Count == 0) return commands;
 
             var idleArmies = gameState.GetArmiesForPlayer(playerID)
-                .Where(a => !a.isInCombat && a.currentPath == null && HasGarrisonableUnits(a))
-                .ToList();
+                .Where(a => !a.isInCombat && a.currentPath == null && HasGarrisonableUnits(a));
 
             var assignedBuildings = new HashSet<Guid>();
             foreach (var army in idleArmies)
@@ -273,7 +264,7 @@ namespace Sporefront.AI
                 {
                     commands.Add(new AIMoveCommand(playerID, army.id, targetBuilding.coordinate, true));
                     assignedBuildings.Add(targetBuilding.id);
-                    DebugLog.Log(string.Format("AI moving army to garrison {0}", targetBuilding.buildingType.DisplayName()));
+                    DebugLog.Log($"AI moving army to garrison {targetBuilding.buildingType.DisplayName()}");
                 }
             }
 
@@ -288,9 +279,8 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastEntrenchCheckTime < GameConfig.AI.Intervals.EntrenchCheck)
+            if (!AIHelper.ShouldExecute(ref aiState.lastEntrenchCheckTime, currentTime, GameConfig.AI.Intervals.EntrenchCheck))
                 return new List<IEngineCommand>();
-            aiState.lastEntrenchCheckTime = currentTime;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -315,31 +305,27 @@ namespace Sporefront.AI
             // Find idle armies near city center that could entrench
             // Faction-aware: prefer terrain that synergizes with faction bonuses
             var commands = new List<IEngineCommand>();
-            var faction = player.faction;
+            var entrenchConfig = FactionAIConfig.Get(player.faction);
             var candidates = armies
                 .Where(a => !a.isInCombat && a.currentPath == null && !a.isRetreating &&
                             !a.isEntrenched && !a.isEntrenching)
                 .Select(a => {
                     double score = -a.coordinate.Distance(cityCenter.coordinate); // Closer = higher
-                    if (faction == FactionType.Morel)
+                    // Faction terrain preferences for entrenchment (data-driven)
+                    double eTerrain;
+                    var eTile = gameState.mapData.GetTerrain(a.coordinate);
+                    if (eTile.HasValue && entrenchConfig.EntrenchTerrainBonus.TryGetValue(eTile.Value, out eTerrain))
+                        score += eTerrain;
+                    if (entrenchConfig.EntrenchForestBonus > 0)
                     {
-                        // Prefer forest tiles (camouflage + entrenchment = strong defense)
                         var rp = gameState.GetResourcePoint(a.coordinate);
                         if (rp != null && rp.resourceType == ResourcePointType.Trees)
-                            score += 3.0;
-                    }
-                    else if (faction == FactionType.Muscaria)
-                    {
-                        // Prefer mountain/hill (defense bonus + speed bonus for counterattack)
-                        var terrain = gameState.mapData.GetTerrain(a.coordinate);
-                        if (terrain == TerrainType.Mountain) score += 3.0;
-                        else if (terrain == TerrainType.Hill) score += 2.0;
+                            score += entrenchConfig.EntrenchForestBonus;
                     }
                     return (army: a, score: score);
                 })
                 .OrderByDescending(x => x.score)
-                .Select(x => x.army)
-                .ToList();
+                .Select(x => x.army);
 
             foreach (var army in candidates)
             {
@@ -352,8 +338,7 @@ namespace Sporefront.AI
                 if (alreadyEntrenched) continue;
 
                 commands.Add(new AIEntrenchCommand(playerID, army.id));
-                DebugLog.Log(string.Format("AI entrenching army {0} near city center (threat: {1})",
-                    army.name, (int)threatLevel));
+                DebugLog.Log($"AI entrenching army {army.name} near city center (threat: {(int)threatLevel})");
                 break; // One entrenchment command per cycle
             }
 

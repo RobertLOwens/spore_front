@@ -71,6 +71,10 @@ namespace Sporefront.Data
         private Dictionary<Guid, List<VillagerGroupData>> villagerGroupsByPlayer = new Dictionary<Guid, List<VillagerGroupData>>();
         [System.NonSerialized]
         private Dictionary<Guid, List<ScoutData>> scoutsByPlayer = new Dictionary<Guid, List<ScoutData>>();
+        [System.NonSerialized]
+        private Dictionary<Guid, BuildingData> cityCenterCache = new Dictionary<Guid, BuildingData>();
+        [System.NonSerialized]
+        private Dictionary<Guid, List<CommanderData>> commandersByPlayer = new Dictionary<Guid, List<CommanderData>>();
 
         // Enemy composition analysis cache (transient)
         [System.NonSerialized]
@@ -78,6 +82,13 @@ namespace Sporefront.Data
             new Dictionary<Guid, (EnemyCompositionAnalysis?, double)>();
         [System.NonSerialized]
         private readonly double enemyAnalysisCacheTTL = 0.5; // seconds
+
+        // Visible enemy buildings cache (transient)
+        [System.NonSerialized]
+        private Dictionary<Guid, (List<BuildingData> result, double timestamp)> visibleEnemyBuildingsCache =
+            new Dictionary<Guid, (List<BuildingData>, double)>();
+        [System.NonSerialized]
+        private readonly double visibleEnemyBuildingsCacheTTL = 0.5; // seconds
 
         public GameState(int mapWidth, int mapHeight)
         {
@@ -167,6 +178,7 @@ namespace Sporefront.Data
         public void AddBuilding(BuildingData building)
         {
             buildings[building.id] = building;
+            visibleEnemyBuildingsCache.Clear();
 
             // Register with map data
             mapData.RegisterBuilding(building.id, building.coordinate, building.OccupiedCoordinates);
@@ -185,12 +197,16 @@ namespace Sporefront.Data
                 }
                 playerBuildings.Add(building);
             }
+
+            if (building.buildingType == BuildingType.CityCenter && building.ownerID.HasValue)
+                cityCenterCache[building.ownerID.Value] = building;
         }
 
         public void RemoveBuilding(Guid id)
         {
             BuildingData building;
             if (!buildings.TryGetValue(id, out building)) return;
+            visibleEnemyBuildingsCache.Clear();
 
             // Reassign home bases for armies that had this building as home
             ReassignHomeBasesForDestroyedBuilding(id, building.ownerID);
@@ -205,6 +221,9 @@ namespace Sporefront.Data
                 if (buildingsByPlayer.TryGetValue(building.ownerID.Value, out playerBuildings))
                     playerBuildings.Remove(building);
             }
+
+            if (building.buildingType == BuildingType.CityCenter && building.ownerID.HasValue)
+                cityCenterCache.Remove(building.ownerID.Value);
 
             // Unregister from map data
             mapData.UnregisterBuilding(id);
@@ -304,15 +323,16 @@ namespace Sporefront.Data
             return GetArmyCountForHomeBase(buildingID) < capacity.Value;
         }
 
+        private static readonly HashSet<BuildingType> HomeBaseTypes = new HashSet<BuildingType>
+            { BuildingType.CityCenter, BuildingType.WoodenFort, BuildingType.Castle };
+
         public BuildingData FindHomeBaseWithCapacity(Guid playerID, HexCoordinate fromCoordinate, Guid? excludingBuildingID = null)
         {
-            var validTypes = new HashSet<BuildingType> { BuildingType.CityCenter, BuildingType.WoodenFort, BuildingType.Castle };
             var candidates = new List<BuildingData>();
 
-            foreach (var b in buildings.Values)
+            foreach (var b in GetBuildingsForPlayer(playerID))
             {
-                if (b.ownerID.HasValue && b.ownerID.Value == playerID &&
-                    validTypes.Contains(b.buildingType) &&
+                if (HomeBaseTypes.Contains(b.buildingType) &&
                     b.IsOperational &&
                     (!excludingBuildingID.HasValue || b.id != excludingBuildingID.Value))
                 {
@@ -331,13 +351,11 @@ namespace Sporefront.Data
 
         public BuildingData FindNearestHomeBase(Guid playerID, HexCoordinate fromCoordinate, HexCoordinate? excludingCoordinate = null)
         {
-            var validTypes = new HashSet<BuildingType> { BuildingType.CityCenter, BuildingType.WoodenFort, BuildingType.Castle };
             var candidates = new List<BuildingData>();
 
-            foreach (var b in buildings.Values)
+            foreach (var b in GetBuildingsForPlayer(playerID))
             {
-                if (b.ownerID.HasValue && b.ownerID.Value == playerID &&
-                    validTypes.Contains(b.buildingType) &&
+                if (HomeBaseTypes.Contains(b.buildingType) &&
                     b.IsOperational)
                 {
                     if (excludingCoordinate.HasValue && b.OccupiedCoordinates.Contains(excludingCoordinate.Value))
@@ -386,12 +404,36 @@ namespace Sporefront.Data
             return GetBuilding(buildingID.Value);
         }
 
-        public List<BuildingData> GetBuildingsForPlayer(Guid playerID)
+        private static readonly List<BuildingData> EmptyBuildingList = new List<BuildingData>();
+
+        public IReadOnlyList<BuildingData> GetBuildingsForPlayer(Guid playerID)
         {
             List<BuildingData> cached;
             if (buildingsByPlayer.TryGetValue(playerID, out cached))
-                return new List<BuildingData>(cached);
-            return new List<BuildingData>();
+                return cached;
+            return EmptyBuildingList;
+        }
+
+        public bool HasBuilding(Guid playerID, BuildingType type, bool operationalOnly = false)
+        {
+            var buildings = GetBuildingsForPlayer(playerID);
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                if (buildings[i].buildingType == type && (!operationalOnly || buildings[i].IsOperational))
+                    return true;
+            }
+            return false;
+        }
+
+        public BuildingData GetFirstBuilding(Guid playerID, BuildingType type, bool operationalOnly = false)
+        {
+            var buildings = GetBuildingsForPlayer(playerID);
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                if (buildings[i].buildingType == type && (!operationalOnly || buildings[i].IsOperational))
+                    return buildings[i];
+            }
+            return null;
         }
 
         // ================================================================
@@ -506,12 +548,14 @@ namespace Sporefront.Data
             return covered;
         }
 
-        public List<ArmyData> GetArmiesForPlayer(Guid playerID)
+        private static readonly List<ArmyData> EmptyArmyList = new List<ArmyData>();
+
+        public IReadOnlyList<ArmyData> GetArmiesForPlayer(Guid playerID)
         {
             List<ArmyData> cached;
             if (armiesByPlayer.TryGetValue(playerID, out cached))
-                return new List<ArmyData>(cached);
-            return new List<ArmyData>();
+                return cached;
+            return EmptyArmyList;
         }
 
         public void UpdateArmyPosition(Guid armyID, HexCoordinate to)
@@ -589,12 +633,14 @@ namespace Sporefront.Data
             return result;
         }
 
-        public List<VillagerGroupData> GetVillagerGroupsForPlayer(Guid playerID)
+        private static readonly List<VillagerGroupData> EmptyVillagerGroupList = new List<VillagerGroupData>();
+
+        public IReadOnlyList<VillagerGroupData> GetVillagerGroupsForPlayer(Guid playerID)
         {
             List<VillagerGroupData> cached;
             if (villagerGroupsByPlayer.TryGetValue(playerID, out cached))
-                return new List<VillagerGroupData>(cached);
-            return new List<VillagerGroupData>();
+                return cached;
+            return EmptyVillagerGroupList;
         }
 
         public void UpdateVillagerGroupPosition(Guid groupID, HexCoordinate to)
@@ -648,12 +694,14 @@ namespace Sporefront.Data
             return scouts.TryGetValue(id, out scout) ? scout : null;
         }
 
-        public List<ScoutData> GetScoutsForPlayer(Guid playerID)
+        private static readonly List<ScoutData> EmptyScoutList = new List<ScoutData>();
+
+        public IReadOnlyList<ScoutData> GetScoutsForPlayer(Guid playerID)
         {
             List<ScoutData> cached;
             if (scoutsByPlayer.TryGetValue(playerID, out cached))
-                return new List<ScoutData>(cached);
-            return new List<ScoutData>();
+                return cached;
+            return EmptyScoutList;
         }
 
         public void UpdateScoutPosition(Guid scoutID, HexCoordinate to)
@@ -710,6 +758,14 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(commander.ownerID.Value);
                 if (player != null) player.AddOwnedCommander(commander.id);
+
+                List<CommanderData> playerCommanders;
+                if (!commandersByPlayer.TryGetValue(commander.ownerID.Value, out playerCommanders))
+                {
+                    playerCommanders = new List<CommanderData>();
+                    commandersByPlayer[commander.ownerID.Value] = playerCommanders;
+                }
+                playerCommanders.Add(commander);
             }
         }
 
@@ -722,6 +778,10 @@ namespace Sporefront.Data
             {
                 var player = GetPlayer(commander.ownerID.Value);
                 if (player != null) player.RemoveOwnedCommander(id);
+
+                List<CommanderData> playerCommanders;
+                if (commandersByPlayer.TryGetValue(commander.ownerID.Value, out playerCommanders))
+                    playerCommanders.Remove(commander);
             }
 
             commanders.Remove(id);
@@ -733,15 +793,14 @@ namespace Sporefront.Data
             return commanders.TryGetValue(id, out commander) ? commander : null;
         }
 
-        public List<CommanderData> GetCommandersForPlayer(Guid playerID)
+        private static readonly List<CommanderData> EmptyCommanderList = new List<CommanderData>();
+
+        public IReadOnlyList<CommanderData> GetCommandersForPlayer(Guid playerID)
         {
-            var result = new List<CommanderData>();
-            foreach (var commander in commanders.Values)
-            {
-                if (commander.ownerID.HasValue && commander.ownerID.Value == playerID)
-                    result.Add(commander);
-            }
-            return result;
+            List<CommanderData> cached;
+            if (commandersByPlayer.TryGetValue(playerID, out cached))
+                return cached;
+            return EmptyCommanderList;
         }
 
         // ================================================================
@@ -763,10 +822,27 @@ namespace Sporefront.Data
         public List<ArmyData> GetEnemyArmiesInRange(HexCoordinate coordinate, int range, Guid playerID)
         {
             var result = new List<ArmyData>();
-            foreach (var army in armies.Values)
+            // For small ranges, use spatial lookup instead of scanning all armies
+            if (range <= 6)
             {
-                if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
-                if (army.coordinate.Distance(coordinate) <= range) result.Add(army);
+                foreach (var coord in coordinate.CoordinatesWithinRange(range))
+                {
+                    foreach (var armyId in mapData.GetArmyIDs(coord))
+                    {
+                        ArmyData army;
+                        if (!armies.TryGetValue(armyId, out army)) continue;
+                        if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
+                        result.Add(army);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var army in armies.Values)
+                {
+                    if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
+                    if (army.coordinate.Distance(coordinate) <= range) result.Add(army);
+                }
             }
             return result;
         }
@@ -828,16 +904,11 @@ namespace Sporefront.Data
 
         public int GetCityCenterLevel(Guid playerID)
         {
-            int maxLevel = 0;
-            foreach (var building in GetBuildingsForPlayer(playerID))
-            {
-                if (building.buildingType == BuildingType.CityCenter &&
-                    (building.state == BuildingState.Completed || building.state == BuildingState.Upgrading))
-                {
-                    if (building.level > maxLevel) maxLevel = building.level;
-                }
-            }
-            return maxLevel;
+            BuildingData cc;
+            if (cityCenterCache.TryGetValue(playerID, out cc) &&
+                (cc.state == BuildingState.Completed || cc.state == BuildingState.Upgrading))
+                return cc.level;
+            return 0;
         }
 
         // ================================================================
@@ -987,25 +1058,61 @@ namespace Sporefront.Data
         public List<ArmyData> GetEnemyArmies(HexCoordinate near, int range, Guid playerID)
         {
             var result = new List<ArmyData>();
-            foreach (var army in armies.Values)
+            // For small ranges, use spatial lookup instead of scanning all armies
+            if (range <= 6)
             {
-                if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
-
-                var status = GetDiplomacyStatus(playerID, army.ownerID.Value);
-                if (status != DiplomacyStatus.Enemy) continue;
-
-                if (army.coordinate.Distance(near) <= range) result.Add(army);
+                foreach (var coord in near.CoordinatesWithinRange(range))
+                {
+                    foreach (var armyId in mapData.GetArmyIDs(coord))
+                    {
+                        ArmyData army;
+                        if (!armies.TryGetValue(armyId, out army)) continue;
+                        if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
+                        var status = GetDiplomacyStatus(playerID, army.ownerID.Value);
+                        if (status != DiplomacyStatus.Enemy) continue;
+                        result.Add(army);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var army in armies.Values)
+                {
+                    if (!army.ownerID.HasValue || army.ownerID.Value == playerID) continue;
+                    var status = GetDiplomacyStatus(playerID, army.ownerID.Value);
+                    if (status != DiplomacyStatus.Enemy) continue;
+                    if (army.coordinate.Distance(near) <= range) result.Add(army);
+                }
             }
             return result;
         }
 
         public List<BuildingData> GetUndefendedBuildings(Guid playerID)
         {
+            // Pre-compute all coordinates defended by garrison buildings (O(n * r) where r = defense range)
+            var defendedCoords = new HashSet<HexCoordinate>();
+            foreach (var building in GetBuildingsForPlayer(playerID))
+            {
+                if (!building.CanProvideGarrisonDefense || !building.IsOperational) continue;
+                int defenseRange = building.GarrisonDefenseRange;
+                foreach (var coord in building.OccupiedCoordinates)
+                {
+                    foreach (var covered in coord.CoordinatesWithinRange(defenseRange))
+                        defendedCoords.Add(covered);
+                }
+            }
+
+            // Check each building: if ANY of its tiles are in the defended set, it's protected
             var result = new List<BuildingData>();
             foreach (var building in GetBuildingsForPlayer(playerID))
             {
-                if (!IsBuildingProtected(building.id) && building.IsOperational)
-                    result.Add(building);
+                if (!building.IsOperational) continue;
+                bool isProtected = false;
+                foreach (var coord in building.OccupiedCoordinates)
+                {
+                    if (defendedCoords.Contains(coord)) { isProtected = true; break; }
+                }
+                if (!isProtected) result.Add(building);
             }
             return result;
         }
@@ -1049,6 +1156,14 @@ namespace Sporefront.Data
             var player = GetPlayer(playerID);
             if (player == null) return new List<BuildingData>();
 
+            // Check cache
+            (List<BuildingData> result, double timestamp) cached;
+            if (visibleEnemyBuildingsCache.TryGetValue(playerID, out cached) &&
+                currentTime - cached.timestamp < visibleEnemyBuildingsCacheTTL)
+            {
+                return cached.result;
+            }
+
             var result = new List<BuildingData>();
             foreach (var building in buildings.Values)
             {
@@ -1064,16 +1179,16 @@ namespace Sporefront.Data
                 }
                 if (isVisible) result.Add(building);
             }
+
+            visibleEnemyBuildingsCache[playerID] = (result, currentTime);
             return result;
         }
 
         public BuildingData GetCityCenter(Guid playerID)
         {
-            foreach (var building in GetBuildingsForPlayer(playerID))
-            {
-                if (building.buildingType == BuildingType.CityCenter && building.IsOperational)
-                    return building;
-            }
+            BuildingData cached;
+            if (cityCenterCache.TryGetValue(playerID, out cached) && cached.IsOperational)
+                return cached;
             return null;
         }
 
@@ -1312,10 +1427,8 @@ namespace Sporefront.Data
             {
                 double civilianRate = civilianCount * baseRate;
                 double militaryRate = militaryCount * baseRate;
-                double civMultiplier = player.GetResearchBonusMultiplier(
-                    ResearchBonusType.FoodConsumption.ToString());
-                double milMultiplier = player.GetResearchBonusMultiplier(
-                    ResearchBonusType.MilitaryFoodConsumption.ToString());
+                double civMultiplier = player.GetResearchBonusMultiplier(ResearchBonusType.FoodConsumption);
+                double milMultiplier = player.GetResearchBonusMultiplier(ResearchBonusType.MilitaryFoodConsumption);
 
                 var commanders = GetCommandersForPlayer(playerID);
                 int bestRationing = 0;

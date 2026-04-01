@@ -31,35 +31,13 @@ namespace Sporefront.AI.Commands
 
         private double GetTerrainCostMultiplier(GameState state)
         {
-            var occupiedCoords = buildingType.GetOccupiedCoordinates(coordinate, rotation);
-            bool hasMountain = occupiedCoords.Any(c => state.mapData.GetTerrain(c) == TerrainType.Mountain);
-            bool hasHighland = hasMountain || occupiedCoords.Any(c =>
-            {
-                var t = state.mapData.GetTerrain(c);
-                return t == TerrainType.Hill;
-            });
-            double multiplier = hasMountain ? GameConfig.Terrain.MountainBuildingCostMultiplier : 1.0;
-
-            // Apply faction mountain building cost reduction on highland terrain
-            if (hasHighland)
-            {
-                var player = state.GetPlayer(PlayerID);
-                if (player != null)
-                {
-                    double reduction = player.faction.MountainBuildCostReduction();
-                    if (reduction > 0)
-                        multiplier *= (1.0 - reduction);
-                }
-            }
-
-            return multiplier;
+            return BuildHelper.GetTerrainCostMultiplier(state, buildingType, coordinate, rotation, PlayerID);
         }
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Check faction-exclusive building restrictions
             if (buildingType.IsFactionExclusive() && buildingType.ExclusiveFaction() != player.faction)
@@ -78,9 +56,7 @@ namespace Sporefront.AI.Commands
                 return EngineCommandResult.Failure("Cannot build at this location");
 
             // Require an idle villager — AI must assign a builder just like the player does
-            var hasIdleVillager = state.GetVillagerGroupsForPlayer(PlayerID)
-                .Any(g => g.currentTask.IsIdle && g.currentPath == null);
-            if (!hasIdleVillager)
+            if (BuildHelper.FindNearestIdleVillager(state, PlayerID, coordinate) == null)
                 return EngineCommandResult.Failure("No idle villager available to build");
 
             return EngineCommandResult.Success(new List<StateChange>());
@@ -88,9 +64,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct resources with terrain multiplier
             double costMultiplier = GetTerrainCostMultiplier(state);
@@ -115,14 +90,10 @@ namespace Sporefront.AI.Commands
             });
 
             // Find nearest idle villager to dispatch as builder (validated to exist)
-            var idleVillagers = state.GetVillagerGroupsForPlayer(PlayerID)
-                .Where(g => g.currentTask.IsIdle && g.currentPath == null)
-                .OrderBy(g => g.coordinate.Distance(coordinate))
-                .ToList();
+            var builder = BuildHelper.FindNearestIdleVillager(state, PlayerID, coordinate);
 
-            if (idleVillagers.Count > 0)
+            if (builder != null)
             {
-                var builder = idleVillagers[0];
                 builder.AssignTask(new BuildingTask(building.id), coordinate, building.id);
 
                 if (builder.coordinate.Equals(coordinate))
@@ -169,7 +140,7 @@ namespace Sporefront.AI.Commands
                 return EngineCommandResult.Failure("No idle villager available to build");
             }
 
-            DebugLog.Log(string.Format("AI built {0} at ({1}, {2})", buildingType, coordinate.q, coordinate.r));
+            DebugLog.Log($"AI built {buildingType} at ({coordinate.q}, {coordinate.r})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

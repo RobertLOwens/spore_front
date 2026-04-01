@@ -39,8 +39,10 @@ namespace Sporefront.Visual
         // ================================================================
 
         public event Action OnNotificationClicked;
+#pragma warning disable CS0067 // Events subscribed to externally by UIManager
         public event Action OnCombatLogClicked;
         public event Action OnSettingsClicked;
+#pragma warning restore CS0067
         public event Action OnMainMenuClicked;
         public event Action OnIdleVillagerClicked;
 

@@ -42,8 +42,7 @@ namespace Sporefront.AI
                 };
 
                 var militaryBuildings = gameState.GetBuildingsForPlayer(playerID)
-                    .Where(b => militaryBuildingTypes.Contains(b.buildingType) && b.IsOperational && b.trainingQueue.Count == 0)
-                    .ToList();
+                    .Where(b => militaryBuildingTypes.Contains(b.buildingType) && b.IsOperational && b.trainingQueue.Count == 0);
 
                 bool trainedThisCycle = false;
                 foreach (var building in militaryBuildings)
@@ -120,13 +119,7 @@ namespace Sporefront.AI
 
             foreach (var unitType in trainableUnits)
             {
-                var trainingCost = unitType.TrainingCost();
-                bool canAfford = true;
-                foreach (var kvp in trainingCost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value)) { canAfford = false; break; }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(unitType.TrainingCost())) continue;
 
                 double score = ScoreUnitTraining(unitType, enemyAnalysis, ownComposition, player, gameState, playerID, gameTime, targetComp, aiState.gamePosition, aiState.siegeRequired && !aiState.siegeReady);
 
@@ -292,22 +285,19 @@ namespace Sporefront.AI
                     score -= 30.0;
             }
 
-            // Faction unit preferences
-            var faction = player.faction;
-            if (faction == FactionType.Morel)
+            // Faction unit preferences (data-driven via FactionAIConfig)
+            var factionConfig = FactionAIConfig.Get(player.faction);
+            double catBias;
+            if (factionConfig.UnitCategoryBias.TryGetValue(category, out catBias))
             {
-                if (category == UnitCategory.Infantry) score += 6.0;
-                if (unitType == MilitaryUnitType.Scout) score += 5.0; // +1 vision makes scouts more valuable
-                if (category == UnitCategory.Cavalry && unitType != MilitaryUnitType.Scout) score -= 5.0;
-                if (category == UnitCategory.Siege) score -= 5.0;
+                // Scouts are exempt from negative cavalry bias
+                if (unitType == MilitaryUnitType.Scout && catBias < 0)
+                    catBias = 0;
+                score += catBias;
             }
-            else if (faction == FactionType.Muscaria)
-            {
-                if (category == UnitCategory.Ranged) score += 6.0;
-                if (category == UnitCategory.Siege) score += 6.0;
-                if (category == UnitCategory.Infantry) score -= 4.0;
-                if (category == UnitCategory.Cavalry && unitType != MilitaryUnitType.Scout) score -= 4.0;
-            }
+            double typeBias;
+            if (factionConfig.UnitTypeBias.TryGetValue(unitType, out typeBias))
+                score += typeBias;
 
             // Feature 4: Comeback — favor cheap units when behind
             if (gamePosition == GamePosition.Behind || gamePosition == GamePosition.CriticallyBehind)
@@ -384,8 +374,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastPatrolTime < 8.0) return commands;
-            aiState.lastPatrolTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastPatrolTime, currentTime, 8.0)) return commands;
 
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return commands;
@@ -464,8 +453,7 @@ namespace Sporefront.AI
             if (gameState.controlZones == null || gameState.controlZones.Count == 0)
                 return commands;
 
-            if (currentTime - aiState.lastZoneContestTime < 5.0) return commands;
-            aiState.lastZoneContestTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastZoneContestTime, currentTime, 5.0)) return commands;
 
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return commands;
@@ -811,16 +799,16 @@ namespace Sporefront.AI
                 scores.Add(new TargetScore(building.id, building.coordinate, score, true));
             }
 
-            // Muscaria aggression: poison DoT makes attacking armies more valuable
-            var attackerFaction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
-            if (attackerFaction == FactionType.Muscaria)
+            // Faction aggression bonus for army targets (e.g. Muscaria poison DoT)
+            var attackerConfig = FactionAIConfig.Get(gameState.GetPlayer(playerID)?.faction ?? FactionType.None);
+            if (attackerConfig.ArmyTargetBonus > 0)
             {
                 for (int i = 0; i < scores.Count; i++)
                 {
                     if (!scores[i].isBuilding)
                     {
                         var s = scores[i];
-                        s.score += 8.0;
+                        s.score += attackerConfig.ArmyTargetBonus;
                         scores[i] = s;
                     }
                 }
@@ -904,8 +892,7 @@ namespace Sporefront.AI
                 if (!wasSiegeRequired)
                 {
                     aiState.siegeRequirementDetectedTime = gameState.currentTime;
-                    DebugLog.Log(string.Format("AI {0}: Siege required — {1} defensive buildings detected, need {2} siege units",
-                        playerID, totalDefensive, aiState.requiredSiegeCount));
+                    DebugLog.Log($"AI {playerID}: Siege required — {totalDefensive} defensive buildings detected, need {aiState.requiredSiegeCount} siege units");
                 }
             }
             else
@@ -934,8 +921,7 @@ namespace Sporefront.AI
             aiState.siegeReady = siegeCount >= aiState.requiredSiegeCount;
 
             if (aiState.siegeReady && !wasReady)
-                DebugLog.Log(string.Format("AI {0}: Siege ready — {1}/{2} siege units built",
-                    playerID, siegeCount, aiState.requiredSiegeCount));
+                DebugLog.Log($"AI {playerID}: Siege ready — {siegeCount}/{aiState.requiredSiegeCount} siege units built");
         }
 
         // ================================================================
@@ -1038,8 +1024,7 @@ namespace Sporefront.AI
                 new AIMoveCommand(playerID, flankArmy.id, bestFlankPos.Value, true)
             };
 
-            DebugLog.Log(string.Format("AI {0}: Flanking attack — main to ({1},{2}), flank to ({3},{4})",
-                playerID, target.q, target.r, bestFlankPos.Value.q, bestFlankPos.Value.r));
+            DebugLog.Log($"AI {playerID}: Flanking attack — main to ({target.q},{target.r}), flank to ({bestFlankPos.Value.q},{bestFlankPos.Value.r})");
 
             return commands;
         }
@@ -1093,8 +1078,7 @@ namespace Sporefront.AI
             aiState.feintInProgress = true;
             aiState.lastFeintAttemptTime = currentTime;
 
-            DebugLog.Log(string.Format("AI {0}: Feint initiated — sending {1}-unit army toward enemy CC at ({2},{3})",
-                playerID, feintArmy.GetTotalUnits(), enemyCC.q, enemyCC.r));
+            DebugLog.Log($"AI {playerID}: Feint initiated — sending {feintArmy.GetTotalUnits()}-unit army toward enemy CC at ({enemyCC.q},{enemyCC.r})");
 
             return commands;
         }
@@ -1139,19 +1123,19 @@ namespace Sporefront.AI
                             && a.id != feintArmy.id && !IsScoutArmy(a)
                             && !aiState.activeRaidArmies.Contains(a.id)
                             && a.GetTotalUnits() >= 5)
-                        .OrderByDescending(a => a.GetTotalUnits())
-                        .ToList();
+                        .OrderByDescending(a => a.GetTotalUnits());
 
+                    int mainArmyCount = 0;
                     foreach (var army in mainArmies)
                     {
                         // Send to opposite approach, then they'll path to enemy CC
                         commands.Add(new AIMoveCommand(playerID, army.id, oppositeApproach, true));
+                        mainArmyCount++;
                     }
 
-                    if (mainArmies.Count > 0)
+                    if (mainArmyCount > 0)
                     {
-                        DebugLog.Log(string.Format("AI {0}: Feint successful! Enemy responded — sending {1} armies from opposite direction ({2},{3})",
-                            playerID, mainArmies.Count, oppositeApproach.q, oppositeApproach.r));
+                        DebugLog.Log($"AI {playerID}: Feint successful! Enemy responded — sending {mainArmyCount} armies from opposite direction ({oppositeApproach.q},{oppositeApproach.r})");
                     }
                 }
 
@@ -1204,8 +1188,7 @@ namespace Sporefront.AI
             // Priority 1: Nearest friendly fort or tower within 8 tiles
             var defensiveBuildings = gameState.GetBuildingsForPlayer(playerID)
                 .Where(b => (b.buildingType == BuildingType.WoodenFort || b.buildingType == BuildingType.Tower ||
-                             b.buildingType == BuildingType.Castle) && b.IsOperational)
-                .ToList();
+                             b.buildingType == BuildingType.Castle) && b.IsOperational);
 
             BuildingData bestDefense = null;
             int bestDefenseDist = int.MaxValue;
@@ -1315,20 +1298,23 @@ namespace Sporefront.AI
                     {
                         aiState.knownEnemyBases.Add(building.coordinate);
                         aiState.enemyBaseFound = true;
-                        DebugLog.Log(string.Format("AI {0}: Found enemy base at ({1}, {2})", playerID, building.coordinate.q, building.coordinate.r));
+                        DebugLog.Log($"AI {playerID}: Found enemy base at ({building.coordinate.q}, {building.coordinate.r})");
                     }
                 }
             }
 
             // Feature 1: Early game deliberate scouting — send ANY fast army to explore
-            if (!aiState.earlyScoutDispatched && gameState.currentTime < 120.0 && gameState.currentTime >= GameConfig.AI.Scouting.EarlyScoutTime)
+            if (!aiState.earlyScoutDispatched && gameState.currentTime < GameConfig.AI.Scouting.EarlyScoutWindow && gameState.currentTime >= GameConfig.AI.Scouting.EarlyScoutTime)
             {
                 // Find the fastest idle army (prefer scouts, but use any army)
-                var earlyScoutCandidate = gameState.GetArmiesForPlayer(playerID)
-                    .Where(a => !a.isInCombat && a.currentPath == null && a.GetTotalUnits() <= 5)
-                    .OrderByDescending(a => IsScoutArmy(a) ? 1 : 0)
-                    .ThenByDescending(a => IsFastArmy(a) ? 1 : 0)
-                    .FirstOrDefault();
+                ArmyData earlyScoutCandidate = null;
+                int bestScore = -1;
+                foreach (var a in gameState.GetArmiesForPlayer(playerID))
+                {
+                    if (a.isInCombat || a.currentPath != null || a.GetTotalUnits() > GameConfig.AI.Hunting.MaxScoutCandidateUnits) continue;
+                    int score = (IsScoutArmy(a) ? 2 : 0) + (IsFastArmy(a) ? 1 : 0);
+                    if (score > bestScore) { bestScore = score; earlyScoutCandidate = a; }
+                }
 
                 if (earlyScoutCandidate != null)
                 {
@@ -1340,14 +1326,13 @@ namespace Sporefront.AI
 
                     commands.Add(new AIMoveCommand(playerID, earlyScoutCandidate.id, target.Value, true));
                     aiState.earlyScoutDispatched = true;
-                    DebugLog.Log(string.Format("AI {0}: Early scout dispatched to ({1},{2})", playerID, target.Value.q, target.Value.r));
+                    DebugLog.Log($"AI {playerID}: Early scout dispatched to ({target.Value.q},{target.Value.r})");
                 }
             }
 
             // Find scout armies
             var scoutArmies = gameState.GetArmiesForPlayer(playerID)
-                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null)
-                .ToList();
+                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null);
 
             foreach (var scout in scoutArmies)
             {
@@ -1520,8 +1505,7 @@ namespace Sporefront.AI
             aiState.activeRaidArmies.Add(raider.id);
             aiState.lastRaidTime = currentTime;
 
-            DebugLog.Log(string.Format("AI {0}: Sending raid party ({1} units) to ({2},{3})",
-                playerID, raider.GetTotalUnits(), raidTarget.q, raidTarget.r));
+            DebugLog.Log($"AI {playerID}: Sending raid party ({raider.GetTotalUnits()} units) to ({raidTarget.q},{raidTarget.r})");
 
             return commands;
         }
@@ -1563,8 +1547,7 @@ namespace Sporefront.AI
                     // Retreat toward our CC
                     commands.Add(new AIMoveCommand(playerID, army.id, cityCenter.coordinate, true));
                     toRemove.Add(raidArmyID);
-                    DebugLog.Log(string.Format("AI {0}: Raid party fleeing from ({1},{2})",
-                        playerID, army.coordinate.q, army.coordinate.r));
+                    DebugLog.Log($"AI {playerID}: Raid party fleeing from ({army.coordinate.q},{army.coordinate.r})");
                 }
             }
 
@@ -1804,7 +1787,7 @@ namespace Sporefront.AI
             }
 
             aiState.lastMultiObjectiveTime = currentTime;
-            DebugLog.Log(string.Format("AI {0}: Multi-objective attack with {1} armies", playerID, Math.Min(3, idleArmies.Count)));
+            DebugLog.Log($"AI {playerID}: Multi-objective attack with {Math.Min(3, idleArmies.Count)} armies");
 
             return commands;
         }
@@ -1902,9 +1885,9 @@ namespace Sporefront.AI
 
             if (aiState.rallyPoints.Count > 0)
             {
-                DebugLog.Log(string.Format("AI {0}: Computed {1} rally points", playerID, aiState.rallyPoints.Count));
+                DebugLog.Log($"AI {playerID}: Computed {aiState.rallyPoints.Count} rally points");
                 foreach (var rp in aiState.rallyPoints)
-                    DebugLog.Log(string.Format("   Rally point at ({0},{1})", rp.q, rp.r));
+                    DebugLog.Log($"   Rally point at ({rp.q},{rp.r})");
             }
         }
 
@@ -1922,8 +1905,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastMergeCheckTime < 5.0) return commands;
-            aiState.lastMergeCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastMergeCheckTime, currentTime, 5.0)) return commands;
 
             var idleArmies = gameState.GetArmiesForPlayer(playerID)
                 .Where(a => !a.isInCombat && a.currentPath == null && !IsScoutArmy(a)
@@ -1970,9 +1952,7 @@ namespace Sporefront.AI
                         merged.Add(sourceID);
                         merged.Add(targetID);
 
-                        DebugLog.Log(string.Format("AI {0}: Merging armies ({1}+{2} units) at ({3},{4})",
-                            playerID, armyA.GetTotalUnits(), armyB.GetTotalUnits(),
-                            armyA.coordinate.q, armyA.coordinate.r));
+                        DebugLog.Log($"AI {playerID}: Merging armies ({armyA.GetTotalUnits()}+{armyB.GetTotalUnits()} units) at ({armyA.coordinate.q},{armyA.coordinate.r})");
                         break; // One merge per army per cycle
                     }
                     else if (distance <= 3)
@@ -2008,9 +1988,8 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastCommanderCheckTime < GameConfig.AI.Commander.CheckInterval)
+            if (!AIHelper.ShouldExecute(ref aiState.lastCommanderCheckTime, currentTime, GameConfig.AI.Commander.CheckInterval))
                 return commands;
-            aiState.lastCommanderCheckTime = currentTime;
 
             var commanders = gameState.GetCommandersForPlayer(playerID);
             if (commanders.Count == 0) return commands;
@@ -2062,9 +2041,7 @@ namespace Sporefront.AI
             if (bestCommander != null && bestArmy != null)
             {
                 commands.Add(new AIAssignCommanderCommand(playerID, bestCommander.id, bestArmy.id));
-                DebugLog.Log(string.Format("AI {0}: Reassigning commander {1} ({2}) to army at ({3},{4}) — improvement: {5:F0}",
-                    playerID, bestCommander.name, bestCommander.specialty.DisplayName(),
-                    bestArmy.coordinate.q, bestArmy.coordinate.r, bestImprovement));
+                DebugLog.Log($"AI {playerID}: Reassigning commander {bestCommander.name} ({bestCommander.specialty.DisplayName()}) to army at ({bestArmy.coordinate.q},{bestArmy.coordinate.r}) — improvement: {bestImprovement:F0}");
             }
 
             return commands;

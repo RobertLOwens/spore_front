@@ -59,6 +59,24 @@ namespace Sporefront.Visual
         private Dictionary<Guid, EntityRenderState> desiredStates = new Dictionary<Guid, EntityRenderState>();
         private List<Guid> toRemove = new List<Guid>();
 
+        // List pool: avoids allocating new List<EntityPlacement> per tile per frame
+        private Stack<List<EntityPlacement>> listPool = new Stack<List<EntityPlacement>>();
+
+        private List<EntityPlacement> RentList()
+        {
+            return listPool.Count > 0 ? listPool.Pop() : new List<EntityPlacement>();
+        }
+
+        private void ReturnAllLists()
+        {
+            foreach (var list in entitiesPerTile.Values)
+            {
+                list.Clear();
+                listPool.Push(list);
+            }
+            entitiesPerTile.Clear();
+        }
+
         // Movement interpolation state
         private Dictionary<Guid, MovementInterpolationState> movementStates =
             new Dictionary<Guid, MovementInterpolationState>();
@@ -68,6 +86,7 @@ namespace Sporefront.Visual
 
         // Building progress/HP bar state
         private Dictionary<Guid, BuildingBarVisuals> buildingBars = new Dictionary<Guid, BuildingBarVisuals>();
+        private readonly List<Guid> barKeyBuffer = new List<Guid>();
 
         // Fog of war filtering
         private Guid fogLocalPlayerID;
@@ -273,8 +292,8 @@ namespace Sporefront.Visual
 
         private void ComputeDesiredStates(GameState gameState)
         {
-            // Clear reusable collections
-            entitiesPerTile.Clear();
+            // Return pooled lists, then clear
+            ReturnAllLists();
             desiredStates.Clear();
             activelyMovingEntities.Clear();
 
@@ -301,7 +320,7 @@ namespace Sporefront.Visual
 
                 var coord = building.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
-                    entitiesPerTile[coord] = new List<EntityPlacement>();
+                    entitiesPerTile[coord] = RentList();
 
                 Color color = GetOwnerColor(building.ownerID, gameState);
 
@@ -377,7 +396,7 @@ namespace Sporefront.Visual
                         }
 
                         if (!entitiesPerTile.ContainsKey(oCoord))
-                            entitiesPerTile[oCoord] = new List<EntityPlacement>();
+                            entitiesPerTile[oCoord] = RentList();
 
                         // Deterministic ID for secondary tiles: XOR building ID with tile index
                         // to avoid Guid.NewGuid() churn causing constant GO destroy+recreate
@@ -409,7 +428,7 @@ namespace Sporefront.Visual
 
                 var coord = army.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
-                    entitiesPerTile[coord] = new List<EntityPlacement>();
+                    entitiesPerTile[coord] = RentList();
 
                 Color color = GetOwnerColor(army.ownerID, gameState);
 
@@ -438,7 +457,7 @@ namespace Sporefront.Visual
 
                 var coord = group.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
-                    entitiesPerTile[coord] = new List<EntityPlacement>();
+                    entitiesPerTile[coord] = RentList();
 
                 Color color = GetOwnerColor(group.ownerID, gameState);
 
@@ -465,7 +484,7 @@ namespace Sporefront.Visual
 
                 var coord = scout.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
-                    entitiesPerTile[coord] = new List<EntityPlacement>();
+                    entitiesPerTile[coord] = RentList();
 
                 Color color = GetOwnerColor(scout.ownerID, gameState);
 
@@ -497,7 +516,7 @@ namespace Sporefront.Visual
 
                 var coord = resource.coordinate;
                 if (!entitiesPerTile.ContainsKey(coord))
-                    entitiesPerTile[coord] = new List<EntityPlacement>();
+                    entitiesPerTile[coord] = RentList();
 
                 entitiesPerTile[coord].Add(new EntityPlacement
                 {
@@ -577,57 +596,8 @@ namespace Sporefront.Visual
                 if (army.currentPath != null && army.pathIndex < army.currentPath.Count &&
                     army.movementSpeed > 0 && desiredStates.ContainsKey(army.id))
                 {
-                    activelyMovingEntities.Add(army.id);
-                    var desired = desiredStates[army.id];
-                    var fromPos = desired.worldPosition; // tile-offset position at current coordinate
-                    var nextTileCenter = HexMetrics.HexToWorldPosition(army.currentPath[army.pathIndex]);
-                    // Apply same offset as armies get (upper-left for index 0)
-                    var typeOffset = new Vector3(desired.worldPosition.x - HexMetrics.HexToWorldPosition(army.coordinate).x,
-                                                 desired.worldPosition.y - HexMetrics.HexToWorldPosition(army.coordinate).y, 0f);
-                    var toPos = new Vector3(nextTileCenter.x + typeOffset.x, nextTileCenter.y + typeOffset.y, ZPosition);
-                    float t = Mathf.Clamp01((float)army.movementProgress);
-                    var interpolatedPos = Vector3.Lerp(fromPos, toPos, t);
-
-                    desired.worldPosition = interpolatedPos;
-                    desiredStates[army.id] = desired;
-
-                    int remainingTiles = army.currentPath.Count - army.pathIndex;
-
-                    // Compute next tile position for cross-tile extrapolation
-                    Vector3 nextPos = Vector3.zero;
-                    if (army.pathIndex + 1 < army.currentPath.Count)
-                    {
-                        var nextCoord = army.currentPath[army.pathIndex + 1];
-                        var nextCenter = HexMetrics.HexToWorldPosition(nextCoord);
-                        nextPos = new Vector3(nextCenter.x + typeOffset.x, nextCenter.y + typeOffset.y, ZPosition);
-                    }
-
-                    // Only reset interpolation baseline when engine movement data actually changed
-                    bool engineUnchanged = movementStates.TryGetValue(army.id, out var existingState)
-                        && existingState.lastEngineProgress == army.movementProgress
-                        && existingState.fromPosition == fromPos
-                        && existingState.toPosition == toPos;
-
-                    if (engineUnchanged)
-                    {
-                        existingState.lastEngineSpeed = army.movementSpeed;
-                        existingState.remainingTiles = remainingTiles;
-                        existingState.nextTilePosition = nextPos;
-                        movementStates[army.id] = existingState;
-                    }
-                    else
-                    {
-                        movementStates[army.id] = new MovementInterpolationState
-                        {
-                            fromPosition = fromPos,
-                            toPosition = toPos,
-                            lastEngineProgress = army.movementProgress,
-                            lastEngineSpeed = army.movementSpeed,
-                            lastUpdateTime = now,
-                            remainingTiles = remainingTiles,
-                            nextTilePosition = nextPos
-                        };
-                    }
+                    InterpolateMovingEntity(army.id, army.coordinate, army.currentPath,
+                        army.pathIndex, army.movementProgress, army.movementSpeed, now);
                 }
             }
 
@@ -637,60 +607,12 @@ namespace Sporefront.Visual
                 if (group.currentPath != null && group.pathIndex < group.currentPath.Count &&
                     group.movementSpeed > 0 && desiredStates.ContainsKey(group.id))
                 {
-                    activelyMovingEntities.Add(group.id);
-                    var desired = desiredStates[group.id];
-                    var fromPos = desired.worldPosition;
-                    var nextTileCenter = HexMetrics.HexToWorldPosition(group.currentPath[group.pathIndex]);
-                    var typeOffset = new Vector3(desired.worldPosition.x - HexMetrics.HexToWorldPosition(group.coordinate).x,
-                                                 desired.worldPosition.y - HexMetrics.HexToWorldPosition(group.coordinate).y, 0f);
-                    var toPos = new Vector3(nextTileCenter.x + typeOffset.x, nextTileCenter.y + typeOffset.y, ZPosition);
-                    float t = Mathf.Clamp01((float)group.movementProgress);
-                    var interpolatedPos = Vector3.Lerp(fromPos, toPos, t);
-
-                    desired.worldPosition = interpolatedPos;
-                    desiredStates[group.id] = desired;
-
-                    int remainingTiles = group.currentPath.Count - group.pathIndex;
-
-                    // Compute next tile position for cross-tile extrapolation
-                    Vector3 nextPos = Vector3.zero;
-                    if (group.pathIndex + 1 < group.currentPath.Count)
-                    {
-                        var nextCoord = group.currentPath[group.pathIndex + 1];
-                        var nextCenter = HexMetrics.HexToWorldPosition(nextCoord);
-                        nextPos = new Vector3(nextCenter.x + typeOffset.x, nextCenter.y + typeOffset.y, ZPosition);
-                    }
-
-                    // Only reset interpolation baseline when engine movement data actually changed
-                    bool engineUnchanged = movementStates.TryGetValue(group.id, out var existingState)
-                        && existingState.lastEngineProgress == group.movementProgress
-                        && existingState.fromPosition == fromPos
-                        && existingState.toPosition == toPos;
-
-                    if (engineUnchanged)
-                    {
-                        existingState.lastEngineSpeed = group.movementSpeed;
-                        existingState.remainingTiles = remainingTiles;
-                        existingState.nextTilePosition = nextPos;
-                        movementStates[group.id] = existingState;
-                    }
-                    else
-                    {
-                        movementStates[group.id] = new MovementInterpolationState
-                        {
-                            fromPosition = fromPos,
-                            toPosition = toPos,
-                            lastEngineProgress = group.movementProgress,
-                            lastEngineSpeed = group.movementSpeed,
-                            lastUpdateTime = now,
-                            remainingTiles = remainingTiles,
-                            nextTilePosition = nextPos
-                        };
-                    }
+                    InterpolateMovingEntity(group.id, group.coordinate, group.currentPath,
+                        group.pathIndex, group.movementProgress, group.movementSpeed, now);
                 }
             }
 
-            // Scout movement interpolation
+            // Scout movement interpolation (simplified — no MovementInterpolationState tracking)
             foreach (var kvp in gameState.scouts)
             {
                 var scout = kvp.Value;
@@ -705,9 +627,7 @@ namespace Sporefront.Visual
                                                  desired.worldPosition.y - HexMetrics.HexToWorldPosition(scout.coordinate).y, 0f);
                     var toPos = new Vector3(nextTileCenter.x + typeOffset.x, nextTileCenter.y + typeOffset.y, ZPosition);
                     float t = Mathf.Clamp01((float)scout.movementProgress);
-                    var interpolatedPos = Vector3.Lerp(fromPos, toPos, t);
-
-                    desired.worldPosition = interpolatedPos;
+                    desired.worldPosition = Vector3.Lerp(fromPos, toPos, t);
                     desiredStates[scout.id] = desired;
                 }
             }
@@ -1058,8 +978,9 @@ namespace Sporefront.Visual
             float dt = Time.deltaTime;
 
             // Iterate over a snapshot of keys to allow struct mutation
-            var barKeys = new List<Guid>(buildingBars.Keys);
-            foreach (var id in barKeys)
+            barKeyBuffer.Clear();
+            barKeyBuffer.AddRange(buildingBars.Keys);
+            foreach (var id in barKeyBuffer)
             {
                 if (!buildingBars.TryGetValue(id, out var bars)) continue;
                 if (bars.hpFill == null) continue;
@@ -1428,6 +1349,65 @@ namespace Sporefront.Visual
             public bool isEntrenching;
             public BuildingType buildingType;
             public int buildingLevel;
+        }
+
+        /// <summary>
+        /// Shared interpolation logic for armies and villager groups.
+        /// Updates desired position, movement state, and actively-moving tracking.
+        /// </summary>
+        private void InterpolateMovingEntity(
+            Guid entityId, HexCoordinate coordinate, List<HexCoordinate> path,
+            int pathIndex, double movementProgress, double movementSpeed, double now)
+        {
+            activelyMovingEntities.Add(entityId);
+            var desired = desiredStates[entityId];
+            var fromPos = desired.worldPosition;
+            var nextTileCenter = HexMetrics.HexToWorldPosition(path[pathIndex]);
+            var typeOffset = new Vector3(
+                desired.worldPosition.x - HexMetrics.HexToWorldPosition(coordinate).x,
+                desired.worldPosition.y - HexMetrics.HexToWorldPosition(coordinate).y, 0f);
+            var toPos = new Vector3(nextTileCenter.x + typeOffset.x, nextTileCenter.y + typeOffset.y, ZPosition);
+            float t = Mathf.Clamp01((float)movementProgress);
+            desired.worldPosition = Vector3.Lerp(fromPos, toPos, t);
+            desiredStates[entityId] = desired;
+
+            int remainingTiles = path.Count - pathIndex;
+
+            // Compute next tile position for cross-tile extrapolation
+            Vector3 nextPos = Vector3.zero;
+            if (pathIndex + 1 < path.Count)
+            {
+                var nextCoord = path[pathIndex + 1];
+                var nextCenter = HexMetrics.HexToWorldPosition(nextCoord);
+                nextPos = new Vector3(nextCenter.x + typeOffset.x, nextCenter.y + typeOffset.y, ZPosition);
+            }
+
+            // Only reset interpolation baseline when engine movement data actually changed
+            bool engineUnchanged = movementStates.TryGetValue(entityId, out var existingState)
+                && existingState.lastEngineProgress == movementProgress
+                && existingState.fromPosition == fromPos
+                && existingState.toPosition == toPos;
+
+            if (engineUnchanged)
+            {
+                existingState.lastEngineSpeed = movementSpeed;
+                existingState.remainingTiles = remainingTiles;
+                existingState.nextTilePosition = nextPos;
+                movementStates[entityId] = existingState;
+            }
+            else
+            {
+                movementStates[entityId] = new MovementInterpolationState
+                {
+                    fromPosition = fromPos,
+                    toPosition = toPos,
+                    lastEngineProgress = movementProgress,
+                    lastEngineSpeed = movementSpeed,
+                    lastUpdateTime = now,
+                    remainingTiles = remainingTiles,
+                    nextTilePosition = nextPos
+                };
+            }
         }
 
         private struct MovementInterpolationState

@@ -13,7 +13,7 @@ using Sporefront.Engine;
 
 namespace Sporefront.Visual
 {
-    public class MainMenuPanel : MonoBehaviour
+    public class MainMenuPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -77,7 +77,7 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             RefreshUsername();
             ShowMainPage();
@@ -105,12 +105,12 @@ namespace Sporefront.Visual
             }
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         public void SetRejoinVisible(bool visible)
         {

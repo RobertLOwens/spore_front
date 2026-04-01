@@ -80,20 +80,7 @@ namespace Sporefront.Commands
             }
 
             // Deduct resources and emit state changes
-            foreach (var kvp in RecruitCost)
-            {
-                int oldAmount = player.GetResource(kvp.Key);
-                player.RemoveResource(kvp.Key, kvp.Value);
-                int newAmount = player.GetResource(kvp.Key);
-
-                changeBuilder.Add(new ResourcesChangedChange
-                {
-                    playerID = PlayerID,
-                    resourceType = kvp.Key.ToString(),
-                    oldAmount = oldAmount,
-                    newAmount = newAmount
-                });
-            }
+            DeductResourcesWithChanges(player, RecruitCost, changeBuilder);
 
             // Create commander
             var commander = new CommanderData(
@@ -112,27 +99,12 @@ namespace Sporefront.Commands
             });
 
             // Deploy commander as a standalone army at the recruiting building
-            HexCoordinate spawnCoord = recruitBuilding != null
+            HexCoordinate baseCoord = recruitBuilding != null
                 ? recruitBuilding.coordinate
                 : state.GetCityCenter(PlayerID)?.coordinate ?? new HexCoordinate(0, 0);
 
-            // Find a walkable spawn tile if the building tile is full
-            var armiesAtSpawn = state.GetArmies(spawnCoord);
-            if (armiesAtSpawn.Count >= GameConfig.Stacking.MaxEntitiesPerTile)
-            {
-                foreach (var neighbor in spawnCoord.Neighbors())
-                {
-                    if (state.mapData.IsValidCoordinate(neighbor) && state.mapData.IsWalkable(neighbor))
-                    {
-                        var armiesAtNeighbor = state.GetArmies(neighbor);
-                        if (armiesAtNeighbor.Count < GameConfig.Stacking.MaxEntitiesPerTile)
-                        {
-                            spawnCoord = neighbor;
-                            break;
-                        }
-                    }
-                }
-            }
+            var spawnResult = FindSpawnPosition(state, baseCoord, c => state.GetArmies(c).Count);
+            HexCoordinate spawnCoord = spawnResult ?? baseCoord;
 
             // Create army with commander assigned
             var army = new ArmyData(commander.name + "'s Company", spawnCoord, PlayerID);

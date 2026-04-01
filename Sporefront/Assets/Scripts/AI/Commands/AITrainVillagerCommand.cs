@@ -25,19 +25,14 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your building");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (!building.CanTrainVillagers())
                 return EngineCommandResult.Failure("Cannot train villagers here");
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             if (!player.HasResource(ResourceType.Food, 50 * quantity))
                 return EngineCommandResult.Failure("Insufficient food");
@@ -47,10 +42,11 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            var player = state.GetPlayer(PlayerID);
-            if (building == null || player == null)
-                return EngineCommandResult.Failure("Not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
+
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct food
             player.RemoveResource(ResourceType.Food, 50 * quantity);
@@ -65,7 +61,7 @@ namespace Sporefront.AI.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("AI training {0} villagers", quantity));
+            DebugLog.Log($"AI training {quantity} villagers");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
