@@ -234,8 +234,98 @@ namespace Sporefront.AI
                     aiState.currentState, cityCenter != null, buildingCount, villagerCount,
                     player.GetResource(ResourceType.Food)));
 
+                // One-time strategic map analysis (chokepoints + map strategy)
+                if (!aiState.mapAnalyzed)
+                {
+                    aiState.cachedChokepoints = AIStrategicAnalysis.AnalyzeChokepoints(gameState, playerID);
+                    aiState.mapStrategy = AIStrategicAnalysis.DetermineMapStrategy(gameState, playerID);
+                    aiState.currentBuildOrder = BuildOrder.ForStrategy(aiState.mapStrategy);
+
+                    // Detect enemy faction and generate counter-strategy
+                    foreach (var otherPlayer in gameState.players.Values)
+                    {
+                        if (otherPlayer.id == playerID) continue;
+                        var dipStatus = gameState.GetDiplomacyStatus(playerID, otherPlayer.id);
+                        if (dipStatus == DiplomacyStatus.Enemy)
+                        {
+                            aiState.factionStrategy = AIStrategicAnalysis.GetFactionCounterStrategy(otherPlayer.faction);
+                            DebugLog.Log(string.Format("AI {0}: Faction counter-strategy — {1}",
+                                player.name, aiState.factionStrategy.Value.description));
+                            break;
+                        }
+                    }
+
+                    aiState.mapAnalyzed = true;
+                    DebugLog.Log(string.Format("AI {0}: Map analysis complete — strategy={1}, chokepoints={2}",
+                        player.name, AIStrategicAnalysis.DescribeStrategy(aiState.mapStrategy),
+                        aiState.cachedChokepoints.Count));
+                    foreach (var cp in aiState.cachedChokepoints)
+                    {
+                        DebugLog.Log(string.Format("   Chokepoint at ({0},{1}), width={2}",
+                            cp.center.q, cp.center.r, cp.width));
+                    }
+                }
+
+                // Compute rally points once (after map analysis and enemy base discovery)
+                if (aiState.mapAnalyzed && !aiState.rallyPointsComputed)
+                    militaryPlanner.ComputeRallyPoints(aiState, gameState);
+                // Recompute rally points when we discover new enemy bases
+                if (aiState.rallyPointsComputed && aiState.knownEnemyBases.Count > 0)
+                {
+                    int expectedRallyCount = aiState.rallyPoints.Count;
+                    if (expectedRallyCount == 0 || (aiState.knownEnemyBases.Count > 0 && expectedRallyCount < 2))
+                        militaryPlanner.ComputeRallyPoints(aiState, gameState);
+                }
+
+                // Update threat memory with visible enemy positions
+                militaryPlanner.UpdateThreatMemory(aiState, gameState, currentTime);
+
                 // Update enemy analysis cache
                 militaryPlanner.UpdateEnemyAnalysis(aiState, gameState, currentTime);
+
+                // Feature 2: Analyze enemy strategy (greed detection) every 15 seconds
+                if (currentTime - aiState.lastEnemyStrategyTime >= 15.0)
+                {
+                    var prevStrategy = aiState.enemyStrategy;
+                    aiState.enemyStrategy = AIStrategicAnalysis.AnalyzeEnemyStrategy(gameState, playerID);
+                    aiState.lastEnemyStrategyTime = currentTime;
+                    if (aiState.enemyStrategy != prevStrategy && aiState.enemyStrategy != EnemyStrategyRead.Unknown)
+                        DebugLog.Log(string.Format("AI {0}: Enemy strategy detected — {1}", player.name, aiState.enemyStrategy));
+                }
+
+                // Feature 4: Assess game position (comeback mechanics) every 15 seconds
+                if (currentTime - aiState.lastPositionAssessTime >= 15.0)
+                {
+                    var prevPosition = aiState.gamePosition;
+                    aiState.gamePosition = AIStrategicAnalysis.AssessGamePosition(gameState, playerID);
+                    aiState.lastPositionAssessTime = currentTime;
+                    if (aiState.gamePosition != prevPosition)
+                        DebugLog.Log(string.Format("AI {0}: Game position — {1}", player.name, aiState.gamePosition));
+                }
+
+                // Round 4: Update exploration percentage
+                militaryPlanner.UpdateExplorationPercent(aiState, gameState, currentTime);
+
+                // Round 4: Check build order milestones (adaptive timing)
+                economyPlanner.CheckBuildOrderMilestones(aiState, gameState, currentTime);
+
+                // Round 4: Evaluate siege requirement when enemy strategy is known
+                if (aiState.enemyStrategy != EnemyStrategyRead.Unknown)
+                {
+                    militaryPlanner.EvaluateSiegeRequirement(aiState, gameState);
+                    militaryPlanner.CheckSiegeReadiness(aiState, gameState);
+                }
+
+                // Round 4: Update dynamic counter composition every 15s
+                if (currentTime - aiState.lastCompositionAdaptTime >= GameConfig.AI.Composition.AdaptInterval)
+                {
+                    if (aiState.lastEnemyAnalysis.HasValue)
+                    {
+                        aiState.dynamicTargetComposition = AIStrategicAnalysis.GenerateCounterComposition(
+                            aiState.lastEnemyAnalysis.Value, aiState.mapStrategy, aiState.currentState);
+                        aiState.lastCompositionAdaptTime = currentTime;
+                    }
+                }
 
                 // Update AI state machine
                 UpdateState(aiState, gameState, currentTime);
@@ -272,20 +362,54 @@ namespace Sporefront.AI
             double threatLevel = gameState.GetThreatLevel(cityCenter.coordinate, playerID);
             int ourStrength = gameState.GetMilitaryStrength(playerID);
             double ourWeightedStrength = gameState.GetWeightedMilitaryStrength(playerID);
-            var nearbyEnemies = gameState.GetEnemyArmies(cityCenter.coordinate, 5, playerID);
+            // Faction adaptation: widen alert radius if facing stealth-capable factions
+            int alertRadius = 5;
+            if (aiState.factionStrategy.HasValue)
+                alertRadius += aiState.factionStrategy.Value.alertRadiusBonus;
+            var nearbyEnemies = gameState.GetEnemyArmies(cityCenter.coordinate, alertRadius, playerID);
 
             var armies = gameState.GetArmiesForPlayer(playerID);
             bool armyNeedsRetreat = false;
+            int retreatDist = genome != null ? genome.retreatDistanceFromBase : 3;
             foreach (var army in armies)
             {
                 int distanceFromBase = army.coordinate.Distance(cityCenter.coordinate);
                 bool isLocallyOutnumbered = gameState.IsArmyLocallyOutnumbered(army, playerID);
 
-                if (isLocallyOutnumbered && distanceFromBase > 3)
+                if (isLocallyOutnumbered && distanceFromBase > retreatDist)
                 {
                     armyNeedsRetreat = true;
                     break;
                 }
+
+                // Retreat if army is severely depleted (unit count below threshold)
+                int unitThresh = genome != null ? genome.retreatUnitThreshold : 5;
+                if (army.GetTotalUnits() > 0 && army.GetTotalUnits() < unitThresh && distanceFromBase > retreatDist)
+                {
+                    armyNeedsRetreat = true;
+                    break;
+                }
+            }
+
+            // Feature 2: Greedy punishment — rush when enemy has no military
+            if (aiState.enemyStrategy == EnemyStrategyRead.Greedy
+                && ourWeightedStrength >= 1000
+                && aiState.currentState != AIState.Attack && aiState.currentState != AIState.Defense)
+            {
+                aiState.currentState = AIState.Attack;
+                aiState.attackStateEnteredTime = currentTime;
+                aiState.lastAttackProgressTime = currentTime;
+                aiState.lastKnownEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
+                DebugLog.Log(string.Format("AI {0}: -> Attack (PUNISHING GREEDY PLAY — enemy has no military)", playerID));
+            }
+
+            // Feature 4: CriticallyBehind — force defensive posture
+            if (aiState.gamePosition == GamePosition.CriticallyBehind
+                && aiState.currentState == AIState.Attack)
+            {
+                aiState.currentState = AIState.Retreat;
+                aiState.persistentAttackTargetID = null;
+                DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (critically behind — conserving forces)", playerID));
             }
 
             switch (aiState.currentState)
@@ -354,6 +478,16 @@ namespace Sporefront.AI
                     else if (ourWeightedStrength < 500 || armyNeedsRetreat)
                     {
                         aiState.currentState = AIState.Retreat;
+                        // Feature 2: Mark current battle location as defeat site in threat memory
+                        if (nearbyEnemies.Count > 0)
+                        {
+                            var defeatCoord = nearbyEnemies[0].coordinate;
+                            int enemyStrength = 0;
+                            foreach (var e in nearbyEnemies) enemyStrength += e.GetTotalUnits();
+                            aiState.threatMemory[defeatCoord] = new ThreatMemoryEntry(
+                                defeatCoord, nearbyEnemies[0].ownerID ?? Guid.Empty,
+                                enemyStrength, currentTime, true);
+                        }
                         DebugLog.Log(string.Format("AI {0}: Defense -> Retreat (too weak or outnumbered)", playerID));
                     }
                     break;
@@ -361,7 +495,9 @@ namespace Sporefront.AI
                 case AIState.Attack:
                     // Attack timeout: check if making progress
                     double currentEnemyStrength = gameState.AnalyzeEnemyComposition(playerID)?.weightedStrength ?? 0;
-                    if (aiState.lastKnownEnemyStrength - currentEnemyStrength >= 100)
+                    // Relative progress: 10% reduction counts as progress (scales with enemy strength)
+                    double progressThreshold = Math.Max(50.0, aiState.lastKnownEnemyStrength * 0.1);
+                    if (aiState.lastKnownEnemyStrength - currentEnemyStrength >= progressThreshold)
                     {
                         aiState.lastAttackProgressTime = currentTime;
                         aiState.lastKnownEnemyStrength = currentEnemyStrength;
@@ -388,6 +524,12 @@ namespace Sporefront.AI
                     else if (armyNeedsRetreat)
                     {
                         aiState.currentState = AIState.Retreat;
+                        // Feature 2: Mark last attack target as defeat site
+                        if (aiState.lastAttackTarget.HasValue)
+                        {
+                            aiState.threatMemory[aiState.lastAttackTarget.Value] = new ThreatMemoryEntry(
+                                aiState.lastAttackTarget.Value, Guid.Empty, 0, currentTime, true);
+                        }
                         DebugLog.Log(string.Format("AI {0}: Attack -> Retreat (army in danger)", playerID));
                     }
                     break;
@@ -408,6 +550,28 @@ namespace Sporefront.AI
             var playerID = aiState.playerID;
             double ourWeightedStrength = gameState.GetWeightedMilitaryStrength(playerID);
             if (ourWeightedStrength < 2000) return false;
+
+            // Round 4: Don't attack blind — require minimum map knowledge
+            if (!aiState.enemyBaseFound && aiState.mapExplorationPercent < GameConfig.AI.Scouting.MinExplorationBeforeAttack)
+                return false;
+
+            // Round 4: Siege intelligence — delay attack until siege is ready (with timeout)
+            if (aiState.siegeRequired && !aiState.siegeReady)
+            {
+                double waitTime = gameState.currentTime - aiState.siegeRequirementDetectedTime;
+                if (waitTime < GameConfig.AI.Siege.SiegeWaitTimeout)
+                    return false; // Still waiting for siege
+            }
+
+            // Feature 2: Threat memory — check if enemy army has recently moved away,
+            // creating a window of opportunity for attack
+            var opportunity = militaryPlanner.FindOpportunityWindow(aiState, gameState, gameState.currentTime);
+            if (opportunity.HasValue && ourWeightedStrength >= 1500)
+            {
+                DebugLog.Log(string.Format("AI {0}: Opportunity window detected at ({1},{2}) — enemy moved away",
+                    playerID, opportunity.Value.q, opportunity.Value.r));
+                return true; // Attack even at lower threshold when enemy is out of position
+            }
 
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return false;
@@ -450,15 +614,20 @@ namespace Sporefront.AI
                     ourRangedRatio /= totalOurUnits;
                     ourInfantryRatio /= totalOurUnits;
 
-                    if (analysis.cavalryRatio > 0.35 && ourInfantryRatio > 0.3)
+                    // Use genome thresholds when available, fall back to defaults
+                    double cavThresh = genome != null ? genome.counterCavalryThreshold : 0.35;
+                    double rngThresh = genome != null ? genome.counterRangedThreshold : 0.4;
+                    double infThresh = genome != null ? genome.counterInfantryThreshold : 0.4;
+
+                    if (analysis.cavalryRatio > cavThresh && ourInfantryRatio > 0.3)
                         compositionModifier += 0.2;
-                    if (analysis.rangedRatio > 0.35 && ourCavalryRatio > 0.3)
+                    if (analysis.rangedRatio > rngThresh && ourCavalryRatio > 0.3)
                         compositionModifier += 0.2;
-                    if (analysis.infantryRatio > 0.4 && ourRangedRatio > 0.3)
+                    if (analysis.infantryRatio > infThresh && ourRangedRatio > 0.3)
                         compositionModifier += 0.15;
-                    if (ourCavalryRatio > 0.35 && analysis.infantryRatio > 0.3)
+                    if (ourCavalryRatio > cavThresh && analysis.infantryRatio > 0.3)
                         compositionModifier -= 0.2;
-                    if (ourRangedRatio > 0.35 && analysis.cavalryRatio > 0.3)
+                    if (ourRangedRatio > rngThresh && analysis.cavalryRatio > 0.3)
                         compositionModifier -= 0.2;
                 }
             }
@@ -468,7 +637,26 @@ namespace Sporefront.AI
             double effectiveStrength = ourWeightedStrength * compositionModifier;
             double ratio = effectiveStrength / Math.Max(1.0, enemyWeightedStrength);
 
-            return ratio >= aiState.difficulty.AttackThreshold();
+            // Faction counter-strategy: adjust attack threshold
+            double attackThreshold = aiState.difficulty.AttackThreshold();
+            if (aiState.factionStrategy.HasValue)
+            {
+                // Negative aggressionModifier = more defensive = higher threshold needed
+                // Positive aggressionModifier = more aggressive = lower threshold needed
+                attackThreshold -= aiState.factionStrategy.Value.aggressionModifier;
+            }
+
+            // Feature 2: Turtle detection — require much higher strength vs turtles
+            if (aiState.enemyStrategy == EnemyStrategyRead.Turtle)
+                attackThreshold *= 1.5;
+
+            // Feature 4: Comeback — don't attack when behind unless very strong
+            if (aiState.gamePosition == GamePosition.Behind)
+                attackThreshold += 0.5;
+            else if (aiState.gamePosition == GamePosition.CriticallyBehind)
+                return false; // Never initiate attacks when critically behind
+
+            return ratio >= attackThreshold;
         }
 
         // ================================================================
@@ -584,6 +772,17 @@ namespace Sporefront.AI
         {
             var commands = new List<IEngineCommand>();
 
+            // Feature 3: Villager flee runs in ALL states — always protect economy
+            commands.AddRange(economyPlanner.GenerateVillagerFleeCommands(aiState, gameState, currentTime));
+
+            // Feature 1: Army merging runs in most states
+            if (aiState.currentState != AIState.Defense) // Don't merge during active defense
+                commands.AddRange(militaryPlanner.GenerateMergeCommands(aiState, gameState, currentTime));
+
+            // Round 4: Commander utilization runs in most states
+            if (aiState.currentState != AIState.Retreat)
+                commands.AddRange(militaryPlanner.GenerateCommanderCommands(aiState, gameState, currentTime));
+
             switch (aiState.currentState)
             {
                 case AIState.Peace:
@@ -592,9 +791,21 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateStagingCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateIdleArmyCommands(aiState, gameState, currentTime));
+                    if (gameState.gameMode.UsesControlZones())
+                        commands.AddRange(militaryPlanner.GenerateZoneContestCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidFleeCommands(aiState, gameState, currentTime));
+                    // Round 4: Expansion timing — second CC
+                    commands.AddRange(economyPlanner.GenerateExpansionTimingCommands(aiState, gameState, currentTime));
+                    // Round 4: Resource denial / map control
+                    commands.AddRange(economyPlanner.GenerateMapControlCommands(aiState, gameState, currentTime));
+                    // Feature 2: Passive detection — expand more aggressively
+                    if (aiState.enemyStrategy == EnemyStrategyRead.Passive)
+                        commands.AddRange(economyPlanner.GenerateExpansionCommands(aiState, gameState, currentTime));
                     break;
 
                 case AIState.Alert:
@@ -602,36 +813,67 @@ namespace Sporefront.AI
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateStagingCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateIdleArmyCommands(aiState, gameState, currentTime));
+                    if (gameState.gameMode.UsesControlZones())
+                        commands.AddRange(militaryPlanner.GenerateZoneContestCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateGarrisonCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateEntrenchmentCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidFleeCommands(aiState, gameState, currentTime));
+                    // Round 4: Resource denial in Alert too
+                    commands.AddRange(economyPlanner.GenerateMapControlCommands(aiState, gameState, currentTime));
                     break;
 
                 case AIState.Defense:
                     commands.AddRange(militaryPlanner.GenerateDefenseCommands(aiState, gameState, currentTime));
                     commands.AddRange(militaryPlanner.GenerateMilitaryCommands(aiState, gameState, currentTime));
+                    if (gameState.gameMode.UsesControlZones())
+                        commands.AddRange(militaryPlanner.GenerateZoneContestCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateDefensiveBuildingCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateGarrisonCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateEntrenchmentCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidFleeCommands(aiState, gameState, currentTime));
                     break;
 
                 case AIState.Attack:
-                    commands.AddRange(militaryPlanner.GenerateAttackCommands(aiState, gameState, currentTime));
+                    // Round 4: Feint — try diversion before committing main force
+                    var feintCmds = militaryPlanner.GenerateFeintCommands(aiState, gameState, currentTime);
+                    if (feintCmds.Count > 0)
+                    {
+                        commands.AddRange(feintCmds);
+                    }
+                    else
+                    {
+                        // Feature 4: Multi-objective attack when 3+ armies available
+                        var multiObjCmds = militaryPlanner.GenerateMultiObjectiveAttack(aiState, gameState, currentTime);
+                        if (multiObjCmds.Count > 0)
+                            commands.AddRange(multiObjCmds);
+                        else
+                            commands.AddRange(militaryPlanner.GenerateAttackCommands(aiState, gameState, currentTime));
+                    }
                     commands.AddRange(militaryPlanner.GenerateScoutingCommands(aiState, gameState, currentTime));
+                    if (gameState.gameMode.UsesControlZones())
+                        commands.AddRange(militaryPlanner.GenerateZoneContestCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateEconomyCommands(aiState, gameState, currentTime));
                     commands.AddRange(economyPlanner.GenerateUpgradeCommands(aiState, gameState, currentTime));
                     commands.AddRange(researchPlanner.GenerateResearchCommands(aiState, gameState, currentTime));
                     commands.AddRange(defensePlanner.GenerateGarrisonCommands(aiState, gameState, currentTime));
                     commands.AddRange(GenerateUnitUpgradeCommands(aiState, gameState, currentTime));
+                    // Feature 1: Raids during attack (harass while main force pushes)
+                    commands.AddRange(militaryPlanner.GenerateRaidCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidFleeCommands(aiState, gameState, currentTime));
                     break;
 
                 case AIState.Retreat:
                     commands.AddRange(militaryPlanner.GenerateRetreatCommands(aiState, gameState, currentTime));
+                    commands.AddRange(militaryPlanner.GenerateRaidFleeCommands(aiState, gameState, currentTime));
                     break;
             }
 

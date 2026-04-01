@@ -487,7 +487,7 @@ namespace Sporefront.Visual
             detailLE.preferredHeight = 18;
 
             // Click to select
-            var cardBtn = card.AddComponent<Button>();
+            var cardBtn = card.gameObject.AddComponent<Button>();
             cardBtn.transition = Selectable.Transition.ColorTint;
             cardBtn.colors = UIHelper.CardButtonColors(SporefrontColors.ParchmentDark);
 

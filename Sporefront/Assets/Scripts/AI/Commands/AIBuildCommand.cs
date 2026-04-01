@@ -9,9 +9,10 @@ namespace Sporefront.AI.Commands
 {
     /// <summary>
     /// Port of AIBuildCommand from AIController.swift.
-    /// Build a structure: validate resources + location, deduct cost, place building as Planning,
-    /// dispatch nearest idle villager to build site. If villager is on-site, start construction
-    /// immediately. If no path found or no idle villager, start construction without (graceful fallback).
+    /// Build a structure: validate resources + location + idle villager availability,
+    /// deduct cost, place building as Planning, dispatch nearest idle villager to build site.
+    /// If villager is on-site, start construction immediately. If no path found, cancel and refund.
+    /// AI must have an idle villager to build — no fallback construction without a builder.
     /// The terrain cost multiplier applies if any occupied coordinate is Mountain.
     /// </summary>
     public class AIBuildCommand : BaseEngineCommand
@@ -76,6 +77,12 @@ namespace Sporefront.AI.Commands
             if (!state.CanBuildAt(coordinate, PlayerID))
                 return EngineCommandResult.Failure("Cannot build at this location");
 
+            // Require an idle villager — AI must assign a builder just like the player does
+            var hasIdleVillager = state.GetVillagerGroupsForPlayer(PlayerID)
+                .Any(g => g.currentTask.IsIdle && g.currentPath == null);
+            if (!hasIdleVillager)
+                return EngineCommandResult.Failure("No idle villager available to build");
+
             return EngineCommandResult.Success(new List<StateChange>());
         }
 
@@ -107,7 +114,7 @@ namespace Sporefront.AI.Commands
                 rotation = rotation
             });
 
-            // Find nearest idle villager to dispatch as builder
+            // Find nearest idle villager to dispatch as builder (validated to exist)
             var idleVillagers = state.GetVillagerGroupsForPlayer(PlayerID)
                 .Where(g => g.currentTask.IsIdle && g.currentPath == null)
                 .OrderBy(g => g.coordinate.Distance(coordinate))
@@ -134,18 +141,32 @@ namespace Sporefront.AI.Commands
                     }
                     else
                     {
-                        // No path found -- start anyway as fallback
-                        building.StartConstruction(state.currentTime, 1);
+                        // No path found -- cancel the build, refund resources
                         builder.ClearTask();
-                        changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                        state.RemoveBuilding(building.id);
+                        var buildCostRefund = buildingType.BuildCost();
+                        double refundMultiplier = GetTerrainCostMultiplier(state);
+                        foreach (var kvp in buildCostRefund)
+                        {
+                            int adjustedAmount = (int)Math.Ceiling(kvp.Value * refundMultiplier);
+                            player.AddResource(kvp.Key, adjustedAmount, int.MaxValue);
+                        }
+                        return EngineCommandResult.Failure("No path to build site");
                     }
                 }
             }
             else
             {
-                // No idle villager -- start construction without one (graceful fallback)
-                building.StartConstruction(state.currentTime, 1);
-                changeBuilder.Add(new BuildingConstructionStartedChange { buildingID = building.id });
+                // Should not reach here — Validate checks for idle villagers
+                state.RemoveBuilding(building.id);
+                var buildCostRefund = buildingType.BuildCost();
+                double refundMultiplier = GetTerrainCostMultiplier(state);
+                foreach (var kvp in buildCostRefund)
+                {
+                    int adjustedAmount = (int)Math.Ceiling(kvp.Value * refundMultiplier);
+                    player.AddResource(kvp.Key, adjustedAmount, int.MaxValue);
+                }
+                return EngineCommandResult.Failure("No idle villager available to build");
             }
 
             DebugLog.Log(string.Format("AI built {0} at ({1}, {2})", buildingType, coordinate.q, coordinate.r));

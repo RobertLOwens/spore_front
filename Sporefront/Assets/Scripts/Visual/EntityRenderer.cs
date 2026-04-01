@@ -338,7 +338,8 @@ namespace Sporefront.Visual
                     // If revealed, fall through to normal building rendering
                 }
 
-                string label = GetBuildingLabel(building.buildingType);
+                // No center label on building icon — name+level shown on bar instead
+                string label = null;
 
                 // Garrison badge: show troop count for own operational buildings
                 string badge = null;
@@ -355,7 +356,9 @@ namespace Sporefront.Visual
                     type = EntityVisualType.Building,
                     color = color,
                     label = label,
-                    badgeLabel = badge
+                    badgeLabel = badge,
+                    buildingType = building.buildingType,
+                    buildingLevel = building.level
                 });
 
                 // Multi-tile buildings: render on all occupied tiles
@@ -741,7 +744,9 @@ namespace Sporefront.Visual
                     tileCenter.y + offset.y,
                     ZPosition),
                 isEntrenched = placement.isEntrenched,
-                isEntrenching = placement.isEntrenching
+                isEntrenching = placement.isEntrenching,
+                buildingType = placement.buildingType,
+                buildingLevel = placement.buildingLevel
             };
         }
 
@@ -900,10 +905,10 @@ namespace Sporefront.Visual
                 CreateBadgeLabel(state.id, go, state.badgeLabel);
             }
 
-            // Progress/HP bars for buildings
+            // Progress/HP bars for buildings (with name+level label)
             if (state.type == EntityVisualType.Building)
             {
-                CreateBuildingBars(state.id, go);
+                CreateBuildingBars(state.id, go, state.buildingType, state.buildingLevel);
             }
 
             entityVisuals[state.id] = go;
@@ -985,7 +990,7 @@ namespace Sporefront.Visual
         // Building Progress/HP Bars
         // ================================================================
 
-        private void CreateBuildingBars(Guid id, GameObject parent)
+        private void CreateBuildingBars(Guid id, GameObject parent, BuildingType buildingType = BuildingType.CityCenter, int level = 1)
         {
             // Create rotated container aligned to hex bottom-right edge
             var container = new GameObject("BarContainer");
@@ -1001,14 +1006,31 @@ namespace Sporefront.Visual
             var upgradeFill = CreateBarChild(container.transform, "BarUpgrade", SporefrontColors.SporeAmber, 7, 0f);
             upgradeFill.SetActive(false);
 
+            // Name + level label positioned just above the HP bar
+            var nameLabelGO = new GameObject("NameLabel");
+            nameLabelGO.transform.SetParent(container.transform, false);
+            nameLabelGO.transform.localPosition = new Vector3(BarWidth * 0.5f, 0.055f, -0.01f);
+            var nameText = nameLabelGO.AddComponent<TextMesh>();
+            nameText.text = $"{buildingType.DisplayName()} Lv.{level}";
+            nameText.fontSize = 24;
+            nameText.characterSize = 0.05f;
+            nameText.anchor = TextAnchor.MiddleCenter;
+            nameText.alignment = TextAlignment.Center;
+            nameText.color = SporefrontColors.InkBlack;
+            var nameMR = nameLabelGO.GetComponent<MeshRenderer>();
+            nameMR.sortingOrder = 8;
+
             buildingBars[id] = new BuildingBarVisuals
             {
                 container = container,
                 background = bg,
                 hpFill = hpFill,
                 upgradeFill = upgradeFill,
+                nameLabel = nameLabelGO,
                 currentHPFill = 0f,
-                currentUpgradeFill = 0f
+                currentUpgradeFill = 0f,
+                lastLevel = level,
+                buildingType = buildingType
             };
         }
 
@@ -1093,6 +1115,15 @@ namespace Sporefront.Visual
                     bars.upgradeFill.SetActive(showUpgrade);
                 if (showUpgrade)
                     bars.upgradeFill.transform.localScale = new Vector3(BarWidth * bars.currentUpgradeFill, 1f, 1f);
+
+                // Update name label if level changed
+                if (bars.nameLabel != null && building.level != bars.lastLevel)
+                {
+                    var nameText = bars.nameLabel.GetComponent<TextMesh>();
+                    if (nameText != null)
+                        nameText.text = $"{bars.buildingType.DisplayName()} Lv.{building.level}";
+                    bars.lastLevel = building.level;
+                }
 
                 buildingBars[id] = bars;
             }
@@ -1381,6 +1412,8 @@ namespace Sporefront.Visual
             public string badgeLabel; // secondary label (garrison count for buildings)
             public bool isEntrenched;
             public bool isEntrenching;
+            public BuildingType buildingType; // for building name labels
+            public int buildingLevel;         // for building name labels
         }
 
         private struct EntityRenderState
@@ -1393,6 +1426,8 @@ namespace Sporefront.Visual
             public Vector3 worldPosition;
             public bool isEntrenched;
             public bool isEntrenching;
+            public BuildingType buildingType;
+            public int buildingLevel;
         }
 
         private struct MovementInterpolationState
@@ -1412,8 +1447,11 @@ namespace Sporefront.Visual
             public GameObject background;
             public GameObject hpFill;
             public GameObject upgradeFill;
+            public GameObject nameLabel;
             public float currentHPFill;
             public float currentUpgradeFill;
+            public int lastLevel;
+            public BuildingType buildingType;
         }
     }
 }

@@ -310,6 +310,96 @@ namespace Sporefront.Engine
                 public const int MaxScouts = 2;
                 public const int PatrolRadius = 6;
                 public const double EarlyGameThreshold = 300.0;
+                public const double EarlyScoutTime = 30.0;             // Send first scout by 30s
+                public const double ExplorationUpdateInterval = 10.0;   // How often to recalc exploration %
+                public const double MinExplorationBeforeAttack = 0.3;   // 30% explored before attacking blind
+            }
+
+            public static class ThreatMemory
+            {
+                public const double DecayTime = 60.0;           // Seconds before a memory entry goes stale
+                public const double CleanupInterval = 30.0;      // How often to purge stale entries
+                public const double OpportunityWindow = 10.0;    // Seconds after enemy army leaves before AI tries to exploit
+            }
+
+            public static class Raiding
+            {
+                public const double RaidInterval = 20.0;         // Min seconds between raid attempts
+                public const int MinCavalryForRaid = 2;          // Min units in a raid-eligible army
+                public const int MaxRaidDistance = 15;            // Max distance from CC for raid targets
+                public const int FleeRadius = 4;                 // Retreat when enemy army within this range
+            }
+
+            public static class Staging
+            {
+                public const int MaxRallyPoints = 3;             // Max rally points to compute
+                public const int StagingDistanceFromCC = 5;      // How far out to stage armies
+                public const double RestageInterval = 15.0;      // How often to recheck staging
+            }
+
+            // Round 4 constants
+
+            public static class Feint
+            {
+                public const double FeintDuration = 15.0;        // Max seconds for feint maneuver
+                public const double FeintCooldown = 60.0;         // Min seconds between feints
+                public const int MinArmiesForFeint = 2;           // Minimum armies to attempt feint
+                public const int FeintRetreatRadius = 3;          // Retreat feint when enemy this close
+            }
+
+            public static class MapControl
+            {
+                public const double CheckInterval = 20.0;         // How often to check for contested resources
+                public const double ContestDistanceRatio = 0.7;   // Nodes within 70% equidistant = contested
+                public const int MaxContestedCamps = 2;            // Max camps beyond normal limit for map control
+            }
+
+            public static class BuildOrderTiming
+            {
+                public const double MilestoneCheckInterval = 10.0;
+                public const double BarracksDeadline = 180.0;      // Must have barracks by 3 minutes
+                public const double FarmDeadline = 120.0;          // Must have farm by 2 minutes
+                public const double RangeDeadline = 300.0;         // Should have range by 5 minutes
+                public const double EmergencyPriorityBonus = 1.5;  // Weight override for emergency builds
+            }
+
+            public static class Composition
+            {
+                public const double AdaptInterval = 15.0;          // How often to recalculate counter composition
+                public const double StrongCounterBonus = 40.0;     // Bonus when countering >50% enemy category
+                public const double MildCounterBonus = 25.0;       // Bonus when countering >30% enemy category
+                public const double CounteredPenalty = 15.0;        // Penalty for units countered by enemy
+                public const double StrongCounterThreshold = 0.5;
+                public const double MildCounterThreshold = 0.3;
+            }
+
+            public static class Siege
+            {
+                public const int DefenseBuildingThreshold = 2;     // This many defensive buildings = siege needed
+                public const int SiegePerTower = 1;                // Siege units needed per tower
+                public const int SiegePerFort = 2;                 // Siege units needed per fort/castle
+                public const double SiegeTrainingBonus = 50.0;     // Score bonus for siege when needed
+                public const double SiegeWaitTimeout = 90.0;       // Don't wait forever for siege
+                public const double WorkshopBuildPriority = 0.8;   // Economy weight for siege workshop when needed
+            }
+
+            public static class Expansion
+            {
+                public const double MinGameTime = 300.0;           // 5 minutes before considering expansion
+                public const double CheckInterval = 30.0;
+                public const int MinSurplusFood = 200;
+                public const int MinSurplusWood = 300;
+                public const int MaxExpansions = 1;                // Only 1 extra CC
+                public const int MinDistFromCC = 8;
+                public const int MaxDistFromCC = 15;
+            }
+
+            public static class Commander
+            {
+                public const double CheckInterval = 15.0;
+                public const int MinArmiesForReassignment = 2;
+                public const double StabilityBonus = 10.0;          // Bonus for staying with current army
+                public const double ReassignmentThreshold = 20.0;   // Min improvement to justify swap
             }
         }
 

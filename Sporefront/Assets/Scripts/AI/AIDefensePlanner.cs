@@ -62,10 +62,28 @@ namespace Sporefront.AI
             bool hasBarracks = gameState.GetBuildingsForPlayer(playerID)
                 .Any(b => b.buildingType == BuildingType.Barracks && b.IsOperational);
 
+            // Comeback mechanic: CriticallyBehind lowers all thresholds and forces tower building
+            bool isCriticallyBehind = aiState.gamePosition == GamePosition.CriticallyBehind;
+            bool isBehind = aiState.gamePosition == GamePosition.Behind;
+
             bool shouldBuildDefense;
-            if (aiState.currentState == AIState.Peace)
+            if (isCriticallyBehind)
             {
-                if (threatIsRising)
+                // Desperate defense: build towers with minimal resources in ANY state
+                shouldBuildDefense = player.GetResource(ResourceType.Wood) > 150 &&
+                                     player.GetResource(ResourceType.Stone) > 100;
+                if (shouldBuildDefense)
+                    DebugLog.Log("AI critically behind — prioritizing defensive tower construction");
+            }
+            else if (aiState.currentState == AIState.Peace)
+            {
+                if (isBehind)
+                {
+                    // Behind: lower Peace-state thresholds to get towers up faster
+                    shouldBuildDefense = player.GetResource(ResourceType.Wood) > 250 &&
+                                         player.GetResource(ResourceType.Stone) > 200;
+                }
+                else if (threatIsRising)
                 {
                     // Reduced thresholds when threat is rising
                     shouldBuildDefense = player.GetResource(ResourceType.Wood) > 300 &&
@@ -92,14 +110,18 @@ namespace Sporefront.AI
             {
                 shouldBuildDefense = threatLevel >= minThreatForDefenseBuilding ||
                                      aiState.currentState == AIState.Defense ||
-                                     threatIsRising;
+                                     threatIsRising ||
+                                     isBehind; // Behind: always consider defense building
             }
 
             if (!shouldBuildDefense) return commands;
 
             int fortCount = gameState.GetBuildingCount(BuildingType.WoodenFort, playerID);
 
-            if (towerCount < maxTowersPerAI)
+            // CriticallyBehind: allow extra towers for desperate defense
+            int effectiveMaxTowers = isCriticallyBehind ? maxTowersPerAI + 2 : maxTowersPerAI;
+
+            if (towerCount < effectiveMaxTowers)
             {
                 var cmd = TryBuildDefensiveStructure(BuildingType.Tower, aiState, gameState);
                 if (cmd != null)
@@ -111,7 +133,7 @@ namespace Sporefront.AI
             }
 
             if (fortCount < maxFortsPerAI &&
-                (aiState.currentState == AIState.Defense || aiState.currentState == AIState.Alert))
+                (aiState.currentState == AIState.Defense || aiState.currentState == AIState.Alert || isCriticallyBehind))
             {
                 var cmd = TryBuildDefensiveStructure(BuildingType.WoodenFort, aiState, gameState);
                 if (cmd != null)
@@ -143,7 +165,7 @@ namespace Sporefront.AI
             }
 
             int maxDistance = buildingType == BuildingType.Tower ? 4 : 5;
-            var location = FindDefenseBuildLocation(cityCenter.coordinate, maxDistance, gameState, playerID, buildingType);
+            var location = FindDefenseBuildLocation(cityCenter.coordinate, maxDistance, gameState, playerID, buildingType, aiState.cachedChokepoints);
             if (!location.HasValue) return null;
 
             DebugLog.Log(string.Format("AI building {0} at ({1}, {2}) for defense",
@@ -151,7 +173,7 @@ namespace Sporefront.AI
             return new AIBuildCommand(playerID, buildingType, location.Value, 0);
         }
 
-        private HexCoordinate? FindDefenseBuildLocation(HexCoordinate center, int maxDistance, GameState gameState, Guid playerID, BuildingType buildingType)
+        private HexCoordinate? FindDefenseBuildLocation(HexCoordinate center, int maxDistance, GameState gameState, Guid playerID, BuildingType buildingType, List<ChokepointData> chokepoints = null)
         {
             var rng = new System.Random();
             var faction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
@@ -181,6 +203,9 @@ namespace Sporefront.AI
                     if (!canBuild) continue;
 
                     double score = rng.NextDouble(); // Base randomness
+
+                    // Chokepoint bonus: defensive buildings near chokepoints are much more effective
+                    score += AIStrategicAnalysis.GetChokepointBonus(coord, chokepoints);
 
                     // Faction terrain preferences for defensive buildings
                     if (faction == FactionType.Muscaria)
