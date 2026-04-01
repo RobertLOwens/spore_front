@@ -16,7 +16,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class ResourceOverviewPanel : MonoBehaviour
+    public class ResourceOverviewPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,10 +28,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
-        private Guid localPlayerID;
 
         // Throttled rebuild
         private bool isDirty;
@@ -94,11 +91,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -112,7 +104,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             backdrop.SetActive(false);
             OnClose?.Invoke();
@@ -124,8 +116,6 @@ namespace Sporefront.Visual
             cachedGameState = gameState;
             isDirty = true;
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         private void Update()
         {

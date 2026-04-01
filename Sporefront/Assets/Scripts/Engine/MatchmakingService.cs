@@ -313,8 +313,7 @@ namespace Sporefront.Engine
             {
                 if (task.IsFaulted)
                 {
-                    Debug.Log(string.Format("[MatchmakingService] Match transaction failed (race condition expected): {0}",
-                        task.Exception?.InnerException?.Message));
+                    Debug.Log($"[MatchmakingService] Match transaction failed (race condition expected): {task.Exception?.InnerException?.Message}");
                     // Will retry on next poll
                 }
                 // Match result comes via the listener, not from here
@@ -387,8 +386,7 @@ namespace Sporefront.Engine
                             IsInQueue = false;
                             CurrentMatch = result;
 
-                            Debug.Log(string.Format("[MatchmakingService] Match found! Game: {0}, Host: {1}, Opponent: {2}",
-                                gameID, isHost, oppName));
+                            Debug.Log($"[MatchmakingService] Match found! Game: {gameID}, Host: {isHost}, Opponent: {oppName}");
 
                             OnMatchFound?.Invoke(result);
                         });
@@ -427,8 +425,7 @@ namespace Sporefront.Engine
             {
                 if (task.IsFaulted)
                 {
-                    Debug.LogWarning(string.Format("[MatchmakingService] Failed to confirm ready: {0}",
-                        task.Exception?.InnerException?.Message));
+                    Debug.LogWarning($"[MatchmakingService] Failed to confirm ready: {task.Exception?.InnerException?.Message}");
                 }
                 callback?.Invoke(!task.IsFaulted);
             });
@@ -497,7 +494,7 @@ namespace Sporefront.Engine
                         if ((DateTime.UtcNow - enqueuedAt).TotalSeconds > StaleEntryAge)
                         {
                             doc.Reference.DeleteAsync();
-                            Debug.Log(string.Format("[MatchmakingService] Cleaned stale entry: {0}", doc.Id));
+                            Debug.Log($"[MatchmakingService] Cleaned stale entry: {doc.Id}");
                         }
                     }
                 }

@@ -14,12 +14,11 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class FactionBannerPanel : MonoBehaviour
+    public class FactionBannerPanel : SporefrontPanel
     {
         private GameObject panel;
         private Text bannerLabel;
         private GameObject detailBackdrop;
-        private CanvasGroup backdropCG;
         private Coroutine fadeCoroutine;
         private FactionType currentFaction = FactionType.None;
         private RectTransform popupContentRT;
@@ -208,7 +207,7 @@ namespace Sporefront.Visual
         // Show / Close with Fade
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             if (detailBackdrop == null) return;
             if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
@@ -223,7 +222,7 @@ namespace Sporefront.Visual
             fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
         }
 
-        public void Hide()
+        public override void Hide()
         {
             Close();
         }
@@ -237,7 +236,7 @@ namespace Sporefront.Visual
             }
         }
 
-        public bool IsVisible => detailBackdrop != null && detailBackdrop.activeSelf;
+        public new bool IsVisible => detailBackdrop != null && detailBackdrop.activeSelf;
 
         // ================================================================
         // Helpers

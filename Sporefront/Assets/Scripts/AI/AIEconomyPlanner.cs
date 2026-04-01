@@ -131,7 +131,7 @@ namespace Sporefront.AI
                 if (aiState.siegeRequired && !aiState.siegeReady)
                 {
                     if (buildOrderTarget == BuildingType.SiegeWorkshop ||
-                        !gameState.GetBuildingsForPlayer(playerID).Any(b => b.buildingType == BuildingType.SiegeWorkshop && b.IsOperational))
+                        !gameState.HasBuilding(playerID, BuildingType.SiegeWorkshop, operationalOnly: true))
                         milWeight = Math.Max(milWeight, GameConfig.AI.Siege.WorkshopBuildPriority);
                 }
                 buildCandidates.Add((() => TryBuildMilitaryBuilding(playerID, gameState), milWeight, "Military"));
@@ -273,8 +273,7 @@ namespace Sporefront.AI
             var playerID = aiState.playerID;
 
             if (aiState.expansionCount >= GameConfig.AI.Expansion.MaxExpansions) return commands;
-            if (currentTime - aiState.lastExpansionCheckTime < GameConfig.AI.Expansion.CheckInterval) return commands;
-            aiState.lastExpansionCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastExpansionCheckTime, currentTime, GameConfig.AI.Expansion.CheckInterval)) return commands;
 
             if (gameState.currentTime < GameConfig.AI.Expansion.MinGameTime) return commands;
             if (aiState.gamePosition == GamePosition.CriticallyBehind) return commands;
@@ -300,11 +299,7 @@ namespace Sporefront.AI
             if (aiState.mapExplorationPercent < 0.4 && campCount < 2) return commands;
 
             // Can we afford a CC?
-            var ccCost = BuildingType.CityCenter.BuildCost();
-            foreach (var kvp in ccCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return commands;
-            }
+            if (!player.CanAfford(BuildingType.CityCenter.BuildCost())) return commands;
 
             // Find or use cached expansion site
             if (!aiState.plannedExpansionSite.HasValue || !gameState.mapData.IsWalkable(aiState.plannedExpansionSite.Value))
@@ -328,8 +323,7 @@ namespace Sporefront.AI
             aiState.expansionPlanned = false;
             aiState.plannedExpansionSite = null;
 
-            DebugLog.Log(string.Format("AI {0}: Expanding — building second City Center at ({1},{2})",
-                playerID, site.q, site.r));
+            DebugLog.Log($"AI {playerID}: Expanding — building second City Center at ({site.q},{site.r})");
 
             return commands;
         }
@@ -390,8 +384,7 @@ namespace Sporefront.AI
             var playerID = aiState.playerID;
 
             if (!aiState.enemyBaseFound) return commands;
-            if (currentTime - aiState.lastMapControlCheckTime < GameConfig.AI.MapControl.CheckInterval) return commands;
-            aiState.lastMapControlCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastMapControlCheckTime, currentTime, GameConfig.AI.MapControl.CheckInterval)) return commands;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return commands;
@@ -427,11 +420,7 @@ namespace Sporefront.AI
                 return commands; // Not a camp-able resource
 
             // Check affordability
-            var cost = campType.BuildCost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return commands;
-            }
+            if (!player.CanAfford(campType.BuildCost())) return commands;
 
             // Find build location near the resource
             HexCoordinate? buildSite = null;
@@ -452,8 +441,7 @@ namespace Sporefront.AI
             if (!buildSite.HasValue) return commands;
 
             commands.Add(new AIBuildCommand(playerID, campType, buildSite.Value, 0));
-            DebugLog.Log(string.Format("AI {0}: Map control — building {1} at contested node ({2},{3})",
-                playerID, campType.DisplayName(), buildSite.Value.q, buildSite.Value.r));
+            DebugLog.Log($"AI {playerID}: Map control — building {campType.DisplayName()} at contested node ({buildSite.Value.q},{buildSite.Value.r})");
 
             return commands;
         }
@@ -525,8 +513,7 @@ namespace Sporefront.AI
                     urgency.TryGetValue(r.resourceType.ResourceYield(), out u);
                     return u;
                 })
-                .ThenBy(r => r.coordinate.Distance(cityCenter.coordinate))
-                .ToList();
+                .ThenBy(r => r.coordinate.Distance(cityCenter.coordinate));
 
             var assignedResources = new HashSet<Guid>();
             foreach (var villagerGroup in idleVillagers)
@@ -567,8 +554,7 @@ namespace Sporefront.AI
                 .ToList();
 
             var idleVillagers = gameState.GetVillagerGroupsForPlayer(playerID)
-                .Where(g => g.currentTask is IdleTask && g.currentPath == null)
-                .ToList();
+                .Where(g => g.currentTask is IdleTask && g.currentPath == null);
 
             var usedVillagers = new HashSet<Guid>();
             foreach (var animal in huntableAnimals)
@@ -620,19 +606,12 @@ namespace Sporefront.AI
                 urgency[resourceType] = Math.Max(0.0, Math.Min(2.0, score));
             }
 
-            // Faction resource urgency bias
-            var faction = player.faction;
-            if (faction == FactionType.Morel)
+            // Faction resource urgency bias (data-driven via FactionAIConfig)
+            var factionConfig = FactionAIConfig.Get(player.faction);
+            foreach (var kvp in factionConfig.ResourceUrgencyMultiplier)
             {
-                if (urgency.ContainsKey(ResourceType.Wood))
-                    urgency[ResourceType.Wood] = Math.Min(2.0, urgency[ResourceType.Wood] * 1.10);
-            }
-            else if (faction == FactionType.Muscaria)
-            {
-                if (urgency.ContainsKey(ResourceType.Stone))
-                    urgency[ResourceType.Stone] = Math.Min(2.0, urgency[ResourceType.Stone] * 1.10);
-                if (urgency.ContainsKey(ResourceType.Ore))
-                    urgency[ResourceType.Ore] = Math.Min(2.0, urgency[ResourceType.Ore] * 1.10);
+                if (urgency.ContainsKey(kvp.Key))
+                    urgency[kvp.Key] = Math.Min(2.0, urgency[kvp.Key] * kvp.Value);
             }
 
             return urgency;
@@ -745,8 +724,8 @@ namespace Sporefront.AI
 
         private HexCoordinate? FindFactionPreferredBuildLocation(HexCoordinate center, int maxDistance, GameState gameState, Guid playerID)
         {
-            var faction = gameState.GetPlayer(playerID)?.faction ?? FactionType.None;
-            if (faction != FactionType.Muscaria)
+            var factionBuildConfig = FactionAIConfig.Get(gameState.GetPlayer(playerID)?.faction ?? FactionType.None);
+            if (!factionBuildConfig.PreferHighlandBuilding)
                 return gameState.FindBuildLocation(center, maxDistance, playerID);
 
             // Muscaria: prefer mountain/hill tiles for -15% build cost reduction
@@ -776,117 +755,48 @@ namespace Sporefront.AI
         // Building Construction
         // ================================================================
 
-        private IEngineCommand TryBuildFarm(Guid playerID, GameState gameState)
+        /// <summary>
+        /// Generic building construction helper. Validates player/CC, checks optional preconditions
+        /// (CC level, singleton, max count), affordability, and finds a build location.
+        /// </summary>
+        private IEngineCommand TryBuildStructure(Guid playerID, GameState gameState, BuildingType type, int searchRadius,
+            bool requiresCCLevel = false, bool singleton = false, int? maxAllowed = null)
         {
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return null;
             var player = gameState.GetPlayer(playerID);
             if (player == null) return null;
 
-            var farmCost = BuildingType.Farm.BuildCost();
-            foreach (var kvp in farmCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (requiresCCLevel && cityCenter.level < type.RequiredCityCenterLevel()) return null;
+            if (singleton && gameState.HasBuilding(playerID, type)) return null;
+            if (maxAllowed.HasValue && gameState.GetBuildingCount(type, playerID) >= maxAllowed.Value) return null;
 
-            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 4, gameState, playerID);
+            if (!player.CanAfford(type.BuildCost())) return null;
+
+            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, searchRadius, gameState, playerID);
             if (!location.HasValue) return null;
 
-            return new AIBuildCommand(playerID, BuildingType.Farm, location.Value, 0);
+            return new AIBuildCommand(playerID, type, location.Value, 0);
         }
+
+        private IEngineCommand TryBuildFarm(Guid playerID, GameState gameState)
+            => TryBuildStructure(playerID, gameState, BuildingType.Farm, 4);
 
         private IEngineCommand TryBuildHouse(Guid playerID, GameState gameState, double currentTime, AIPlayerState aiState)
-        {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            var houseCost = BuildingType.Neighborhood.BuildCost();
-            foreach (var kvp in houseCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 5, gameState, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Neighborhood, location.Value, 0);
-        }
+            => TryBuildStructure(playerID, gameState, BuildingType.Neighborhood, 5);
 
         private IEngineCommand TryBuildStorage(Guid playerID, GameState gameState)
         {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            int ccLevel = cityCenter.level;
-            int currentWarehouses = gameState.GetBuildingCount(BuildingType.Warehouse, playerID);
-            int maxWarehouses = BuildingTypeExtensions.MaxWarehousesAllowed(ccLevel);
-
-            if (currentWarehouses >= maxWarehouses) return null;
-
-            var warehouseCost = BuildingType.Warehouse.BuildCost();
-            foreach (var kvp in warehouseCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 5, gameState, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Warehouse, location.Value, 0);
+            int ccLevel = gameState.GetCityCenter(playerID)?.level ?? 0;
+            return TryBuildStructure(playerID, gameState, BuildingType.Warehouse, 5,
+                maxAllowed: BuildingTypeExtensions.MaxWarehousesAllowed(ccLevel));
         }
 
         private IEngineCommand TryBuildLibrary(Guid playerID, GameState gameState)
-        {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            if (cityCenter.level < BuildingType.Library.RequiredCityCenterLevel()) return null;
-
-            bool existingLibrary = gameState.GetBuildingsForPlayer(playerID).Any(b => b.buildingType == BuildingType.Library);
-            if (existingLibrary) return null;
-
-            var libraryCost = BuildingType.Library.BuildCost();
-            foreach (var kvp in libraryCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 4, gameState, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Library, location.Value, 0);
-        }
+            => TryBuildStructure(playerID, gameState, BuildingType.Library, 4, requiresCCLevel: true, singleton: true);
 
         private IEngineCommand TryBuildBlacksmith(Guid playerID, GameState gameState)
-        {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            if (cityCenter.level < BuildingType.Blacksmith.RequiredCityCenterLevel()) return null;
-
-            bool existingBlacksmith = gameState.GetBuildingsForPlayer(playerID)
-                .Any(b => b.buildingType == BuildingType.Blacksmith);
-            if (existingBlacksmith) return null;
-
-            var cost = BuildingType.Blacksmith.BuildCost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = FindFactionPreferredBuildLocation(cityCenter.coordinate, 4, gameState, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Blacksmith, location.Value, 0);
-        }
+            => TryBuildStructure(playerID, gameState, BuildingType.Blacksmith, 4, requiresCCLevel: true, singleton: true);
 
         // ================================================================
         // Building Upgrades
@@ -896,8 +806,7 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastUpgradeCheckTime < GameConfig.AI.Intervals.UpgradeCheck) return new List<IEngineCommand>();
-            aiState.lastUpgradeCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastUpgradeCheckTime, currentTime, GameConfig.AI.Intervals.UpgradeCheck)) return new List<IEngineCommand>();
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -907,7 +816,7 @@ namespace Sporefront.AI
             int currentlyUpgrading = buildings.Count(b => b.state == BuildingState.Upgrading);
 
             // Don't upgrade CC until we have a lumber camp or have wood income
-            bool hasLumber = buildings.Any(b => b.buildingType == BuildingType.LumberCamp && b.IsOperational);
+            bool hasLumber = gameState.HasBuilding(playerID, BuildingType.LumberCamp, operationalOnly: true);
             bool hasWoodIncome = player.GetCollectionRate(ResourceType.Wood) > 0;
             if (!hasLumber && !hasWoodIncome) return new List<IEngineCommand>();
 
@@ -933,16 +842,7 @@ namespace Sporefront.AI
                 var cost = building.GetUpgradeCost();
                 if (cost == null) continue;
 
-                bool canAfford = true;
-                foreach (var kvp in cost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(cost)) continue;
 
                 // Use genome upgrade priorities when available
                 var genome = AIController.Instance?.genome;
@@ -1049,43 +949,8 @@ namespace Sporefront.AI
             var buildings = gameState.GetBuildingsForPlayer(playerID);
 
             // Faction-specific military building priorities
-            var faction = player.faction;
-            (BuildingType type, int minCount, int maxCount)[] priorities;
-            if (faction == FactionType.Morel)
-            {
-                // Morel: infantry focus — second barracks earlier, deprioritize siege
-                priorities = new[]
-                {
-                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
-                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
-                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
-                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
-                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
-                };
-            }
-            else if (faction == FactionType.Muscaria)
-            {
-                // Muscaria: ranged/siege focus — siege workshop earlier
-                priorities = new[]
-                {
-                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
-                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
-                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
-                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
-                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
-                };
-            }
-            else
-            {
-                priorities = new[]
-                {
-                    (type: BuildingType.Barracks, minCount: 0, maxCount: 1),
-                    (type: BuildingType.ArcheryRange, minCount: 0, maxCount: 1),
-                    (type: BuildingType.Stable, minCount: 0, maxCount: 1),
-                    (type: BuildingType.Barracks, minCount: 1, maxCount: 2),
-                    (type: BuildingType.SiegeWorkshop, minCount: 0, maxCount: 1),
-                };
-            }
+            // Faction-specific military building priorities (data-driven via FactionAIConfig)
+            var priorities = FactionAIConfig.Get(player.faction).MilitaryBuildOrder;
 
             foreach (var priority in priorities)
             {
@@ -1097,17 +962,7 @@ namespace Sporefront.AI
 
                 if (existingCount < priority.minCount || existingCount >= priority.maxCount) continue;
 
-                var cost = priority.type.BuildCost();
-                bool canAfford = true;
-                foreach (var kvp in cost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(priority.type.BuildCost())) continue;
 
                 var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
                 if (!location.HasValue) continue;
@@ -1137,11 +992,7 @@ namespace Sporefront.AI
             var player = gameState.GetPlayer(playerID);
             if (player == null) return null;
 
-            var campCost = BuildingType.LumberCamp.BuildCost();
-            foreach (var kvp in campCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (!player.CanAfford(BuildingType.LumberCamp.BuildCost())) return null;
 
             var trees = gameState.GetExploredResourcePoints(playerID)
                 .Where(r => r.resourceType == ResourcePointType.Trees && r.remainingAmount > 0 &&
@@ -1269,9 +1120,7 @@ namespace Sporefront.AI
                 commands.Add(new AIMoveCommand(playerID, group.id, destination, false));
                 aiState.fleeingVillagers.Add(group.id);
 
-                DebugLog.Log(string.Format("AI {0}: Villager group fleeing from ({1},{2}) to ({3},{4}) — {5} enemy units nearby",
-                    playerID, group.coordinate.q, group.coordinate.r,
-                    destination.q, destination.r, totalEnemyUnits));
+                DebugLog.Log($"AI {playerID}: Villager group fleeing from ({group.coordinate.q},{group.coordinate.r}) to ({destination.q},{destination.r}) — {totalEnemyUnits} enemy units nearby");
             }
 
             return commands;
@@ -1389,17 +1238,7 @@ namespace Sporefront.AI
                         continue;
                 }
 
-                var campCost = campType.BuildCost();
-                bool canAfford = true;
-                foreach (var kvp in campCost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(campType.BuildCost())) continue;
 
                 double score = resourceUrgency * resource.remainingAmount / (100.0 * distance);
                 candidates.Add((resource, campType, score));
@@ -1423,11 +1262,7 @@ namespace Sporefront.AI
             var player = gameState.GetPlayer(playerID);
             if (player == null) return null;
 
-            var campCost = campType.BuildCost();
-            foreach (var kvp in campCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (!player.CanAfford(campType.BuildCost())) return null;
 
             if (gameState.CanBuildAt(resource.coordinate, playerID))
             {
@@ -1471,7 +1306,7 @@ namespace Sporefront.AI
             else
             {
                 // Shuffle and try random order
-                var shuffled = candidates.OrderBy(_ => rng.Next()).ToList();
+                var shuffled = candidates.OrderBy(_ => rng.Next());
                 foreach (var candidate in shuffled)
                 {
                     var cmd = candidate.tryBuild();
@@ -1536,9 +1371,8 @@ namespace Sporefront.AI
         /// </summary>
         public void CheckBuildOrderMilestones(AIPlayerState aiState, GameState gameState, double currentTime)
         {
-            if (currentTime - aiState.lastMilestoneCheckTime < GameConfig.AI.BuildOrderTiming.MilestoneCheckInterval)
+            if (!AIHelper.ShouldExecute(ref aiState.lastMilestoneCheckTime, currentTime, GameConfig.AI.BuildOrderTiming.MilestoneCheckInterval))
                 return;
-            aiState.lastMilestoneCheckTime = currentTime;
 
             // Initialize milestones if null
             if (aiState.milestones == null)
@@ -1558,8 +1392,7 @@ namespace Sporefront.AI
                         aiState.buildOrderEmergency = true;
                         aiState.emergencyBuildTarget = milestone.requiredBuilding;
                         anyBehind = true;
-                        DebugLog.Log(string.Format("AI {0}: Build order emergency — missing {1} past {2}s deadline",
-                            playerID, milestone.requiredBuilding, milestone.targetTime));
+                        DebugLog.Log($"AI {playerID}: Build order emergency — missing {milestone.requiredBuilding} past {milestone.targetTime}s deadline");
                         break; // Handle the most urgent milestone first
                     }
                 }

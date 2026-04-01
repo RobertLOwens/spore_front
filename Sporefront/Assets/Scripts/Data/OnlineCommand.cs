@@ -23,19 +23,19 @@ namespace Sporefront.Data
         public static OnlineCommandException SerializationFailed(string detail)
         {
             return new OnlineCommandException(
-                string.Format("Failed to serialize command: {0}", detail));
+                $"Failed to serialize command: {detail}");
         }
 
         public static OnlineCommandException DeserializationFailed(string detail)
         {
             return new OnlineCommandException(
-                string.Format("Failed to deserialize command: {0}", detail));
+                $"Failed to deserialize command: {detail}");
         }
 
         public static OnlineCommandException UnknownCommandType(string type)
         {
             return new OnlineCommandException(
-                string.Format("Unknown command type: {0}", type));
+                $"Unknown command type: {type}");
         }
     }
 
@@ -103,7 +103,7 @@ namespace Sporefront.Data
                 {
                     sequence = sequence,
                     commandID = envelope.commandID,
-                    commandType = string.Format("ai_{0}", (AICommandType)envelope.aiCommandType),
+                    commandType = $"ai_{(AICommandType)envelope.aiCommandType}",
                     playerID = envelope.playerID,
                     timestamp = envelope.timestamp,
                     isAICommand = true,
@@ -141,9 +141,8 @@ namespace Sporefront.Data
             }
             catch (Exception e)
             {
-                DebugLog.Log(string.Format(
-                    "OnlineCommand.ToEngineCommand() failed for type {0}: {1}",
-                    commandType, e.Message));
+                DebugLog.Log(
+                    $"OnlineCommand.ToEngineCommand() failed for type {commandType}: {e.Message}");
                 return null;
             }
         }
@@ -171,8 +170,8 @@ namespace Sporefront.Data
             }
             catch (Exception e)
             {
-                DebugLog.Log(string.Format(
-                    "Failed to decode AICommandEnvelope: {0}", e.Message));
+                DebugLog.Log(
+                    $"Failed to decode AICommandEnvelope: {e.Message}");
                 return null;
             }
         }

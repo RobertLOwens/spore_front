@@ -181,18 +181,12 @@ namespace Sporefront.Data
             else if (command is AIDeployArmyCommand deployArmyCmd)
             {
                 aiType = AICommandType.AIDeployArmy;
-                var keys = new List<string>();
-                var values = new List<int>();
-                foreach (var kvp in deployArmyCmd.composition)
-                {
-                    keys.Add(kvp.Key.ToString());
-                    values.Add(kvp.Value);
-                }
+                DictSerializationHelper.SerializeEnumDict(deployArmyCmd.composition, out var keys, out var values);
                 paramJson = JsonUtility.ToJson(new AIDeployArmyParams
                 {
                     buildingID = deployArmyCmd.buildingID.ToString(),
-                    compositionKeys = keys.ToArray(),
-                    compositionValues = values.ToArray()
+                    compositionKeys = keys,
+                    compositionValues = values
                 });
             }
             else if (command is AIDeployVillagersCommand deployVilCmd)
@@ -268,7 +262,7 @@ namespace Sporefront.Data
             }
             else
             {
-                DebugLog.Log(string.Format("Unknown AI command type: {0}", command.GetType().Name));
+                DebugLog.Log($"Unknown AI command type: {command.GetType().Name}");
                 return null;
             }
 
@@ -331,19 +325,7 @@ namespace Sporefront.Data
                     if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
-                    var composition = new Dictionary<MilitaryUnitType, int>();
-                    if (p.compositionKeys != null && p.compositionValues != null
-                        && p.compositionKeys.Length == p.compositionValues.Length)
-                    {
-                        for (int i = 0; i < p.compositionKeys.Length; i++)
-                        {
-                            MilitaryUnitType ut;
-                            if (Enum.TryParse<MilitaryUnitType>(p.compositionKeys[i], out ut))
-                            {
-                                composition[ut] = p.compositionValues[i];
-                            }
-                        }
-                    }
+                    var composition = DictSerializationHelper.DeserializeEnumDict<MilitaryUnitType>(p.compositionKeys, p.compositionValues);
                     return new AIDeployArmyCommand(pid, bID, composition);
                 }
 
@@ -425,7 +407,7 @@ namespace Sporefront.Data
                 }
 
                 default:
-                    DebugLog.Log(string.Format("Unknown AI command type: {0}", cmdType));
+                    DebugLog.Log($"Unknown AI command type: {cmdType}");
                     return null;
             }
         }

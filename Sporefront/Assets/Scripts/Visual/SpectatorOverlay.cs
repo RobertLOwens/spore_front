@@ -98,20 +98,18 @@ namespace Sporefront.Visual
             if (player1NameLabel != null)
                 player1NameLabel.text = player1Name;
             if (player1StatsLabel != null)
-                player1StatsLabel.text = string.Format("F:{0} W:{1} S:{2} A:{3} B:{4}",
-                    player1Food, player1Wood, player1Stone, player1Armies, player1Buildings);
+                player1StatsLabel.text = $"F:{player1Food} W:{player1Wood} S:{player1Stone} A:{player1Armies} B:{player1Buildings}";
 
             if (player2NameLabel != null)
                 player2NameLabel.text = player2Name;
             if (player2StatsLabel != null)
-                player2StatsLabel.text = string.Format("F:{0} W:{1} S:{2} A:{3} B:{4}",
-                    player2Food, player2Wood, player2Stone, player2Armies, player2Buildings);
+                player2StatsLabel.text = $"F:{player2Food} W:{player2Wood} S:{player2Stone} A:{player2Armies} B:{player2Buildings}";
 
             if (gameTimeLabel != null)
             {
                 int minutes = (int)gameTime / 60;
                 int seconds = (int)gameTime % 60;
-                gameTimeLabel.text = string.Format("{0}:{1:D2}", minutes, seconds);
+                gameTimeLabel.text = $"{minutes}:{seconds:D2}";
             }
         }
 

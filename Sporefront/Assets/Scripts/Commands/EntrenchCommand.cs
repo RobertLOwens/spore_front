@@ -92,9 +92,8 @@ namespace Sporefront.Commands
             }
 
             // Deduct wood cost
-            int oldWood = player.GetResource(ResourceType.Wood);
-            player.RemoveResource(ResourceType.Wood, GameConfig.Entrenchment.WoodCost);
-            int newWood = player.GetResource(ResourceType.Wood);
+            var entrenchCost = new Dictionary<ResourceType, int> { { ResourceType.Wood, GameConfig.Entrenchment.WoodCost } };
+            DeductResourcesWithChanges(player, entrenchCost, changeBuilder);
 
             // Mark army as entrenching
             army.isEntrenching = true;
@@ -105,15 +104,6 @@ namespace Sporefront.Commands
             {
                 armyID = armyID,
                 coordinate = army.coordinate
-            });
-
-            // Emit resource change for wood deduction
-            changeBuilder.Add(new ResourcesChangedChange
-            {
-                playerID = PlayerID,
-                resourceType = ResourceType.Wood.ToString(),
-                oldAmount = oldWood,
-                newAmount = newWood
             });
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);

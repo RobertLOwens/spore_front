@@ -30,28 +30,7 @@ namespace Sporefront.Data
         public int sizeBytes;
         public string gameVersion; // Game version that created this snapshot
 
-        // Shared serializer settings (matches SaveManager)
-        private static JsonSerializerSettings _settings;
-        private static JsonSerializerSettings Settings
-        {
-            get
-            {
-                if (_settings == null)
-                {
-                    _settings = new JsonSerializerSettings
-                    {
-                        Formatting = Formatting.None,
-                        NullValueHandling = NullValueHandling.Ignore,
-                        TypeNameHandling = TypeNameHandling.None,
-                        Converters = new List<JsonConverter>
-                        {
-                            new HexCoordinateConverter()
-                        }
-                    };
-                }
-                return _settings;
-            }
-        }
+        private static JsonSerializerSettings Settings => SporefrontJsonSettings.Compact;
 
         // ================================================================
         // Factory: Create from GameState
@@ -80,7 +59,7 @@ namespace Sporefront.Data
             }
             catch (Exception e)
             {
-                DebugLog.Log(string.Format("Failed to create game snapshot: {0}", e.Message));
+                DebugLog.Log($"Failed to create game snapshot: {e.Message}");
                 return null;
             }
         }
@@ -276,7 +255,7 @@ namespace Sporefront.Data
 
         public static string DecodingFailed(string detail)
         {
-            return string.Format("Failed to decode snapshot: {0}", detail);
+            return $"Failed to decode snapshot: {detail}";
         }
     }
 }

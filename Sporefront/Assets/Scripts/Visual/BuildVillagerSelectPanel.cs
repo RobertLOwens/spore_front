@@ -16,7 +16,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class BuildVillagerSelectPanel : MonoBehaviour
+    public class BuildVillagerSelectPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -32,11 +32,8 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject modalPanel;
-        private RectTransform contentRT;
         private Text infoLabel;
-        private Guid localPlayerID;
 
         private BuildingType pendingBuildingType;
         private HexCoordinate pendingCoordinate;
@@ -113,11 +110,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -132,7 +124,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             ClearPreview();
             backdrop.SetActive(false);
@@ -144,8 +136,6 @@ namespace Sporefront.Visual
             if (!backdrop.activeSelf) return;
             Rebuild(gameState);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Back Navigation
@@ -201,8 +191,8 @@ namespace Sporefront.Visual
             var sectionLE = sectionLabel.gameObject.AddComponent<LayoutElement>();
             sectionLE.preferredHeight = 28;
 
-            var groups = gameState.GetVillagerGroupsForPlayer(localPlayerID);
-            if (groups == null || groups.Count == 0)
+            var groups = new List<VillagerGroupData>(gameState.GetVillagerGroupsForPlayer(localPlayerID));
+            if (groups.Count == 0)
             {
                 var emptyLabel = UIHelper.CreateLabel(contentRT,
                     "  No villager groups available", UIConstants.FontSmall, UIHelper.InkMutedText);

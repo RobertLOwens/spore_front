@@ -23,6 +23,98 @@ namespace Sporefront.AI
         private readonly double researchCheckInterval = GameConfig.AI.Intervals.ResearchCheck;
 
         // ================================================================
+        // Data-Driven State × Category Bonuses
+        // ================================================================
+
+        private static readonly Dictionary<(AIState, ResearchCategory), double> StateCategoryBonuses =
+            new Dictionary<(AIState, ResearchCategory), double>
+            {
+                { (AIState.Peace, ResearchCategory.Economic), 30.0 },
+                { (AIState.Alert, ResearchCategory.Military), 25.0 },
+                { (AIState.Defense, ResearchCategory.Military), 30.0 },
+                { (AIState.Attack, ResearchCategory.Military), 30.0 },
+            };
+
+        // Alert non-military fallback handled separately (all non-Military categories get +15)
+
+        // ================================================================
+        // Data-Driven State × ResearchType Bonuses
+        // ================================================================
+
+        private static readonly Dictionary<(AIState, ResearchType), double> StateResearchBonuses =
+            new Dictionary<(AIState, ResearchType), double>
+            {
+                // Peace: prioritize economy
+                { (AIState.Peace, ResearchType.FarmGatheringI), 15.0 },
+                { (AIState.Peace, ResearchType.FarmGatheringII), 15.0 },
+                { (AIState.Peace, ResearchType.FarmGatheringIII), 15.0 },
+                { (AIState.Peace, ResearchType.LumberCampGatheringI), 12.0 },
+                { (AIState.Peace, ResearchType.LumberCampGatheringII), 12.0 },
+                { (AIState.Peace, ResearchType.LumberCampGatheringIII), 12.0 },
+                { (AIState.Peace, ResearchType.MiningCampGatheringI), 10.0 },
+                { (AIState.Peace, ResearchType.MiningCampGatheringII), 10.0 },
+                { (AIState.Peace, ResearchType.MiningCampGatheringIII), 10.0 },
+                { (AIState.Peace, ResearchType.PopulationCapacityI), 8.0 },
+                { (AIState.Peace, ResearchType.PopulationCapacityII), 8.0 },
+                { (AIState.Peace, ResearchType.PopulationCapacityIII), 8.0 },
+                { (AIState.Peace, ResearchType.BuildingSpeedI), 5.0 },
+                { (AIState.Peace, ResearchType.BuildingSpeedII), 5.0 },
+                { (AIState.Peace, ResearchType.BuildingSpeedIII), 5.0 },
+                // Alert: armor + training speed
+                { (AIState.Alert, ResearchType.InfantryMeleeArmorI), 10.0 },
+                { (AIState.Alert, ResearchType.InfantryMeleeArmorII), 10.0 },
+                { (AIState.Alert, ResearchType.InfantryMeleeArmorIII), 10.0 },
+                { (AIState.Alert, ResearchType.InfantryPierceArmorI), 10.0 },
+                { (AIState.Alert, ResearchType.InfantryPierceArmorII), 10.0 },
+                { (AIState.Alert, ResearchType.InfantryPierceArmorIII), 10.0 },
+                { (AIState.Alert, ResearchType.MilitaryTrainingSpeedI), 15.0 },
+                { (AIState.Alert, ResearchType.MilitaryTrainingSpeedII), 15.0 },
+                { (AIState.Alert, ResearchType.MilitaryTrainingSpeedIII), 15.0 },
+                // Defense: fortification + armor + retreat
+                { (AIState.Defense, ResearchType.FortifiedBuildingsI), 20.0 },
+                { (AIState.Defense, ResearchType.FortifiedBuildingsII), 20.0 },
+                { (AIState.Defense, ResearchType.FortifiedBuildingsIII), 20.0 },
+                { (AIState.Defense, ResearchType.BuildingBludgeonArmorI), 18.0 },
+                { (AIState.Defense, ResearchType.BuildingBludgeonArmorII), 18.0 },
+                { (AIState.Defense, ResearchType.BuildingBludgeonArmorIII), 18.0 },
+                { (AIState.Defense, ResearchType.InfantryMeleeArmorI), 12.0 },
+                { (AIState.Defense, ResearchType.InfantryMeleeArmorII), 12.0 },
+                { (AIState.Defense, ResearchType.InfantryMeleeArmorIII), 12.0 },
+                { (AIState.Defense, ResearchType.CavalryMeleeArmorI), 12.0 },
+                { (AIState.Defense, ResearchType.CavalryMeleeArmorII), 12.0 },
+                { (AIState.Defense, ResearchType.CavalryMeleeArmorIII), 12.0 },
+                { (AIState.Defense, ResearchType.RetreatSpeedI), 8.0 },
+                { (AIState.Defense, ResearchType.RetreatSpeedII), 8.0 },
+                { (AIState.Defense, ResearchType.RetreatSpeedIII), 8.0 },
+                // Attack: offense + siege + march speed
+                { (AIState.Attack, ResearchType.InfantryMeleeAttackI), 15.0 },
+                { (AIState.Attack, ResearchType.InfantryMeleeAttackII), 15.0 },
+                { (AIState.Attack, ResearchType.InfantryMeleeAttackIII), 15.0 },
+                { (AIState.Attack, ResearchType.CavalryMeleeAttackI), 15.0 },
+                { (AIState.Attack, ResearchType.CavalryMeleeAttackII), 15.0 },
+                { (AIState.Attack, ResearchType.CavalryMeleeAttackIII), 15.0 },
+                { (AIState.Attack, ResearchType.PiercingDamageI), 12.0 },
+                { (AIState.Attack, ResearchType.PiercingDamageII), 12.0 },
+                { (AIState.Attack, ResearchType.PiercingDamageIII), 12.0 },
+                { (AIState.Attack, ResearchType.MarchSpeedI), 10.0 },
+                { (AIState.Attack, ResearchType.MarchSpeedII), 10.0 },
+                { (AIState.Attack, ResearchType.MarchSpeedIII), 10.0 },
+                { (AIState.Attack, ResearchType.SiegeBludgeonDamageI), 15.0 },
+                { (AIState.Attack, ResearchType.SiegeBludgeonDamageII), 15.0 },
+                { (AIState.Attack, ResearchType.SiegeBludgeonDamageIII), 15.0 },
+                // Retreat: escape + survivability
+                { (AIState.Retreat, ResearchType.RetreatSpeedI), 25.0 },
+                { (AIState.Retreat, ResearchType.RetreatSpeedII), 25.0 },
+                { (AIState.Retreat, ResearchType.RetreatSpeedIII), 25.0 },
+                { (AIState.Retreat, ResearchType.InfantryMeleeArmorI), 15.0 },
+                { (AIState.Retreat, ResearchType.InfantryMeleeArmorII), 15.0 },
+                { (AIState.Retreat, ResearchType.InfantryMeleeArmorIII), 15.0 },
+                { (AIState.Retreat, ResearchType.CavalryMeleeArmorI), 15.0 },
+                { (AIState.Retreat, ResearchType.CavalryMeleeArmorII), 15.0 },
+                { (AIState.Retreat, ResearchType.CavalryMeleeArmorIII), 15.0 },
+            };
+
+        // ================================================================
         // Research Commands
         // ================================================================
 
@@ -31,8 +123,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastResearchCheckTime < researchCheckInterval) return commands;
-            aiState.lastResearchCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastResearchCheckTime, currentTime, researchCheckInterval)) return commands;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return commands;
@@ -45,7 +136,7 @@ namespace Sporefront.AI
                 if (CanAffordResearch(bestResearch.Value, playerID, gameState))
                 {
                     commands.Add(new AIStartResearchCommand(playerID, bestResearch.Value));
-                    DebugLog.Log(string.Format("AI starting research: {0}", bestResearch.Value.DisplayName()));
+                    DebugLog.Log($"AI starting research: {bestResearch.Value.DisplayName()}");
                 }
             }
 
@@ -90,142 +181,19 @@ namespace Sporefront.AI
             // Base score: prefer lower tier research (cheaper, faster)
             score += (4 - research.Tier()) * 10.0;
 
-            // State-based priorities
-            switch (aiState.currentState)
-            {
-                case AIState.Peace:
-                    if (research.Category() == ResearchCategory.Economic)
-                    {
-                        score += 30.0;
-                        switch (research)
-                        {
-                            case ResearchType.FarmGatheringI:
-                            case ResearchType.FarmGatheringII:
-                            case ResearchType.FarmGatheringIII:
-                                score += 15.0; break;
-                            case ResearchType.LumberCampGatheringI:
-                            case ResearchType.LumberCampGatheringII:
-                            case ResearchType.LumberCampGatheringIII:
-                                score += 12.0; break;
-                            case ResearchType.MiningCampGatheringI:
-                            case ResearchType.MiningCampGatheringII:
-                            case ResearchType.MiningCampGatheringIII:
-                                score += 10.0; break;
-                            case ResearchType.PopulationCapacityI:
-                            case ResearchType.PopulationCapacityII:
-                            case ResearchType.PopulationCapacityIII:
-                                score += 8.0; break;
-                            case ResearchType.BuildingSpeedI:
-                            case ResearchType.BuildingSpeedII:
-                            case ResearchType.BuildingSpeedIII:
-                                score += 5.0; break;
-                        }
-                    }
-                    break;
+            // State-based priorities (data-driven)
+            var state = aiState.currentState;
+            var category = research.Category();
 
-                case AIState.Alert:
-                    if (research.Category() == ResearchCategory.Military)
-                    {
-                        score += 25.0;
-                        switch (research)
-                        {
-                            case ResearchType.InfantryMeleeArmorI:
-                            case ResearchType.InfantryMeleeArmorII:
-                            case ResearchType.InfantryMeleeArmorIII:
-                            case ResearchType.InfantryPierceArmorI:
-                            case ResearchType.InfantryPierceArmorII:
-                            case ResearchType.InfantryPierceArmorIII:
-                                score += 10.0; break;
-                            case ResearchType.MilitaryTrainingSpeedI:
-                            case ResearchType.MilitaryTrainingSpeedII:
-                            case ResearchType.MilitaryTrainingSpeedIII:
-                                score += 15.0; break;
-                        }
-                    }
-                    else
-                    {
-                        score += 15.0;
-                    }
-                    break;
+            double categoryBonus;
+            if (StateCategoryBonuses.TryGetValue((state, category), out categoryBonus))
+                score += categoryBonus;
+            else if (state == AIState.Alert && category != ResearchCategory.Military)
+                score += 15.0; // Alert: non-military fallback
 
-                case AIState.Defense:
-                    if (research.Category() == ResearchCategory.Military)
-                    {
-                        score += 30.0;
-                        switch (research)
-                        {
-                            case ResearchType.FortifiedBuildingsI:
-                            case ResearchType.FortifiedBuildingsII:
-                            case ResearchType.FortifiedBuildingsIII:
-                                score += 20.0; break;
-                            case ResearchType.BuildingBludgeonArmorI:
-                            case ResearchType.BuildingBludgeonArmorII:
-                            case ResearchType.BuildingBludgeonArmorIII:
-                                score += 18.0; break;
-                            case ResearchType.InfantryMeleeArmorI:
-                            case ResearchType.InfantryMeleeArmorII:
-                            case ResearchType.InfantryMeleeArmorIII:
-                            case ResearchType.CavalryMeleeArmorI:
-                            case ResearchType.CavalryMeleeArmorII:
-                            case ResearchType.CavalryMeleeArmorIII:
-                                score += 12.0; break;
-                            case ResearchType.RetreatSpeedI:
-                            case ResearchType.RetreatSpeedII:
-                            case ResearchType.RetreatSpeedIII:
-                                score += 8.0; break;
-                        }
-                    }
-                    break;
-
-                case AIState.Attack:
-                    if (research.Category() == ResearchCategory.Military)
-                    {
-                        score += 30.0;
-                        switch (research)
-                        {
-                            case ResearchType.InfantryMeleeAttackI:
-                            case ResearchType.InfantryMeleeAttackII:
-                            case ResearchType.InfantryMeleeAttackIII:
-                            case ResearchType.CavalryMeleeAttackI:
-                            case ResearchType.CavalryMeleeAttackII:
-                            case ResearchType.CavalryMeleeAttackIII:
-                                score += 15.0; break;
-                            case ResearchType.PiercingDamageI:
-                            case ResearchType.PiercingDamageII:
-                            case ResearchType.PiercingDamageIII:
-                                score += 12.0; break;
-                            case ResearchType.MarchSpeedI:
-                            case ResearchType.MarchSpeedII:
-                            case ResearchType.MarchSpeedIII:
-                                score += 10.0; break;
-                            case ResearchType.SiegeBludgeonDamageI:
-                            case ResearchType.SiegeBludgeonDamageII:
-                            case ResearchType.SiegeBludgeonDamageIII:
-                                score += 15.0; break;
-                        }
-                    }
-                    break;
-
-                case AIState.Retreat:
-                    if (research.Category() == ResearchCategory.Military)
-                    {
-                        switch (research)
-                        {
-                            case ResearchType.RetreatSpeedI:
-                            case ResearchType.RetreatSpeedII:
-                            case ResearchType.RetreatSpeedIII:
-                                score += 25.0; break;
-                            case ResearchType.InfantryMeleeArmorI:
-                            case ResearchType.InfantryMeleeArmorII:
-                            case ResearchType.InfantryMeleeArmorIII:
-                            case ResearchType.CavalryMeleeArmorI:
-                            case ResearchType.CavalryMeleeArmorII:
-                            case ResearchType.CavalryMeleeArmorIII:
-                                score += 15.0; break;
-                        }
-                    }
-                    break;
-            }
+            double researchBonus;
+            if (StateResearchBonuses.TryGetValue((state, research), out researchBonus))
+                score += researchBonus;
 
             // Penalize Tier I research in gated branches when gate building isn't built yet
             if (research.Tier() == 1)
@@ -233,8 +201,7 @@ namespace Sporefront.AI
                 var gateBuildingType = research.Branch().GateBuildingType();
                 if (gateBuildingType.HasValue)
                 {
-                    bool hasGateBuilding = gameState.GetBuildingsForPlayer(aiState.playerID)
-                        .Any(b => b.buildingType == gateBuildingType.Value && b.IsOperational);
+                    bool hasGateBuilding = gameState.HasBuilding(aiState.playerID, gateBuildingType.Value, operationalOnly: true);
                     if (!hasGateBuilding)
                     {
                         score -= 5.0;
@@ -331,65 +298,21 @@ namespace Sporefront.AI
                     score -= 5.0; // Penalty for over-specializing
             }
 
-            // Faction synergy bonuses
-            var faction = player?.faction ?? FactionType.None;
+            // Faction synergy bonuses (data-driven via FactionAIConfig)
+            var factionConfig = FactionAIConfig.Get(player?.faction ?? FactionType.None);
 
-            if (faction == FactionType.Morel)
+            double factionBonus;
+            if (factionConfig.ResearchBonuses.TryGetValue(research, out factionBonus))
+                score += factionBonus;
+
+            if (factionConfig.ResearchNamePenalties.Count > 0)
             {
-                switch (research)
+                var researchName = research.ToString();
+                foreach (var penalty in factionConfig.ResearchNamePenalties)
                 {
-                    // Lumber gathering synergy (+5% wood bonus)
-                    case ResearchType.LumberCampGatheringI: score += 12.0; break;
-                    case ResearchType.LumberCampGatheringII: score += 10.0; break;
-                    // Faction-exclusive research
-                    case ResearchType.BurnAreas: score += 15.0; break;
-                    case ResearchType.ToxicSpores: score += 12.0; break;
-                    case ResearchType.LethalSpores: score += 10.0; break;
-                    // Infantry research (core army type)
-                    case ResearchType.InfantryMeleeAttackI:
-                    case ResearchType.InfantryMeleeAttackII:
-                    case ResearchType.InfantryMeleeAttackIII:
-                        score += 8.0; break;
-                    case ResearchType.InfantryMeleeArmorI:
-                    case ResearchType.InfantryMeleeArmorII:
-                    case ResearchType.InfantryMeleeArmorIII:
-                        score += 6.0; break;
-                    // March speed synergy with scouting focus
-                    case ResearchType.MarchSpeedI:
-                    case ResearchType.MarchSpeedII:
-                    case ResearchType.MarchSpeedIII:
-                        score += 5.0; break;
+                    if (researchName.Contains(penalty.pattern))
+                        score += penalty.penalty;
                 }
-                // Deprioritize T3-blocked categories (diminishing returns)
-                var name = research.ToString();
-                if (name.Contains("Cavalry")) score -= 5.0;
-                if (name.Contains("Siege")) score -= 5.0;
-            }
-            else if (faction == FactionType.Muscaria)
-            {
-                switch (research)
-                {
-                    // Poison research chain (faction-exclusive, high priority)
-                    case ResearchType.IncreasedPoisonDamage: score += 20.0; break;
-                    case ResearchType.ToxinAccumulation: score += 18.0; break;
-                    case ResearchType.SporeBurst: score += 15.0; break;
-                    // Mining gathering synergy (+5% stone/ore bonus)
-                    case ResearchType.MiningCampGatheringI: score += 12.0; break;
-                    case ResearchType.MiningCampGatheringII: score += 10.0; break;
-                    // Ranged/siege research (core army types)
-                    case ResearchType.PiercingDamageI:
-                    case ResearchType.PiercingDamageII:
-                    case ResearchType.PiercingDamageIII:
-                        score += 8.0; break;
-                    case ResearchType.SiegeBludgeonDamageI:
-                    case ResearchType.SiegeBludgeonDamageII:
-                    case ResearchType.SiegeBludgeonDamageIII:
-                        score += 8.0; break;
-                }
-                // Deprioritize T3-blocked categories
-                var name = research.ToString();
-                if (name.Contains("InfantryMelee")) score -= 5.0;
-                if (name.Contains("Cavalry")) score -= 5.0;
             }
 
             return score;
@@ -461,14 +384,7 @@ namespace Sporefront.AI
         {
             var player = gameState.GetPlayer(playerID);
             if (player == null) return false;
-
-            var cost = research.Cost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value))
-                    return false;
-            }
-            return true;
+            return player.CanAfford(research.Cost());
         }
     }
 }

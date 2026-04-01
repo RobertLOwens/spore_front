@@ -28,12 +28,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
-
-            if (!group.ownerID.HasValue || group.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your villagers");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             var resource = state.GetResourcePoint(resourcePointID);
             if (resource == null)
@@ -50,9 +46,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var group = state.GetVillagerGroup(villagerGroupID);
-            if (group == null)
-                return EngineCommandResult.Failure("Villager group not found");
+            var fail = ValidateVillagerGroup(state, villagerGroupID, out var group);
+            if (fail != null) return fail;
 
             var resource = state.GetResourcePoint(resourcePointID);
             if (resource == null)
@@ -78,8 +73,7 @@ namespace Sporefront.Commands
                 targetCoordinate = resource.coordinate
             });
 
-            DebugLog.Log(string.Format("HuntCommand: Villagers assigned to hunt at ({0}, {1})",
-                resource.coordinate.q, resource.coordinate.r));
+            DebugLog.Log($"HuntCommand: Villagers assigned to hunt at ({resource.coordinate.q}, {resource.coordinate.r})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

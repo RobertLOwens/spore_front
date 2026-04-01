@@ -35,22 +35,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (building.buildingType != BuildingType.Market)
-                return EngineCommandResult.Failure("Building is not a market");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Market is not operational");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Market is not owned by this player");
+            fail = ValidateOperationalBuilding(state, buildingID, out var building, BuildingType.Market);
+            if (fail != null) return fail;
 
             // Must have at least some input
             int totalInput = 0;
@@ -64,7 +53,7 @@ namespace Sporefront.Commands
 
                 if (kvp.Value > 0 && !player.HasResource(kvp.Key, kvp.Value))
                     return EngineCommandResult.Failure(
-                        string.Format("Insufficient {0}: need {1}", kvp.Key, kvp.Value));
+                        $"Insufficient {kvp.Key}: need {kvp.Value}");
 
                 totalInput += kvp.Value;
             }
@@ -77,9 +66,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct input resources
             int totalInput = 0;
@@ -106,8 +94,7 @@ namespace Sporefront.Commands
 
             changeBuilder.Add(new ResourcesChangedChange { playerID = PlayerID });
 
-            DebugLog.Log(string.Format("MarketTradeCommand: Player {0} traded {1} resources for {2} {3}",
-                PlayerID, totalInput, outputAmount, outputType));
+            DebugLog.Log($"MarketTradeCommand: Player {PlayerID} traded {totalInput} resources for {outputAmount} {outputType}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

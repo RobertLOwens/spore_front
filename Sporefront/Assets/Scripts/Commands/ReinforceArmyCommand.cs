@@ -31,24 +31,13 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            // Building exists and is owned by player
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
+            // Building exists, is owned by player, and is operational
+            var fail = ValidateOperationalBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Army exists and is owned by player
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Army is not owned by this player");
+            fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             // Total units must be > 0
             int totalUnits = 0;
@@ -66,8 +55,7 @@ namespace Sporefront.Commands
                 int garrisonCount = building.garrison.ContainsKey(kvp.Key) ? building.garrison[kvp.Key] : 0;
                 if (garrisonCount < kvp.Value)
                     return EngineCommandResult.Failure(
-                        string.Format("Building does not have enough {0} in garrison (have {1}, need {2})",
-                            kvp.Key, garrisonCount, kvp.Value));
+                        $"Building does not have enough {kvp.Key} in garrison (have {garrisonCount}, need {kvp.Value})");
             }
 
             // Path exists from building to army
@@ -80,13 +68,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
+            fail = ValidateArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             // Find path from building to army
             var path = state.mapData.FindPath(building.coordinate, army.coordinate, PlayerID, state);
@@ -134,8 +120,7 @@ namespace Sporefront.Commands
                 newComposition = compositionDict
             });
 
-            DebugLog.Log(string.Format("ReinforceArmyCommand: Dispatched reinforcement from {0} to army {1} ({2} units, {3} steps)",
-                building.coordinate, army.name, GetTotalUnits(), path.Count));
+            DebugLog.Log($"ReinforceArmyCommand: Dispatched reinforcement from {building.coordinate} to army {army.name} ({GetTotalUnits()} units, {path.Count} steps)");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

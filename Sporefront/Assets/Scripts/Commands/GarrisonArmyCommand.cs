@@ -28,25 +28,14 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Army is not owned by this player");
+            var fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             if (army.isInCombat)
                 return EngineCommandResult.Failure("Cannot garrison while in combat");
 
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
+            fail = ValidateOperationalBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Army must be at the building's tile (or an occupied coordinate)
             bool atBuilding = building.Occupies(army.coordinate);

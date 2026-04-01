@@ -16,9 +16,6 @@ namespace Sporefront.Engine
         // State
         private GameState gameState;
 
-        // Constants
-        private double villagerTrainingTime = GameConfig.Training.VillagerTrainingTime;
-
         // Setup
 
         public void Setup(GameState gameState)
@@ -80,8 +77,7 @@ namespace Sporefront.Engine
             {
                 var owner = gameState.GetPlayer(building.ownerID.Value);
                 if (owner != null)
-                    researchMultiplier = owner.GetResearchBonusMultiplier(
-                        ResearchBonusType.MilitaryTrainingSpeed.ToString());
+                    researchMultiplier = owner.GetResearchBonusMultiplier(ResearchBonusType.MilitaryTrainingSpeed);
             }
 
             var completedEntries = building.UpdateTraining(currentTime, researchMultiplier);

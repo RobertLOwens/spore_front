@@ -104,78 +104,9 @@ namespace Sporefront.AI
         // Hunt Arrival Processing
         // ================================================================
 
-        /// <summary>
-        /// Checks all villager groups with hunting tasks -- if they have arrived at the animal,
-        /// execute instant combat and convert to carcass gathering.
-        /// </summary>
         private void ProcessHuntArrivals(GameState state)
         {
-            var groups = state.villagerGroups.Values.ToList();
-
-            foreach (var group in groups)
-            {
-                var huntTask = group.currentTask as HuntingTask;
-                if (huntTask == null) continue;
-                if (group.currentPath != null) continue; // Still en route
-
-                var resourcePointID = huntTask.ResourcePointID;
-                var resource = state.GetResourcePoint(resourcePointID);
-                if (resource == null)
-                {
-                    group.ClearTask();
-                    continue;
-                }
-
-                if (!group.coordinate.Equals(resource.coordinate)) continue;
-
-                // At target -- execute hunt combat
-                double villagerAttack = group.villagerCount * 25.0;
-                double damageToAnimal = Math.Max(1.0, villagerAttack - resource.resourceType.DefensePower());
-                resource.TakeDamage(damageToAnimal);
-
-                double animalAttack = resource.resourceType.AttackPower();
-                double damageToVillagers = Math.Max(0.0, animalAttack - group.villagerCount * 0.5);
-                int villagersLost = (int)(damageToVillagers / 5.0);
-                if (villagersLost > 0) group.RemoveVillagers(villagersLost);
-
-                if (resource.currentHealth <= 0)
-                {
-                    // Animal killed -- create carcass and start gathering
-                    var carcass = resource.CreateCarcassData();
-                    if (carcass != null)
-                    {
-                        state.RemoveResourcePoint(resource.id);
-                        state.AddResourcePoint(carcass);
-
-                        bool registered = context.resourceEngine.StartGathering(
-                            group.id, carcass.id);
-                        if (registered)
-                        {
-                            context.resourceEngine.UpdateCollectionRates(
-                                group.ownerID ?? Guid.Empty);
-                        }
-                        else
-                        {
-                            group.ClearTask();
-                        }
-                    }
-                    else
-                    {
-                        group.ClearTask();
-                    }
-                }
-                else
-                {
-                    // Animal survived -- clear task, AI will retry next cycle
-                    group.ClearTask();
-                }
-
-                if (group.villagerCount <= 0)
-                {
-                    context.resourceEngine.StopGathering(group.id);
-                    state.RemoveVillagerGroup(group.id);
-                }
-            }
+            AIHelper.ProcessHuntArrivals(state, context.resourceEngine);
         }
 
         // ================================================================
@@ -440,9 +371,8 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastUnitUpgradeCheckTime < genome.unitUpgradeCheckInterval)
+            if (!AIHelper.ShouldExecute(ref aiState.lastUnitUpgradeCheckTime, currentTime, genome.unitUpgradeCheckInterval))
                 return new List<IEngineCommand>();
-            aiState.lastUnitUpgradeCheckTime = currentTime;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -718,8 +648,7 @@ namespace Sporefront.AI
             var exploredCount = gameState.GetExploredResourcePoints(playerID).Count;
             var idleVillagerCount = gameState.GetVillagerGroupsForPlayer(playerID)
                 .Count(g => g.currentTask is IdleTask && g.currentPath == null);
-            DebugLog.Log(string.Format("Sim Economy: exploredResources={0}, idleVillagers={1}, wood={2}",
-                exploredCount, idleVillagerCount, player.GetResource(ResourceType.Wood)));
+            DebugLog.Log($"Sim Economy: exploredResources={exploredCount}, idleVillagers={idleVillagerCount}, wood={player.GetResource(ResourceType.Wood)}");
 
             var villagerCount = gameState.GetVillagerCount(playerID);
             int popCurrent, popCapacity;
@@ -853,9 +782,8 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastUpgradeCheckTime < genome.upgradeCheckInterval)
+            if (!AIHelper.ShouldExecute(ref aiState.lastUpgradeCheckTime, currentTime, genome.upgradeCheckInterval))
                 return new List<IEngineCommand>();
-            aiState.lastUpgradeCheckTime = currentTime;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -869,7 +797,7 @@ namespace Sporefront.AI
             if (player.GetResource(ResourceType.Wood) < 300) return new List<IEngineCommand>();
 
             // Don't upgrade CC until we have a lumber camp
-            bool hasLumber = buildings.Any(b => b.buildingType == BuildingType.LumberCamp && b.IsOperational);
+            bool hasLumber = gameState.HasBuilding(playerID, BuildingType.LumberCamp, operationalOnly: true);
             if (!hasLumber) return new List<IEngineCommand>();
 
             // Score and pick the best building to upgrade
@@ -881,16 +809,7 @@ namespace Sporefront.AI
                 var cost = building.GetUpgradeCost();
                 if (cost == null) continue;
 
-                bool canAfford = true;
-                foreach (var kvp in cost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(cost)) continue;
 
                 double score = 0.0;
                 switch (building.buildingType)
@@ -1019,8 +938,7 @@ namespace Sporefront.AI
                     urgency.TryGetValue(r.resourceType.ResourceYield(), out u);
                     return u;
                 })
-                .ThenBy(r => r.coordinate.Distance(cityCenter.coordinate))
-                .ToList();
+                .ThenBy(r => r.coordinate.Distance(cityCenter.coordinate));
 
             var assignedResources = new HashSet<Guid>();
             foreach (var villagerGroup in idleVillagers)
@@ -1130,13 +1048,11 @@ namespace Sporefront.AI
 
             if (huntableAnimals.Count == 0)
             {
-                DebugLog.Log(string.Format("Sim Hunt: no huntable animals found (explored={0})",
-                    gameState.GetExploredResourcePoints(playerID).Count));
+                DebugLog.Log($"Sim Hunt: no huntable animals found (explored={gameState.GetExploredResourcePoints(playerID).Count})");
             }
 
             var idleVillagers = gameState.GetVillagerGroupsForPlayer(playerID)
-                .Where(g => g.currentTask is IdleTask && g.currentPath == null)
-                .ToList();
+                .Where(g => g.currentTask is IdleTask && g.currentPath == null);
 
             var usedVillagers = new HashSet<Guid>();
             foreach (var animal in huntableAnimals)
@@ -1166,11 +1082,7 @@ namespace Sporefront.AI
             var player = gameState.GetPlayer(playerID);
             if (player == null) return null;
 
-            var campCost = BuildingType.LumberCamp.BuildCost();
-            foreach (var kvp in campCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (!player.CanAfford(BuildingType.LumberCamp.BuildCost())) return null;
 
             var trees = gameState.GetExploredResourcePoints(playerID)
                 .Where(r => r.resourceType == ResourcePointType.Trees && r.remainingAmount > 0 &&
@@ -1241,92 +1153,45 @@ namespace Sporefront.AI
             }
         }
 
-        private IEngineCommand TryBuildFarm(Guid playerID, GameState gameState)
+        /// <summary>
+        /// Generic building construction helper for simulation AI. Validates player/CC,
+        /// checks optional preconditions, affordability, and finds a build location.
+        /// </summary>
+        private IEngineCommand TryBuildStructure(Guid playerID, GameState gameState, BuildingType type, int searchRadius,
+            bool requiresCCLevel = false, bool singleton = false, int? maxAllowed = null)
         {
             var cityCenter = gameState.GetCityCenter(playerID);
             if (cityCenter == null) return null;
             var player = gameState.GetPlayer(playerID);
             if (player == null) return null;
 
-            var farmCost = BuildingType.Farm.BuildCost();
-            foreach (var kvp in farmCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (requiresCCLevel && cityCenter.level < type.RequiredCityCenterLevel()) return null;
+            if (singleton && gameState.HasBuilding(playerID, type)) return null;
+            if (maxAllowed.HasValue && gameState.GetBuildingCount(type, playerID) >= maxAllowed.Value) return null;
 
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 4, playerID);
+            if (!player.CanAfford(type.BuildCost())) return null;
+
+            var location = gameState.FindBuildLocation(cityCenter.coordinate, searchRadius, playerID);
             if (!location.HasValue) return null;
 
-            return new AIBuildCommand(playerID, BuildingType.Farm, location.Value, 0);
+            return new AIBuildCommand(playerID, type, location.Value, 0);
         }
+
+        private IEngineCommand TryBuildFarm(Guid playerID, GameState gameState)
+            => TryBuildStructure(playerID, gameState, BuildingType.Farm, 4);
 
         private IEngineCommand TryBuildHouse(Guid playerID, GameState gameState, double currentTime, AIPlayerState aiState)
-        {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            var houseCost = BuildingType.Neighborhood.BuildCost();
-            foreach (var kvp in houseCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Neighborhood, location.Value, 0);
-        }
+            => TryBuildStructure(playerID, gameState, BuildingType.Neighborhood, 5);
 
         private IEngineCommand TryBuildStorage(Guid playerID, GameState gameState)
         {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            int ccLevel = cityCenter.level;
-            int currentWarehouses = gameState.GetBuildingCount(BuildingType.Warehouse, playerID);
-            int maxWarehouses = BuildingTypeExtensions.MaxWarehousesAllowed(ccLevel);
-
-            if (currentWarehouses >= maxWarehouses) return null;
-
-            var warehouseCost = BuildingType.Warehouse.BuildCost();
-            foreach (var kvp in warehouseCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Warehouse, location.Value, 0);
+            int ccLevel = gameState.GetCityCenter(playerID)?.level ?? 0;
+            return TryBuildStructure(playerID, gameState, BuildingType.Warehouse, 5,
+                maxAllowed: BuildingTypeExtensions.MaxWarehousesAllowed(ccLevel));
         }
 
         private IEngineCommand TryBuildLibrary(Guid playerID, GameState gameState)
-        {
-            var cityCenter = gameState.GetCityCenter(playerID);
-            if (cityCenter == null) return null;
-            var player = gameState.GetPlayer(playerID);
-            if (player == null) return null;
-
-            if (cityCenter.level < BuildingType.Library.RequiredCityCenterLevel()) return null;
-
-            bool existingLibrary = gameState.GetBuildingsForPlayer(playerID).Any(b => b.buildingType == BuildingType.Library);
-            if (existingLibrary) return null;
-
-            var libraryCost = BuildingType.Library.BuildCost();
-            foreach (var kvp in libraryCost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
-
-            var location = gameState.FindBuildLocation(cityCenter.coordinate, 4, playerID);
-            if (!location.HasValue) return null;
-
-            return new AIBuildCommand(playerID, BuildingType.Library, location.Value, 0);
-        }
+            => TryBuildStructure(playerID, gameState, BuildingType.Library, 4, requiresCCLevel: true, singleton: true);
 
         private IEngineCommand TryBuildMilitaryBuilding(Guid playerID, GameState gameState)
         {
@@ -1357,17 +1222,7 @@ namespace Sporefront.AI
 
                 if (existingCount < priority.minCount || existingCount >= priority.maxCount) continue;
 
-                var cost = priority.type.BuildCost();
-                bool canAfford = true;
-                foreach (var kvp in cost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(priority.type.BuildCost())) continue;
 
                 var location = gameState.FindBuildLocation(cityCenter.coordinate, 5, playerID);
                 if (!location.HasValue) continue;
@@ -1435,17 +1290,7 @@ namespace Sporefront.AI
                 }
                 if (hasCoverage) continue;
 
-                var campCost = campType.BuildCost();
-                bool canAfford = true;
-                foreach (var kvp in campCost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(campType.BuildCost())) continue;
 
                 double resourceUrgency;
                 urgency.TryGetValue(resource.resourceType.ResourceYield(), out resourceUrgency);
@@ -1543,7 +1388,7 @@ namespace Sporefront.AI
             else
             {
                 // Shuffle and try random order
-                var shuffled = candidates.OrderBy(_ => rng.Next()).ToList();
+                var shuffled = candidates.OrderBy(_ => rng.Next());
                 foreach (var candidate in shuffled)
                 {
                     var cmd = candidate.tryBuild();
@@ -1590,8 +1435,7 @@ namespace Sporefront.AI
                 };
 
                 var militaryBuildings = gameState.GetBuildingsForPlayer(playerID)
-                    .Where(b => militaryBuildingTypes.Contains(b.buildingType) && b.IsOperational && b.trainingQueue.Count == 0)
-                    .ToList();
+                    .Where(b => militaryBuildingTypes.Contains(b.buildingType) && b.IsOperational && b.trainingQueue.Count == 0);
 
                 bool trainedThisCycle = false;
                 foreach (var building in militaryBuildings)
@@ -1656,13 +1500,7 @@ namespace Sporefront.AI
 
             foreach (var unitType in trainableUnits)
             {
-                var trainingCost = unitType.TrainingCost();
-                bool canAfford = true;
-                foreach (var kvp in trainingCost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value)) { canAfford = false; break; }
-                }
-                if (!canAfford) continue;
+                if (!player.CanAfford(unitType.TrainingCost())) continue;
 
                 double score = ScoreUnitTraining(unitType, enemyAnalysis, ownComposition, player, gameState, playerID, gameTime);
 
@@ -2075,8 +1913,7 @@ namespace Sporefront.AI
 
             // Find scout armies
             var scoutArmies = gameState.GetArmiesForPlayer(playerID)
-                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null)
-                .ToList();
+                .Where(a => IsScoutArmy(a) && !a.isInCombat && a.currentPath == null);
 
             foreach (var scout in scoutArmies)
             {
@@ -2166,8 +2003,7 @@ namespace Sporefront.AI
             aiState.previousThreatLevel = threatLevel;
 
             int towerCount = gameState.GetBuildingCount(BuildingType.Tower, playerID);
-            bool hasBarracks = gameState.GetBuildingsForPlayer(playerID)
-                .Any(b => b.buildingType == BuildingType.Barracks && b.IsOperational);
+            bool hasBarracks = gameState.HasBuilding(playerID, BuildingType.Barracks, operationalOnly: true);
 
             bool shouldBuildDefense;
             if (aiState.currentState == AIState.Peace)
@@ -2235,18 +2071,14 @@ namespace Sporefront.AI
             int ccLevel = cityCenter.level;
             if (ccLevel < buildingType.RequiredCityCenterLevel()) return null;
 
-            var cost = buildingType.BuildCost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value)) return null;
-            }
+            if (!player.CanAfford(buildingType.BuildCost())) return null;
 
             int maxDistance = buildingType == BuildingType.Tower ? 4 : 5;
             var rng = new System.Random();
             for (int distance = 2; distance <= maxDistance; distance++)
             {
                 var ring = cityCenter.coordinate.CoordinatesInRing(distance);
-                var shuffled = ring.OrderBy(_ => rng.Next()).ToList();
+                var shuffled = ring.OrderBy(_ => rng.Next());
 
                 foreach (var coord in shuffled)
                 {
@@ -2269,8 +2101,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastGarrisonCheckTime < genome.garrisonCheckInterval) return commands;
-            aiState.lastGarrisonCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastGarrisonCheckTime, currentTime, genome.garrisonCheckInterval)) return commands;
 
             var defensiveTypes = new HashSet<BuildingType>
             {
@@ -2293,8 +2124,7 @@ namespace Sporefront.AI
 
             var idleArmies = gameState.GetArmiesForPlayer(playerID)
                 .Where(a => !a.isInCombat && a.currentPath == null &&
-                            a.militaryComposition.Any(kvp => garrisonableTypes.Contains(kvp.Key) && kvp.Value > 0))
-                .ToList();
+                            a.militaryComposition.Any(kvp => garrisonableTypes.Contains(kvp.Key) && kvp.Value > 0));
 
             var assignedBuildings = new HashSet<Guid>();
             foreach (var army in idleArmies)
@@ -2321,9 +2151,8 @@ namespace Sporefront.AI
         {
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastEntrenchCheckTime < genome.entrenchCheckInterval)
+            if (!AIHelper.ShouldExecute(ref aiState.lastEntrenchCheckTime, currentTime, genome.entrenchCheckInterval))
                 return new List<IEngineCommand>();
-            aiState.lastEntrenchCheckTime = currentTime;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return new List<IEngineCommand>();
@@ -2348,8 +2177,7 @@ namespace Sporefront.AI
             var candidates = armies
                 .Where(a => !a.isInCombat && a.currentPath == null && !a.isRetreating &&
                             !a.isEntrenched && !a.isEntrenching)
-                .OrderBy(a => a.coordinate.Distance(cityCenter.coordinate))
-                .ToList();
+                .OrderBy(a => a.coordinate.Distance(cityCenter.coordinate));
 
             foreach (var army in candidates)
             {
@@ -2393,8 +2221,7 @@ namespace Sporefront.AI
             var commands = new List<IEngineCommand>();
             var playerID = aiState.playerID;
 
-            if (currentTime - aiState.lastResearchCheckTime < genome.researchCheckInterval) return commands;
-            aiState.lastResearchCheckTime = currentTime;
+            if (!AIHelper.ShouldExecute(ref aiState.lastResearchCheckTime, currentTime, genome.researchCheckInterval)) return commands;
 
             var player = gameState.GetPlayer(playerID);
             if (player == null) return commands;
@@ -2404,19 +2231,7 @@ namespace Sporefront.AI
             var bestResearch = SelectBestResearch(aiState, gameState);
             if (bestResearch.HasValue)
             {
-                // Check affordability
-                var cost = bestResearch.Value.Cost();
-                bool canAfford = true;
-                foreach (var kvp in cost)
-                {
-                    if (!player.HasResource(kvp.Key, kvp.Value))
-                    {
-                        canAfford = false;
-                        break;
-                    }
-                }
-
-                if (canAfford)
+                if (player.CanAfford(bestResearch.Value.Cost()))
                 {
                     commands.Add(new AIStartResearchCommand(playerID, bestResearch.Value));
                 }

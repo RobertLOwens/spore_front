@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class EvolutionPanel : MonoBehaviour
+    public class EvolutionPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -31,7 +31,6 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
 
         private int populationSize = 32;
         private int gamesPerEval = 6;
@@ -91,19 +90,19 @@ namespace Sporefront.Visual
         // Public API
         // ================================================================
 
-        public void Show()
+        public override void Show()
         {
             RefreshGenomeList();
             UpdateApplyButton();
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         /// <summary>
         /// Called by the manager when a generation completes.
@@ -121,8 +120,7 @@ namespace Sporefront.Visual
         {
             if (historyText == null) return;
 
-            string line = string.Format("Gen {0,3} | Fitness: {1:F2} | Win: {2:F0}% | Pop: {3}",
-                generation + 1, bestFitness, winRate * 100, populationCount);
+            string line = $"Gen {generation + 1,3} | Fitness: {bestFitness:F2} | Win: {winRate * 100:F0}% | Pop: {populationCount}";
 
             if (historyText.text == "No data yet.")
                 historyText.text = line;
@@ -382,8 +380,7 @@ namespace Sporefront.Visual
             nameLE.preferredHeight = 20;
 
             // Detail line
-            string detail = string.Format("Gen {0} | Fitness: {1:F2} | WR: {2}%",
-                genome.generation, genome.fitness, genome.WinRatePercent);
+            string detail = $"Gen {genome.generation} | Fitness: {genome.fitness:F2} | WR: {genome.WinRatePercent}%";
             var detailLabel = UIHelper.CreateLabel(vlg.transform, detail,
                 11, UIHelper.InkMutedText, TextAnchor.MiddleLeft);
             var detailLE = detailLabel.gameObject.AddComponent<LayoutElement>();

@@ -17,7 +17,7 @@ using Sporefront.Commands;
 
 namespace Sporefront.Visual
 {
-    public class TileInfoPanel : MonoBehaviour
+    public class TileInfoPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -44,11 +44,8 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
         private HexCoordinate? currentCoord;
-        private Guid localPlayerID;
         private bool showingMoveSelection;
         private bool showingAttackSelection;
         private GameState cachedGameState;
@@ -166,7 +163,7 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             currentCoord = null;
             showingMoveSelection = false;
@@ -191,7 +188,7 @@ namespace Sporefront.Visual
             Rebuild(gameState);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Rebuild Content

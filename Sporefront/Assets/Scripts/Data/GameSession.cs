@@ -395,7 +395,7 @@ namespace Sporefront.Data
             for (int i = 0; i < aiPlayers.Count; i++)
             {
                 var ai = aiPlayers[i];
-                string aiKey = string.Format("ai_{0}", i);
+                string aiKey = $"ai_{i}";
                 players[aiKey] = new GameSessionPlayer(
                     uid: aiKey,
                     displayName: ai.displayName,

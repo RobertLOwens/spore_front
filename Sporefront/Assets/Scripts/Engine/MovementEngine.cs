@@ -199,74 +199,7 @@ namespace Sporefront.Engine
 
             var targetCoord = path[army.pathIndex];
 
-            // Calculate movement speed based on slowest unit in army
-            double slowestUnitSpeed = army.SlowestUnitMoveSpeed;
-            // Normalize: default army speed (1.6) = base speed, slower units reduce speed proportionally
-            double speedMultiplier = 1.6 / slowestUnitSpeed;
-
-            bool onRoad = gameState.mapData.GetBuildingID(targetCoord) != null;
-            double speed;
-            if (onRoad)
-            {
-                // On road
-                speed = baseMovementSpeed * speedMultiplier;
-            }
-            else
-            {
-                speed = baseMovementSpeed * speedMultiplier * terrainSpeedMultiplier;
-            }
-
-            if (army.isRetreating)
-            {
-                speed *= retreatSpeedBonus;
-            }
-
-            // Apply research bonuses for march/retreat/road speed
-            if (army.ownerID.HasValue)
-            {
-                var owner = gameState.GetPlayer(army.ownerID.Value);
-                if (owner != null)
-                {
-                    speed *= owner.GetResearchBonusMultiplier(
-                        ResearchBonusType.MilitaryMarchSpeed.ToString());
-                    if (army.isRetreating)
-                        speed *= owner.GetResearchBonusMultiplier(
-                            ResearchBonusType.MilitaryRetreatSpeed.ToString());
-                    if (onRoad)
-                        speed *= owner.GetResearchBonusMultiplier(
-                            ResearchBonusType.RoadSpeed.ToString());
-                }
-            }
-
-            // Apply faction highland speed bonus
-            if (army.ownerID.HasValue)
-            {
-                var owner = gameState.GetPlayer(army.ownerID.Value);
-                if (owner != null)
-                {
-                    var terrain = gameState.mapData.GetTerrain(targetCoord);
-                    if (terrain.HasValue &&
-                        (terrain.Value == TerrainType.Mountain || terrain.Value == TerrainType.Hill))
-                    {
-                        double highlandBonus = owner.faction.HighlandSpeedBonus();
-                        if (highlandBonus > 0)
-                            speed *= (1.0 + highlandBonus);
-                    }
-                }
-            }
-
-            // Apply commander logistics bonus
-            if (army.commanderID.HasValue)
-            {
-                var commander = gameState.GetCommander(army.commanderID.Value);
-                if (commander != null)
-                {
-                    double logisticsBonus = 1.0 + (double)commander.Logistics * GameConfig.Commander.LogisticsSpeedScaling;
-                    speed *= logisticsBonus;
-                }
-            }
-
-            // Store speed for visual interpolation
+            double speed = CalculateArmySpeed(army, targetCoord);
             army.movementSpeed = speed;
 
             // Update progress (0.1 second update interval)
@@ -294,8 +227,8 @@ namespace Sporefront.Engine
                     from = fromCoord,
                     to = targetCoord,
                     path = army.pathIndex < path.Count
-                        ? path.GetRange(army.pathIndex, path.Count - army.pathIndex)
-                        : new List<HexCoordinate>()
+                        ? path
+                        : null
                 });
 
                 // Auto-engage: non-retreating army that steps onto an enemy tile triggers combat
@@ -407,6 +340,61 @@ namespace Sporefront.Engine
             return changes;
         }
 
+        /// <summary>
+        /// Calculates final movement speed for an army moving toward a target coordinate,
+        /// accounting for unit speed, terrain, roads, research, faction bonuses, and commander logistics.
+        /// </summary>
+        private double CalculateArmySpeed(ArmyData army, HexCoordinate targetCoord)
+        {
+            double slowestUnitSpeed = army.SlowestUnitMoveSpeed;
+            double speedMultiplier = 1.6 / slowestUnitSpeed;
+
+            bool onRoad = gameState.mapData.GetBuildingID(targetCoord) != null;
+            double speed = onRoad
+                ? baseMovementSpeed * speedMultiplier
+                : baseMovementSpeed * speedMultiplier * terrainSpeedMultiplier;
+
+            if (army.isRetreating)
+                speed *= retreatSpeedBonus;
+
+            // Research bonuses
+            if (army.ownerID.HasValue)
+            {
+                var owner = gameState.GetPlayer(army.ownerID.Value);
+                if (owner != null)
+                {
+                    speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.MilitaryMarchSpeed);
+                    if (army.isRetreating)
+                        speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.MilitaryRetreatSpeed);
+                    if (onRoad)
+                        speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.RoadSpeed);
+
+                    // Faction highland speed bonus
+                    var terrain = gameState.mapData.GetTerrain(targetCoord);
+                    if (terrain.HasValue &&
+                        (terrain.Value == TerrainType.Mountain || terrain.Value == TerrainType.Hill))
+                    {
+                        double highlandBonus = owner.faction.HighlandSpeedBonus();
+                        if (highlandBonus > 0)
+                            speed *= (1.0 + highlandBonus);
+                    }
+                }
+            }
+
+            // Commander logistics bonus
+            if (army.commanderID.HasValue)
+            {
+                var commander = gameState.GetCommander(army.commanderID.Value);
+                if (commander != null)
+                {
+                    double logisticsBonus = 1.0 + (double)commander.Logistics * GameConfig.Commander.LogisticsSpeedScaling;
+                    speed *= logisticsBonus;
+                }
+            }
+
+            return speed;
+        }
+
         // Villager Group Movement
 
         private List<StateChange> UpdateVillagerGroupMovement(VillagerGroupData group, double currentTime)
@@ -437,8 +425,7 @@ namespace Sporefront.Engine
             {
                 var owner = gameState.GetPlayer(group.ownerID.Value);
                 if (owner != null)
-                    speed *= owner.GetResearchBonusMultiplier(
-                        ResearchBonusType.VillagerMarchSpeed.ToString());
+                    speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.VillagerMarchSpeed);
             }
 
             // Store speed for visual interpolation
@@ -464,8 +451,8 @@ namespace Sporefront.Engine
                     from = fromCoord,
                     to = targetCoord,
                     path = group.pathIndex < path.Count
-                        ? path.GetRange(group.pathIndex, path.Count - group.pathIndex)
-                        : new List<HexCoordinate>()
+                        ? path
+                        : null
                 });
 
                 // Check if path is complete
@@ -537,8 +524,8 @@ namespace Sporefront.Engine
                     from = fromCoord,
                     to = targetCoord,
                     path = scout.pathIndex < path.Count
-                        ? path.GetRange(scout.pathIndex, path.Count - scout.pathIndex)
-                        : new List<HexCoordinate>()
+                        ? path
+                        : null
                 });
 
                 // Check if path is complete or out of stamina
@@ -593,11 +580,9 @@ namespace Sporefront.Engine
                     var owner = gameState.GetPlayer(army.ownerID.Value);
                     if (owner != null)
                     {
-                        speed *= owner.GetResearchBonusMultiplier(
-                            ResearchBonusType.MilitaryMarchSpeed.ToString());
+                        speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.MilitaryMarchSpeed);
                         if (reinforceOnRoad)
-                            speed *= owner.GetResearchBonusMultiplier(
-                                ResearchBonusType.RoadSpeed.ToString());
+                            speed *= owner.GetResearchBonusMultiplier(ResearchBonusType.RoadSpeed);
                     }
                 }
 

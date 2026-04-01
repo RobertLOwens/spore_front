@@ -175,7 +175,31 @@ namespace Sporefront.Commands
             if (army == null)
                 return EngineCommandResult.Failure("Attacker not found");
 
-            // Consume commander stamina
+            PrepareAttacker(army, state, changeBuilder);
+
+            double currentTime = state.currentTime;
+            HexCoordinate attackerOrigin = army.coordinate;
+            DefensiveStack stack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
+
+            // Branch by target type
+            BuildingData targetBuilding = state.GetBuilding(targetCoordinate);
+            if (targetBuilding != null)
+                return ExecuteBuildingAttack(army, stack, attackerOrigin, currentTime, state, changeBuilder);
+
+            if (stack.ArmyEntries.Count > 0)
+                return ExecuteArmyAttack(army, stack, attackerOrigin, currentTime, state, changeBuilder);
+
+            if (stack.OnlyVillagers)
+                return ExecuteVillagerAttack(army, stack, currentTime, state, changeBuilder);
+
+            return ExecuteCrossTileAttack(army, attackerOrigin, currentTime, state, changeBuilder);
+        }
+
+        /// <summary>
+        /// Consumes commander stamina and cancels entrenchment before attacking.
+        /// </summary>
+        private void PrepareAttacker(ArmyData army, GameState state, StateChangeBuilder changeBuilder)
+        {
             if (army.commanderID.HasValue)
             {
                 CommanderData cmdr = state.GetCommander(army.commanderID.Value);
@@ -183,7 +207,6 @@ namespace Sporefront.Commands
                     cmdr.ConsumeStamina();
             }
 
-            // Cancel entrenchment if army is entrenching or entrenched
             if (army.isEntrenching || army.isEntrenched)
             {
                 HexCoordinate armyCoord = army.coordinate;
@@ -197,184 +220,126 @@ namespace Sporefront.Commands
                     coordinate = armyCoord
                 });
             }
+        }
 
-            double currentTime = state.currentTime;
-
-            // Capture origin BEFORE moving — friendly armies at origin should join the attack
-            HexCoordinate attackerOrigin = army.coordinate;
-
-            // Build defensive stack at the target
-            DefensiveStack stack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
-
-            // Check for building target first
-            BuildingData targetBuilding = state.GetBuilding(targetCoordinate);
-
-            if (targetBuilding != null)
+        /// <summary>
+        /// Gathers friendly armies at the attacker's origin that can join the attack.
+        /// </summary>
+        private List<Guid> GatherAttackerGroup(HexCoordinate origin, GameState state)
+        {
+            var attackerArmyIDs = new List<Guid> { armyID };
+            List<ArmyData> friendlyArmies = state.GetArmies(origin);
+            foreach (ArmyData ally in friendlyArmies)
             {
-                // Move attacker to target tile first
-                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target building");
-                if (moveResult != null)
-                    return moveResult;
-
-                // Building combat scenario
-                if (stack.ArmyEntries.Count > 0)
+                if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
+                    !ally.isInCombat && ally.id != armyID)
                 {
-                    // Defenders present - use stack combat
-                    List<Guid> attackerArmyIDs = new List<Guid> { armyID };
-
-                    // Gather friendly armies at the attacker's ORIGIN position that can join
-                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
-                    foreach (ArmyData ally in friendlyArmies)
-                    {
-                        if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
-                            !ally.isInCombat && ally.id != armyID)
-                        {
-                            attackerArmyIDs.Add(ally.id);
-                        }
-                    }
-
-                    List<StateChange> stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
-                        attackerArmyIDs, targetCoordinate, currentTime);
-
-                    if (stackChanges != null)
-                        changeBuilder.AddAll(stackChanges);
+                    attackerArmyIDs.Add(ally.id);
                 }
-                else if (stack.villagerGroupIDs.Count > 0)
-                {
-                    // Only villagers defending - start villager combat
-                    Guid firstVillagerID = stack.villagerGroupIDs[0];
-                    StateChange villagerChange = GameEngine.Instance.combatEngine.StartVillagerCombat(
-                        armyID, firstVillagerID, currentTime);
-
-                    if (villagerChange != null)
-                        changeBuilder.Add(villagerChange);
-                }
-                else
-                {
-                    // No defenders - pure building combat
-                    StateChange buildingChange = GameEngine.Instance.combatEngine.StartBuildingCombat(
-                        armyID, targetBuilding.id, currentTime);
-
-                    if (buildingChange != null)
-                        changeBuilder.Add(buildingChange);
-
-                    // Collect any extra changes from False Morel instant-kill
-                    var falseMorelChanges = GameEngine.Instance.combatEngine.CollectPendingFalseMorelChanges();
-                    foreach (var fmc in falseMorelChanges)
-                        changeBuilder.Add(fmc);
-                }
-
-                return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
+            return attackerArmyIDs;
+        }
 
-            // Army or villager target (not on a building)
+        private EngineCommandResult ExecuteBuildingAttack(ArmyData army, DefensiveStack stack,
+            HexCoordinate attackerOrigin, double currentTime, GameState state, StateChangeBuilder changeBuilder)
+        {
+            var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target building");
+            if (moveResult != null) return moveResult;
+
             if (stack.ArmyEntries.Count > 0)
             {
-                // Move attacker to target tile first
-                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target");
-                if (moveResult != null)
-                    return moveResult;
-
-                // Has army defenders
-                if (stack.ArmyEntries.Count > 1 || stack.HasEntrenchedDefenders)
-                {
-                    // Multiple defenders or entrenched defenders - use stack combat
-                    List<Guid> attackerArmyIDs = new List<Guid> { armyID };
-
-                    // Gather friendly armies at the attacker's ORIGIN position
-                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
-                    foreach (ArmyData ally in friendlyArmies)
-                    {
-                        if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
-                            !ally.isInCombat && ally.id != armyID)
-                        {
-                            attackerArmyIDs.Add(ally.id);
-                        }
-                    }
-
-                    List<StateChange> stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
-                        attackerArmyIDs, targetCoordinate, currentTime);
-
-                    if (stackChanges != null)
-                        changeBuilder.AddAll(stackChanges);
-                }
-                else
-                {
-                    // Simple 1v1 combat against the single defender
-                    Guid defenderArmyID = stack.ArmyEntries[0].armyID;
-                    StateChange combatChange = GameEngine.Instance.combatEngine.StartCombat(
-                        armyID, defenderArmyID, currentTime);
-
-                    if (combatChange != null)
-                        changeBuilder.Add(combatChange);
-                }
-
-                return EngineCommandResult.Success(changeBuilder.Build().changes);
+                var attackerArmyIDs = GatherAttackerGroup(attackerOrigin, state);
+                var stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
+                    attackerArmyIDs, targetCoordinate, currentTime);
+                if (stackChanges != null) changeBuilder.AddAll(stackChanges);
             }
-
-            if (stack.OnlyVillagers)
+            else if (stack.villagerGroupIDs.Count > 0)
             {
-                // Move attacker to target tile first
-                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target villagers");
-                if (moveResult != null)
-                    return moveResult;
+                var villagerChange = GameEngine.Instance.combatEngine.StartVillagerCombat(
+                    armyID, stack.villagerGroupIDs[0], currentTime);
+                if (villagerChange != null) changeBuilder.Add(villagerChange);
+            }
+            else
+            {
+                BuildingData targetBuilding = state.GetBuilding(targetCoordinate);
+                var buildingChange = GameEngine.Instance.combatEngine.StartBuildingCombat(
+                    armyID, targetBuilding.id, currentTime);
+                if (buildingChange != null) changeBuilder.Add(buildingChange);
 
-                // Only villagers at target - start villager combat
-                Guid firstVillagerID = stack.villagerGroupIDs[0];
-                StateChange villagerChange = GameEngine.Instance.combatEngine.StartVillagerCombat(
-                    armyID, firstVillagerID, currentTime);
-
-                if (villagerChange != null)
-                    changeBuilder.Add(villagerChange);
-
-                return EngineCommandResult.Success(changeBuilder.Build().changes);
+                var falseMorelChanges = GameEngine.Instance.combatEngine.CollectPendingFalseMorelChanges();
+                foreach (var fmc in falseMorelChanges) changeBuilder.Add(fmc);
             }
 
-            // Check for cross-tile entrenched enemies covering this coordinate
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
+        }
+
+        private EngineCommandResult ExecuteArmyAttack(ArmyData army, DefensiveStack stack,
+            HexCoordinate attackerOrigin, double currentTime, GameState state, StateChangeBuilder changeBuilder)
+        {
+            var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target");
+            if (moveResult != null) return moveResult;
+
+            if (stack.ArmyEntries.Count > 1 || stack.HasEntrenchedDefenders)
+            {
+                var attackerArmyIDs = GatherAttackerGroup(attackerOrigin, state);
+                var stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
+                    attackerArmyIDs, targetCoordinate, currentTime);
+                if (stackChanges != null) changeBuilder.AddAll(stackChanges);
+            }
+            else
+            {
+                Guid defenderArmyID = stack.ArmyEntries[0].armyID;
+                var combatChange = GameEngine.Instance.combatEngine.StartCombat(
+                    armyID, defenderArmyID, currentTime);
+                if (combatChange != null) changeBuilder.Add(combatChange);
+            }
+
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
+        }
+
+        private EngineCommandResult ExecuteVillagerAttack(ArmyData army, DefensiveStack stack,
+            double currentTime, GameState state, StateChangeBuilder changeBuilder)
+        {
+            var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to target villagers");
+            if (moveResult != null) return moveResult;
+
+            var villagerChange = GameEngine.Instance.combatEngine.StartVillagerCombat(
+                armyID, stack.villagerGroupIDs[0], currentTime);
+            if (villagerChange != null) changeBuilder.Add(villagerChange);
+
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
+        }
+
+        private EngineCommandResult ExecuteCrossTileAttack(ArmyData army, HexCoordinate attackerOrigin,
+            double currentTime, GameState state, StateChangeBuilder changeBuilder)
+        {
             List<ArmyData> crossTileEntrenched = state.GetEntrenchedArmiesCovering(targetCoordinate);
-            List<ArmyData> enemyCrossTile = new List<ArmyData>();
+            bool hasCrossTileEnemy = false;
             foreach (ArmyData entrenched in crossTileEntrenched)
             {
                 if (entrenched.ownerID.HasValue && entrenched.ownerID.Value != PlayerID)
-                    enemyCrossTile.Add(entrenched);
-            }
-
-            if (enemyCrossTile.Count > 0)
-            {
-                // Move attacker to target tile first
-                var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to entrenchment zone");
-                if (moveResult != null)
-                    return moveResult;
-
-                // Build defensive stack which gathers cross-tile entrenched into Tier 1
-                DefensiveStack crossStack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
-
-                if (crossStack.ArmyEntries.Count > 0)
                 {
-                    List<Guid> attackerArmyIDs = new List<Guid> { armyID };
-
-                    // Gather friendly armies at the attacker's ORIGIN position
-                    List<ArmyData> friendlyArmies = state.GetArmies(attackerOrigin);
-                    foreach (ArmyData ally in friendlyArmies)
-                    {
-                        if (ally.ownerID.HasValue && ally.ownerID.Value == PlayerID &&
-                            !ally.isInCombat && ally.id != armyID)
-                        {
-                            attackerArmyIDs.Add(ally.id);
-                        }
-                    }
-
-                    List<StateChange> stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
-                        attackerArmyIDs, targetCoordinate, currentTime);
-
-                    if (stackChanges != null)
-                        changeBuilder.AddAll(stackChanges);
+                    hasCrossTileEnemy = true;
+                    break;
                 }
-
-                return EngineCommandResult.Success(changeBuilder.Build().changes);
             }
 
-            return EngineCommandResult.Failure("No valid target found");
+            if (!hasCrossTileEnemy)
+                return EngineCommandResult.Failure("No valid target found");
+
+            var moveResult = MoveAttackerToTarget(army, targetCoordinate, state, changeBuilder, "No path to entrenchment zone");
+            if (moveResult != null) return moveResult;
+
+            DefensiveStack crossStack = DefensiveStack.Build(targetCoordinate, state, PlayerID);
+            if (crossStack.ArmyEntries.Count > 0)
+            {
+                var attackerArmyIDs = GatherAttackerGroup(attackerOrigin, state);
+                var stackChanges = GameEngine.Instance.combatEngine.StartStackCombat(
+                    attackerArmyIDs, targetCoordinate, currentTime);
+                if (stackChanges != null) changeBuilder.AddAll(stackChanges);
+            }
+
+            return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
 
         /// <summary>

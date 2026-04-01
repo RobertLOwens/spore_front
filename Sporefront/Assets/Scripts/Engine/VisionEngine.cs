@@ -42,6 +42,7 @@ namespace Sporefront.Engine
         private HashSet<HexCoordinate> reusableNewlyHidden = new HashSet<HexCoordinate>();
         private List<HexCoordinate> reusableRing = new List<HexCoordinate>();
         private List<HexCoordinate> reusablePath = new List<HexCoordinate>();
+        private List<ArmyData> reusableCamoArmies = new List<ArmyData>();
 
         // Setup
 
@@ -108,25 +109,34 @@ namespace Sporefront.Engine
                 }
             }
 
-            // Emit camouflage changes for each player
-            foreach (var player in gameState.players.Values)
+            // Emit camouflage changes — pre-filter to armies whose owner has woodland camouflage
+            reusableCamoArmies.Clear();
+            foreach (var army in gameState.armies.Values)
             {
-                var camouflagedIDs = new List<Guid>();
-                foreach (var army in gameState.armies.Values)
+                if (!army.ownerID.HasValue) continue;
+                var owner = gameState.GetPlayer(army.ownerID.Value);
+                if (owner != null && owner.faction.HasWoodlandCamouflage())
+                    reusableCamoArmies.Add(army);
+            }
+            if (reusableCamoArmies.Count > 0)
+            {
+                foreach (var player in gameState.players.Values)
                 {
-                    if (!army.ownerID.HasValue || army.ownerID.Value == player.id) continue;
-                    if (player.IsVisible(army.coordinate) && IsArmyCamouflaged(army, player.id))
+                    var camouflagedIDs = new List<Guid>();
+                    foreach (var army in reusableCamoArmies)
                     {
-                        camouflagedIDs.Add(army.id);
+                        if (army.ownerID.Value == player.id) continue;
+                        if (player.IsVisible(army.coordinate) && IsArmyCamouflaged(army, player.id))
+                            camouflagedIDs.Add(army.id);
                     }
-                }
-                if (camouflagedIDs.Count > 0)
-                {
-                    changes.Add(new CamouflagedArmiesChange
+                    if (camouflagedIDs.Count > 0)
                     {
-                        observingPlayerID = player.id,
-                        camouflagedArmyIDs = camouflagedIDs
-                    });
+                        changes.Add(new CamouflagedArmiesChange
+                        {
+                            observingPlayerID = player.id,
+                            camouflagedArmyIDs = camouflagedIDs
+                        });
+                    }
                 }
             }
 
@@ -391,16 +401,26 @@ namespace Sporefront.Engine
             if (resourcePoint == null || resourcePoint.resourceType != ResourcePointType.Trees)
                 return false;
 
-            // Check if observing player has any unit within 1 tile
-            foreach (var observerArmy in gameState.GetArmiesForPlayer(observingPlayerID))
+            // Check if observing player has any unit within 1 tile using spatial lookup
+            // Check center hex + 6 neighbors (7 total) instead of iterating all player entities
+            var coordsToCheck = army.coordinate.Neighbors();
+            coordsToCheck.Add(army.coordinate);
+            foreach (var coord in coordsToCheck)
             {
-                if (observerArmy.coordinate.Distance(army.coordinate) <= 1)
-                    return false;
-            }
-            foreach (var observerVillager in gameState.GetVillagerGroupsForPlayer(observingPlayerID))
-            {
-                if (observerVillager.coordinate.Distance(army.coordinate) <= 1)
-                    return false;
+                foreach (var armyId in gameState.mapData.GetArmyIDs(coord))
+                {
+                    ArmyData observer;
+                    if (gameState.armies.TryGetValue(armyId, out observer) &&
+                        observer.ownerID.HasValue && observer.ownerID.Value == observingPlayerID)
+                        return false;
+                }
+                foreach (var vgId in gameState.mapData.GetVillagerGroupIDs(coord))
+                {
+                    VillagerGroupData observer;
+                    if (gameState.villagerGroups.TryGetValue(vgId, out observer) &&
+                        observer.ownerID.HasValue && observer.ownerID.Value == observingPlayerID)
+                        return false;
+                }
             }
 
             return true;

@@ -108,8 +108,7 @@ namespace Sporefront.Commands
                     });
                 }
 
-                DebugLog.Log(string.Format("CancelReinforcementCommand: Returned {0} units to building at {1}",
-                    reinforcement.GetTotalUnits(), sourceBuilding.coordinate));
+                DebugLog.Log($"CancelReinforcementCommand: Returned {reinforcement.GetTotalUnits()} units to building at {sourceBuilding.coordinate}");
             }
             else
             {
@@ -131,15 +130,13 @@ namespace Sporefront.Commands
                         });
                     }
 
-                    DebugLog.Log(string.Format(
-                        "CancelReinforcementCommand: Source building unavailable, returned {0} units to fallback building at {1}",
-                        reinforcement.GetTotalUnits(), fallbackBuilding.coordinate));
+                    DebugLog.Log(
+                        $"CancelReinforcementCommand: Source building unavailable, returned {reinforcement.GetTotalUnits()} units to fallback building at {fallbackBuilding.coordinate}");
                 }
                 else
                 {
-                    DebugLog.Log(string.Format(
-                        "CancelReinforcementCommand: No building available to return {0} units, units lost",
-                        reinforcement.GetTotalUnits()));
+                    DebugLog.Log(
+                        $"CancelReinforcementCommand: No building available to return {reinforcement.GetTotalUnits()} units, units lost");
                 }
             }
 

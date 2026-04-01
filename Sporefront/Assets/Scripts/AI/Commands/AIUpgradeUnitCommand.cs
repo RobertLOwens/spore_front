@@ -26,9 +26,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             if (player.IsUnitUpgradeActive())
                 return EngineCommandResult.Failure("Unit upgrade already in progress");
@@ -46,9 +45,8 @@ namespace Sporefront.AI.Commands
             }
 
             // Check building exists and matches requirements
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            fail = ValidateBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (building.buildingType != upgradeType.RequiredBuildingType())
                 return EngineCommandResult.Failure("Wrong building type");
@@ -57,21 +55,16 @@ namespace Sporefront.AI.Commands
                 return EngineCommandResult.Failure("Building level too low");
 
             // Check affordability
-            var cost = upgradeType.Cost();
-            foreach (var kvp in cost)
-            {
-                if (!player.HasResource(kvp.Key, kvp.Value))
-                    return EngineCommandResult.Failure("Insufficient resources");
-            }
+            var fail2 = ValidateCanAfford(player, upgradeType.Cost());
+            if (fail2 != null) return fail2;
 
             return EngineCommandResult.Success(null);
         }
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            var fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             string rawValue = upgradeType.ToString();
 
@@ -95,8 +88,7 @@ namespace Sporefront.AI.Commands
                 startTime = state.currentTime
             });
 
-            DebugLog.Log(string.Format("AIUpgradeUnitCommand: AI started unit upgrade: {0}",
-                upgradeType.DisplayName()));
+            DebugLog.Log($"AIUpgradeUnitCommand: AI started unit upgrade: {upgradeType.DisplayName()}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

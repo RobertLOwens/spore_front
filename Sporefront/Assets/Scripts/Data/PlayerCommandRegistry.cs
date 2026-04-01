@@ -265,21 +265,12 @@ namespace Sporefront.Data
             }
             if (command is DeployArmyCommand deployArmy)
             {
-                var keys = new List<string>();
-                var values = new List<int>();
-                if (deployArmy.composition != null)
-                {
-                    foreach (var kvp in deployArmy.composition)
-                    {
-                        keys.Add(kvp.Key.ToString());
-                        values.Add(kvp.Value);
-                    }
-                }
+                DictSerializationHelper.SerializeEnumDict(deployArmy.composition, out var keys, out var values);
                 return JsonUtility.ToJson(new DeployArmyParams
                 {
                     buildingID = deployArmy.buildingID.ToString(),
-                    compositionKeys = keys.ToArray(),
-                    compositionValues = values.ToArray()
+                    compositionKeys = keys,
+                    compositionValues = values
                 });
             }
             if (command is DeployVillagersCommand deployVillagers)
@@ -339,21 +330,12 @@ namespace Sporefront.Data
             }
             if (command is MarketTradeCommand trade)
             {
-                var keys = new List<string>();
-                var values = new List<int>();
-                if (trade.inputResources != null)
-                {
-                    foreach (var kvp in trade.inputResources)
-                    {
-                        keys.Add(kvp.Key.ToString());
-                        values.Add(kvp.Value);
-                    }
-                }
+                DictSerializationHelper.SerializeEnumDict(trade.inputResources, out var keys, out var values);
                 return JsonUtility.ToJson(new MarketTradeParams
                 {
                     buildingID = trade.buildingID.ToString(),
-                    inputResourceKeys = keys.ToArray(),
-                    inputResourceValues = values.ToArray(),
+                    inputResourceKeys = keys,
+                    inputResourceValues = values,
                     outputType = trade.outputType.ToString()
                 });
             }
@@ -376,22 +358,13 @@ namespace Sporefront.Data
             }
             if (command is ReinforceArmyCommand reinforce)
             {
-                var keys = new List<string>();
-                var values = new List<int>();
-                if (reinforce.units != null)
-                {
-                    foreach (var kvp in reinforce.units)
-                    {
-                        keys.Add(kvp.Key.ToString());
-                        values.Add(kvp.Value);
-                    }
-                }
+                DictSerializationHelper.SerializeEnumDict(reinforce.units, out var keys, out var values);
                 return JsonUtility.ToJson(new ReinforceArmyParams
                 {
                     buildingID = reinforce.buildingID.ToString(),
                     armyID = reinforce.armyID.ToString(),
-                    unitKeys = keys.ToArray(),
-                    unitValues = values.ToArray()
+                    unitKeys = keys,
+                    unitValues = values
                 });
             }
             if (command is CancelResearchCommand)
@@ -484,8 +457,7 @@ namespace Sporefront.Data
                 });
             }
 
-            DebugLog.Log(string.Format("PlayerCommandRegistry: Unknown command type: {0}",
-                command.GetType().Name));
+            DebugLog.Log($"PlayerCommandRegistry: Unknown command type: {command.GetType().Name}");
             // Fallback to raw JsonUtility (will miss Dictionary/nullable fields)
             return JsonUtility.ToJson(command);
         }
@@ -581,17 +553,7 @@ namespace Sporefront.Data
                     if (p == null) return null;
                     Guid bID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
-                    var composition = new Dictionary<MilitaryUnitType, int>();
-                    if (p.compositionKeys != null && p.compositionValues != null
-                        && p.compositionKeys.Length == p.compositionValues.Length)
-                    {
-                        for (int i = 0; i < p.compositionKeys.Length; i++)
-                        {
-                            MilitaryUnitType ut;
-                            if (Enum.TryParse<MilitaryUnitType>(p.compositionKeys[i], out ut))
-                                composition[ut] = p.compositionValues[i];
-                        }
-                    }
+                    var composition = DictSerializationHelper.DeserializeEnumDict<MilitaryUnitType>(p.compositionKeys, p.compositionValues);
                     return new DeployArmyCommand(cmdId, pid, timestamp, bID, composition);
                 }
 
@@ -670,17 +632,7 @@ namespace Sporefront.Data
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     ResourceType outType;
                     if (!Enum.TryParse<ResourceType>(p.outputType, out outType)) return null;
-                    var inputResources = new Dictionary<ResourceType, int>();
-                    if (p.inputResourceKeys != null && p.inputResourceValues != null
-                        && p.inputResourceKeys.Length == p.inputResourceValues.Length)
-                    {
-                        for (int i = 0; i < p.inputResourceKeys.Length; i++)
-                        {
-                            ResourceType rt;
-                            if (Enum.TryParse<ResourceType>(p.inputResourceKeys[i], out rt))
-                                inputResources[rt] = p.inputResourceValues[i];
-                        }
-                    }
+                    var inputResources = DictSerializationHelper.DeserializeEnumDict<ResourceType>(p.inputResourceKeys, p.inputResourceValues);
                     return new MarketTradeCommand(cmdId, pid, timestamp, bID, inputResources, outType);
                 }
 
@@ -710,17 +662,7 @@ namespace Sporefront.Data
                     Guid bID, aID;
                     if (!Guid.TryParse(p.buildingID, out bID)) return null;
                     if (!Guid.TryParse(p.armyID, out aID)) return null;
-                    var units = new Dictionary<MilitaryUnitType, int>();
-                    if (p.unitKeys != null && p.unitValues != null
-                        && p.unitKeys.Length == p.unitValues.Length)
-                    {
-                        for (int i = 0; i < p.unitKeys.Length; i++)
-                        {
-                            MilitaryUnitType ut;
-                            if (Enum.TryParse<MilitaryUnitType>(p.unitKeys[i], out ut))
-                                units[ut] = p.unitValues[i];
-                        }
-                    }
+                    var units = DictSerializationHelper.DeserializeEnumDict<MilitaryUnitType>(p.unitKeys, p.unitValues);
                     return new ReinforceArmyCommand(cmdId, pid, timestamp, bID, aID, units);
                 }
 
@@ -833,8 +775,8 @@ namespace Sporefront.Data
                 }
 
                 default:
-                    DebugLog.Log(string.Format(
-                        "PlayerCommandRegistry: Unknown command type: {0}", commandType));
+                    DebugLog.Log(
+                        $"PlayerCommandRegistry: Unknown command type: {commandType}");
                     return null;
             }
         }

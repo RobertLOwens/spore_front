@@ -58,6 +58,7 @@ namespace Sporefront.Visual
 
         private EntityRenderer entityRenderer;
         private Dictionary<Guid, EntityTendrilData> activeTendrils = new Dictionary<Guid, EntityTendrilData>();
+        private List<Guid> _toRemoveBuffer = new List<Guid>();
 
         // ================================================================
         // Public API
@@ -75,8 +76,6 @@ namespace Sporefront.Visual
             var player = gameState.GetPlayer(localPlayerID);
             if (player == null) { ClearAll(); return; }
 
-            var shouldHaveTendrils = new HashSet<Guid>();
-
             // Check armies
             foreach (var armyID in player.ownedArmyIDs)
             {
@@ -86,7 +85,6 @@ namespace Sporefront.Visual
                 bool isMoving = army.currentPath != null && army.currentPath.Count > 0 && army.movementSpeed > 0;
                 if (isMoving)
                 {
-                    shouldHaveTendrils.Add(armyID);
                     Vector2 direction = ComputeMovementDirection(army.coordinate, army.currentPath, army.pathIndex);
                     Color color = entityRenderer.GetEntityColor(armyID);
 
@@ -117,7 +115,6 @@ namespace Sporefront.Visual
                 bool isMoving = group.currentPath != null && group.currentPath.Count > 0 && group.movementSpeed > 0;
                 if (isMoving)
                 {
-                    shouldHaveTendrils.Add(groupID);
                     Vector2 direction = ComputeMovementDirection(group.coordinate, group.currentPath, group.pathIndex);
                     Color color = entityRenderer.GetEntityColor(groupID);
 
@@ -144,7 +141,7 @@ namespace Sporefront.Visual
         {
             if (entityRenderer == null) return;
 
-            var toRemove = new List<Guid>();
+            _toRemoveBuffer.Clear();
             float dt = Time.deltaTime;
 
             foreach (var kvp in activeTendrils)
@@ -163,7 +160,7 @@ namespace Sporefront.Visual
                     if (data.growthProgress <= 0f)
                     {
                         if (data.rootGO != null) Destroy(data.rootGO);
-                        toRemove.Add(id);
+                        _toRemoveBuffer.Add(id);
                         continue;
                     }
                 }
@@ -173,7 +170,7 @@ namespace Sporefront.Visual
                 if (entityTransform == null)
                 {
                     if (data.rootGO != null) Destroy(data.rootGO);
-                    toRemove.Add(id);
+                    _toRemoveBuffer.Add(id);
                     continue;
                 }
                 if (data.rootGO != null)
@@ -194,7 +191,7 @@ namespace Sporefront.Visual
                 UpdateGrowthGradients(data);
             }
 
-            foreach (var id in toRemove)
+            foreach (var id in _toRemoveBuffer)
                 activeTendrils.Remove(id);
         }
 
@@ -276,19 +273,25 @@ namespace Sporefront.Visual
 
                 var strands = new LineRenderer[strandCount];
                 var gradients = new Gradient[strandCount];
+                var colorKeysArr = new GradientColorKey[strandCount][];
+                var alphaKeysArr = new GradientAlphaKey[strandCount][];
 
                 for (int s = 0; s < strandCount; s++)
                 {
                     strands[s] = CreateStrand(rootGO, t, s, endPoint, strandWidths[s],
                         color, maxOffset, seed, length);
                     gradients[s] = new Gradient();
+                    colorKeysArr[s] = new GradientColorKey[2];
+                    alphaKeysArr[s] = new GradientAlphaKey[4];
                 }
 
                 tendrils[t] = new TendrilStrandData
                 {
                     strands = strands,
                     gradients = gradients,
-                    endPoint = endPoint
+                    endPoint = endPoint,
+                    colorKeys = colorKeysArr,
+                    alphaKeys = alphaKeysArr
                 };
             }
 
@@ -482,6 +485,11 @@ namespace Sporefront.Visual
 
         private void UpdateGrowthGradients(EntityTendrilData data)
         {
+            // Skip if growth hasn't changed meaningfully since last update
+            if (Mathf.Abs(data.growthProgress - data.lastAppliedGrowth) < 0.001f)
+                return;
+            data.lastAppliedGrowth = data.growthProgress;
+
             float[] strandAlphas = data.isArmy ? ArmyStrandAlphas : VillagerStrandAlphas;
 
             foreach (var tendril in data.tendrils)
@@ -493,42 +501,31 @@ namespace Sporefront.Visual
                     float alpha = strandAlphas[s];
                     Color baseColor = data.baseColor;
                     var gradient = tendril.gradients[s];
+                    var ck = tendril.colorKeys[s];
+                    var ak = tendril.alphaKeys[s];
+
+                    // Mutate pre-allocated arrays in-place (no allocation)
+                    ck[0] = new GradientColorKey(baseColor, 0f);
+                    ck[1] = new GradientColorKey(baseColor, 1f);
 
                     if (data.growthProgress >= 0.99f)
                     {
-                        gradient.SetKeys(
-                            new GradientColorKey[]
-                            {
-                                new GradientColorKey(baseColor, 0f),
-                                new GradientColorKey(baseColor, 1f)
-                            },
-                            new GradientAlphaKey[]
-                            {
-                                new GradientAlphaKey(alpha, 0f),
-                                new GradientAlphaKey(alpha, 1f)
-                            }
-                        );
+                        ak[0] = new GradientAlphaKey(alpha, 0f);
+                        ak[1] = new GradientAlphaKey(alpha, 1f);
+                        ak[2] = new GradientAlphaKey(alpha, 1f);
+                        ak[3] = new GradientAlphaKey(alpha, 1f);
                     }
                     else
                     {
                         float fadeWidth = 0.1f;
                         float fadeStart = Mathf.Max(0f, data.growthProgress - fadeWidth);
-                        gradient.SetKeys(
-                            new GradientColorKey[]
-                            {
-                                new GradientColorKey(baseColor, 0f),
-                                new GradientColorKey(baseColor, 1f)
-                            },
-                            new GradientAlphaKey[]
-                            {
-                                new GradientAlphaKey(alpha, 0f),
-                                new GradientAlphaKey(alpha, fadeStart),
-                                new GradientAlphaKey(0f, Mathf.Min(data.growthProgress + fadeWidth, 1f)),
-                                new GradientAlphaKey(0f, 1f)
-                            }
-                        );
+                        ak[0] = new GradientAlphaKey(alpha, 0f);
+                        ak[1] = new GradientAlphaKey(alpha, fadeStart);
+                        ak[2] = new GradientAlphaKey(0f, Mathf.Min(data.growthProgress + fadeWidth, 1f));
+                        ak[3] = new GradientAlphaKey(0f, 1f);
                     }
 
+                    gradient.SetKeys(ck, ak);
                     tendril.strands[s].colorGradient = gradient;
                 }
             }
@@ -585,6 +582,7 @@ namespace Sporefront.Visual
             public GameObject rootGO;
             public TendrilStrandData[] tendrils;
             public float growthProgress;
+            public float lastAppliedGrowth = -1f;
             public bool isMoving;
             public Vector2 smoothedDirection;
             public Vector2 targetDirection;
@@ -597,6 +595,9 @@ namespace Sporefront.Visual
             public LineRenderer[] strands;
             public Gradient[] gradients;
             public Vector3 endPoint;
+            // Pre-allocated gradient key arrays to avoid per-frame allocations
+            public GradientColorKey[][] colorKeys;
+            public GradientAlphaKey[][] alphaKeys;
         }
     }
 }

@@ -24,12 +24,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your army");
+            var fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             if (army.isEntrenched)
                 return EngineCommandResult.Failure("Already entrenched");
@@ -46,9 +42,8 @@ namespace Sporefront.AI.Commands
             if (army.isRetreating)
                 return EngineCommandResult.Failure("Cannot entrench while retreating");
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             if (!player.HasResource(ResourceType.Wood, GameConfig.Entrenchment.WoodCost))
                 return EngineCommandResult.Failure("Not enough wood");
@@ -69,13 +64,11 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
+            var fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
-            var player = state.GetPlayer(PlayerID);
-            if (player == null)
-                return EngineCommandResult.Failure("Player not found");
+            fail = ValidatePlayer(state, out var player);
+            if (fail != null) return fail;
 
             // Deduct wood cost
             player.RemoveResource(ResourceType.Wood, GameConfig.Entrenchment.WoodCost);
@@ -101,8 +94,7 @@ namespace Sporefront.AI.Commands
                 coordinate = army.coordinate
             });
 
-            DebugLog.Log(string.Format("AIEntrenchCommand: AI army started entrenching at ({0}, {1})",
-                army.coordinate.q, army.coordinate.r));
+            DebugLog.Log($"AIEntrenchCommand: AI army started entrenching at ({army.coordinate.q}, {army.coordinate.r})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

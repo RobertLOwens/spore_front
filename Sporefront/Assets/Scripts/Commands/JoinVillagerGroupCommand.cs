@@ -31,16 +31,9 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            // Building exists and is owned by player
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
-
-            if (!building.IsOperational)
-                return EngineCommandResult.Failure("Building is not operational");
+            // Building exists, is owned by player, and is operational
+            var fail = ValidateOperationalBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Count must be > 0
             if (count <= 0)
@@ -49,16 +42,11 @@ namespace Sporefront.Commands
             // Building has enough villagers
             if (building.villagerGarrison < count)
                 return EngineCommandResult.Failure(
-                    string.Format("Building does not have enough villagers in garrison (have {0}, need {1})",
-                        building.villagerGarrison, count));
+                    $"Building does not have enough villagers in garrison (have {building.villagerGarrison}, need {count})");
 
             // Target villager group exists and is owned by player
-            var targetGroup = state.GetVillagerGroup(targetVillagerGroupID);
-            if (targetGroup == null)
-                return EngineCommandResult.Failure("Target villager group not found");
-
-            if (!targetGroup.ownerID.HasValue || targetGroup.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Target villager group is not owned by this player");
+            fail = ValidateVillagerGroup(state, targetVillagerGroupID, out var targetGroup);
+            if (fail != null) return fail;
 
             // Path exists from building to group
             var path = state.mapData.FindPath(building.coordinate, targetGroup.coordinate, PlayerID, state);
@@ -70,13 +58,11 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
-            var targetGroup = state.GetVillagerGroup(targetVillagerGroupID);
-            if (targetGroup == null)
-                return EngineCommandResult.Failure("Target villager group not found");
+            fail = ValidateVillagerGroup(state, targetVillagerGroupID, out var targetGroup);
+            if (fail != null) return fail;
 
             // Find path from building to target villager group
             var path = state.mapData.FindPath(building.coordinate, targetGroup.coordinate, PlayerID, state);
@@ -95,7 +81,7 @@ namespace Sporefront.Commands
 
             // Create a new villager group to march from building to target
             var marchingGroup = new VillagerGroupData(
-                string.Format("Marching Villagers ({0})", removed),
+                $"Marching Villagers ({removed})",
                 building.coordinate,
                 removed,
                 PlayerID
@@ -127,8 +113,7 @@ namespace Sporefront.Commands
                 path = path
             });
 
-            DebugLog.Log(string.Format("JoinVillagerGroupCommand: Dispatched {0} villagers from {1} to group {2} ({3} steps)",
-                removed, building.coordinate, targetGroup.name, path.Count));
+            DebugLog.Log($"JoinVillagerGroupCommand: Dispatched {removed} villagers from {building.coordinate} to group {targetGroup.name} ({path.Count} steps)");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

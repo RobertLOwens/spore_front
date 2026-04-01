@@ -25,12 +25,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
-
-            if (!army.ownerID.HasValue || army.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Army is not owned by this player");
+            var fail = ValidateOwnedArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             if (army.isInCombat)
                 return EngineCommandResult.Failure("Army is currently in combat");
@@ -43,9 +39,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var army = state.GetArmy(armyID);
-            if (army == null)
-                return EngineCommandResult.Failure("Army not found");
+            var fail = ValidateArmy(state, armyID, out var army);
+            if (fail != null) return fail;
 
             HexCoordinate originalCoord = army.coordinate;
 
@@ -73,7 +68,7 @@ namespace Sporefront.Commands
             army.isRetreating = false;
             army.pendingAttackTarget = null;
 
-            DebugLog.Log(string.Format("StopMovementCommand: Army {0} stopped at {1}", army.name, army.coordinate));
+            DebugLog.Log($"StopMovementCommand: Army {army.name} stopped at {army.coordinate}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

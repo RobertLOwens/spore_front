@@ -17,7 +17,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class ResearchTreePanel : MonoBehaviour
+    public class ResearchTreePanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -31,12 +31,9 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform panelRT;
         private RectTransform treeContentRT;
         private ScrollRect treeScroll;
-        private Guid localPlayerID;
         private ResearchCategory currentCategory = ResearchCategory.Economic;
         private ResearchType? selectedNode;
 
@@ -207,10 +204,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
 
         // ================================================================
         // Active Research Bar
@@ -362,7 +355,7 @@ namespace Sporefront.Visual
             backdrop.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             if (pendingLineDrawCoroutine != null)
             {
@@ -378,8 +371,6 @@ namespace Sporefront.Visual
             if (!backdrop.activeSelf) return;
             Rebuild(gameState);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Rebuild

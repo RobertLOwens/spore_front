@@ -28,12 +28,8 @@ namespace Sporefront.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (composition == null || composition.Count == 0)
                 return EngineCommandResult.Failure("Composition cannot be empty");
@@ -42,13 +38,12 @@ namespace Sporefront.Commands
             foreach (var kvp in composition)
             {
                 if (kvp.Value <= 0)
-                    return EngineCommandResult.Failure(string.Format("Invalid quantity for {0}", kvp.Key.DisplayName()));
+                    return EngineCommandResult.Failure($"Invalid quantity for {kvp.Key.DisplayName()}");
 
                 int garrisoned = building.garrison.ContainsKey(kvp.Key) ? building.garrison[kvp.Key] : 0;
                 if (garrisoned < kvp.Value)
-                    return EngineCommandResult.Failure(string.Format(
-                        "Not enough {0} in garrison (have {1}, need {2})",
-                        kvp.Key.DisplayName(), garrisoned, kvp.Value));
+                    return EngineCommandResult.Failure(
+                        $"Not enough {kvp.Key.DisplayName()} in garrison (have {garrisoned}, need {kvp.Value})");
             }
 
             // Army count limit: current armies < max allowed (1 + ccLevel / 2)
@@ -56,18 +51,16 @@ namespace Sporefront.Commands
             int maxArmies = 1 + ccLevel / 2;
             var currentArmies = state.GetArmiesForPlayer(PlayerID);
             if (currentArmies.Count >= maxArmies)
-                return EngineCommandResult.Failure(string.Format(
-                    "Army limit reached ({0}/{1}). Upgrade your City Center to deploy more armies.",
-                    currentArmies.Count, maxArmies));
+                return EngineCommandResult.Failure(
+                    $"Army limit reached ({currentArmies.Count}/{maxArmies}). Upgrade your City Center to deploy more armies.");
 
             return EngineCommandResult.Success(null);
         }
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Remove units from garrison and emit ungarrisoned changes
             foreach (var kvp in composition)
@@ -83,30 +76,10 @@ namespace Sporefront.Commands
             }
 
             // Find spawn position near building
-            HexCoordinate spawnCoord = building.coordinate;
-
-            // Try to find a walkable tile near the building if the building tile is occupied
-            var armiesAtBuilding = state.GetArmies(spawnCoord);
-            if (armiesAtBuilding.Count >= GameConfig.Stacking.MaxEntitiesPerTile)
-            {
-                bool found = false;
-                foreach (var neighbor in spawnCoord.Neighbors())
-                {
-                    if (state.mapData.IsValidCoordinate(neighbor) && state.mapData.IsWalkable(neighbor))
-                    {
-                        var armiesAtNeighbor = state.GetArmies(neighbor);
-                        if (armiesAtNeighbor.Count < GameConfig.Stacking.MaxEntitiesPerTile)
-                        {
-                            spawnCoord = neighbor;
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!found)
-                    return EngineCommandResult.Failure("No available spawn position near building");
-            }
+            var spawnResult = FindSpawnPosition(state, building.coordinate, c => state.GetArmies(c).Count);
+            if (!spawnResult.HasValue)
+                return EngineCommandResult.Failure("No available spawn position near building");
+            HexCoordinate spawnCoord = spawnResult.Value;
 
             // Create army
             var army = new ArmyData("Army", spawnCoord, PlayerID);
@@ -133,8 +106,7 @@ namespace Sporefront.Commands
                 composition = compositionStrings
             });
 
-            DebugLog.Log(string.Format("DeployArmyCommand: Deployed army {0} at {1} with {2} unit type(s)",
-                army.id, spawnCoord, composition.Count));
+            DebugLog.Log($"DeployArmyCommand: Deployed army {army.id} at {spawnCoord} with {composition.Count} unit type(s)");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }
@@ -165,26 +137,20 @@ namespace Sporefront.Commands
             if (count <= 0)
                 return EngineCommandResult.Failure("Count must be greater than zero");
 
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Building is not owned by this player");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             if (building.villagerGarrison < count)
-                return EngineCommandResult.Failure(string.Format(
-                    "Not enough villagers in garrison (have {0}, need {1})",
-                    building.villagerGarrison, count));
+                return EngineCommandResult.Failure(
+                    $"Not enough villagers in garrison (have {building.villagerGarrison}, need {count})");
 
             return EngineCommandResult.Success(null);
         }
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Remove villagers from garrison
             building.RemoveVillagersFromGarrison(count);
@@ -197,30 +163,10 @@ namespace Sporefront.Commands
             });
 
             // Find spawn position near building
-            HexCoordinate spawnCoord = building.coordinate;
-
-            // Try to find a walkable tile near the building if needed
-            var groupsAtBuilding = state.GetVillagerGroups(spawnCoord);
-            if (groupsAtBuilding.Count >= GameConfig.Stacking.MaxEntitiesPerTile)
-            {
-                bool found = false;
-                foreach (var neighbor in spawnCoord.Neighbors())
-                {
-                    if (state.mapData.IsValidCoordinate(neighbor) && state.mapData.IsWalkable(neighbor))
-                    {
-                        var groupsAtNeighbor = state.GetVillagerGroups(neighbor);
-                        if (groupsAtNeighbor.Count < GameConfig.Stacking.MaxEntitiesPerTile)
-                        {
-                            spawnCoord = neighbor;
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!found)
-                    return EngineCommandResult.Failure("No available spawn position near building");
-            }
+            var spawnResult = FindSpawnPosition(state, building.coordinate, c => state.GetVillagerGroups(c).Count);
+            if (!spawnResult.HasValue)
+                return EngineCommandResult.Failure("No available spawn position near building");
+            HexCoordinate spawnCoord = spawnResult.Value;
 
             // Create villager group
             var group = new VillagerGroupData("Villagers", spawnCoord, count, PlayerID);
@@ -237,8 +183,7 @@ namespace Sporefront.Commands
                 count = count
             });
 
-            DebugLog.Log(string.Format("DeployVillagersCommand: Deployed {0} villager(s) at {1}",
-                count, spawnCoord));
+            DebugLog.Log($"DeployVillagersCommand: Deployed {count} villager(s) at {spawnCoord}");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

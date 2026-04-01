@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class BuildingsOverviewPanel : MonoBehaviour
+    public class BuildingsOverviewPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,14 +28,7 @@ namespace Sporefront.Visual
         // State
         // ================================================================
 
-        private GameObject backdrop;
         private GameObject panel;
-        private RectTransform contentRT;
-        private Guid localPlayerID;
-
-        // Fade animation
-        private CanvasGroup backdropCG;
-        private Coroutine fadeCoroutine;
 
         // Filter
         private enum FilterMode { All, Economic, Military }
@@ -128,11 +121,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -143,16 +131,14 @@ namespace Sporefront.Visual
             lastRebuildTime = Time.unscaledTime;
             isDirty = false;
             Rebuild(gameState);
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
+            FadeIn();
         }
 
-        public void Hide()
+        public override void Hide()
         {
             OnClose?.Invoke();
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
+            FadeOut();
         }
 
         public void Refresh(GameState gameState)
@@ -161,8 +147,6 @@ namespace Sporefront.Visual
             cachedGameState = gameState;
             isDirty = true;
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         private void Update()
         {

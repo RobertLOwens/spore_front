@@ -19,25 +19,7 @@ namespace Sporefront.Engine
         private const string SaveDirectory = "saves";
         private const string AutoSaveName = "autosave";
 
-        private static JsonSerializerSettings serializerSettings;
-
-        private static JsonSerializerSettings GetSettings()
-        {
-            if (serializerSettings == null)
-            {
-                serializerSettings = new JsonSerializerSettings
-                {
-                    Formatting = Formatting.Indented,
-                    NullValueHandling = NullValueHandling.Ignore,
-                    TypeNameHandling = TypeNameHandling.None,
-                    Converters = new List<JsonConverter>
-                    {
-                        new HexCoordinateConverter()
-                    }
-                };
-            }
-            return serializerSettings;
-        }
+        private static JsonSerializerSettings GetSettings() => Data.Serialization.SporefrontJsonSettings.Indented;
 
         private static string GetSavesPath()
         {

@@ -28,18 +28,14 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Validate(GameState state)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
-
-            if (!building.ownerID.HasValue || building.ownerID.Value != PlayerID)
-                return EngineCommandResult.Failure("Not your building");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             foreach (var kvp in composition)
             {
                 int available = building.garrison.ContainsKey(kvp.Key) ? building.garrison[kvp.Key] : 0;
                 if (available < kvp.Value)
-                    return EngineCommandResult.Failure(string.Format("Not enough {0}", kvp.Key.DisplayName()));
+                    return EngineCommandResult.Failure($"Not enough {kvp.Key.DisplayName()}");
             }
 
             return EngineCommandResult.Success(new List<StateChange>());
@@ -47,9 +43,8 @@ namespace Sporefront.AI.Commands
 
         public override EngineCommandResult Execute(GameState state, StateChangeBuilder changeBuilder)
         {
-            var building = state.GetBuilding(buildingID);
-            if (building == null)
-                return EngineCommandResult.Failure("Building not found");
+            var fail = ValidateOwnedBuilding(state, buildingID, out var building);
+            if (fail != null) return fail;
 
             // Remove units from garrison
             foreach (var kvp in composition)
@@ -114,8 +109,7 @@ namespace Sporefront.AI.Commands
                 composition = compositionStrings
             });
 
-            DebugLog.Log(string.Format("AI deployed army with {0} units, commander: {1} ({2})",
-                army.GetTotalUnits(), commander.name, specialty));
+            DebugLog.Log($"AI deployed army with {army.GetTotalUnits()} units, commander: {commander.name} ({specialty})");
 
             return EngineCommandResult.Success(changeBuilder.Build().changes);
         }

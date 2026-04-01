@@ -15,7 +15,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class ArenaResultsPanel : MonoBehaviour
+    public class ArenaResultsPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,7 +28,6 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private RectTransform contentRT;
 
         // Winner colors
         private static readonly Color AttackerWinColor = new Color(0.2f, 0.8f, 0.3f, 1.0f);
@@ -108,18 +107,18 @@ namespace Sporefront.Visual
             panel.SetActive(true);
         }
 
-        public void Hide()
+        public override void Hide()
         {
             panel.SetActive(false);
         }
 
-        public bool IsVisible => panel != null && panel.activeSelf;
+        public new bool IsVisible => panel != null && panel.activeSelf;
 
         // ================================================================
         // Clear Content
         // ================================================================
 
-        private void ClearContent()
+        private new void ClearContent()
         {
             if (contentRT == null) return;
             for (int i = contentRT.childCount - 1; i >= 0; i--)
@@ -149,7 +148,7 @@ namespace Sporefront.Visual
             GetWinnerDisplay(result.winner, out winnerText, out winnerColor);
 
             AddCenteredLabel(winnerText, 22, winnerColor, true);
-            AddCenteredLabel(string.Format("Duration: {0:F1}s", result.combatDuration),
+            AddCenteredLabel($"Duration: {result.combatDuration:F1}s",
                 14, UIHelper.InkMutedText, false);
             AddSpacer(10);
 
@@ -175,7 +174,7 @@ namespace Sporefront.Visual
         private void BuildBatchView(List<SimulationResult> results)
         {
             int total = results.Count;
-            AddTitle(string.Format("SIMULATION RESULTS ({0} runs)", total));
+            AddTitle($"SIMULATION RESULTS ({total} runs)");
 
             int attackerWins = results.Count(r => r.winner == SimWinner.Attacker);
             int defenderWins = results.Count(r => r.winner == SimWinner.Defender);
@@ -192,12 +191,12 @@ namespace Sporefront.Visual
             AddSectionHeader("AVERAGES", UIHelper.InkHeaderText);
 
             double avgDuration = results.Sum(r => r.combatDuration) / total;
-            AddInfoLabel(string.Format("Avg Duration: {0:F1}s", avgDuration));
+            AddInfoLabel($"Avg Duration: {avgDuration:F1}s");
 
             int avgAttackerCas = results.Sum(r => r.attackerCasualties.Values.Sum()) / total;
             int avgDefenderCas = results.Sum(r => r.defenderCasualties.Values.Sum()) / total;
-            AddInfoLabel(string.Format("Avg Attacker Casualties: {0}", avgAttackerCas));
-            AddInfoLabel(string.Format("Avg Defender Casualties: {0}", avgDefenderCas));
+            AddInfoLabel($"Avg Attacker Casualties: {avgAttackerCas}");
+            AddInfoLabel($"Avg Defender Casualties: {avgDefenderCas}");
             AddSpacer(10);
 
             // Modifiers
@@ -228,7 +227,7 @@ namespace Sporefront.Visual
                         break;
                 }
 
-                string text = string.Format("Run {0}: {1} - {2:F1}s", i + 1, winnerStr, result.combatDuration);
+                string text = $"Run {i + 1}: {winnerStr} - {result.combatDuration:F1}s";
                 var label = UIHelper.CreateLabel(contentRT, "  " + text, UIConstants.FontCaption, color, TextAnchor.MiddleLeft);
                 var le = label.gameObject.AddComponent<LayoutElement>();
                 le.preferredHeight = 22;
@@ -252,7 +251,7 @@ namespace Sporefront.Visual
                     remaining.TryGetValue(kvp.Key, out finalCount);
                 int killed = kvp.Value - finalCount;
 
-                string text = string.Format("  {0}:  {1} -> {2}  ({3} killed)", kvp.Key, kvp.Value, finalCount, killed);
+                string text = $"  {kvp.Key}:  {kvp.Value} -> {finalCount}  ({killed} killed)";
                 var label = UIHelper.CreateLabel(contentRT, text, 13, UIHelper.InkBodyText, TextAnchor.MiddleLeft);
                 var le = label.gameObject.AddComponent<LayoutElement>();
                 le.preferredHeight = 22;
@@ -261,7 +260,7 @@ namespace Sporefront.Visual
             int totalInitial = initial.Values.Sum();
             int totalFinal = remaining != null ? remaining.Values.Sum() : 0;
             var totalLabel = UIHelper.CreateLabel(contentRT,
-                string.Format("  Total: {0} -> {1}", totalInitial, totalFinal),
+                $"  Total: {totalInitial} -> {totalFinal}",
                 13, UIHelper.InkHeaderText, TextAnchor.MiddleLeft);
             totalLabel.fontStyle = FontStyle.Bold;
             var totalLE = totalLabel.gameObject.AddComponent<LayoutElement>();
@@ -298,7 +297,7 @@ namespace Sporefront.Visual
             barFillRT.offsetMax = Vector2.zero;
 
             // Count label
-            string countText = string.Format("{0}/{1} ({2}%)", count, total, (int)(pct * 100));
+            string countText = $"{count}/{total} ({(int)(pct * 100)}%)";
             var countLabel = UIHelper.CreateLabel(row.transform, countText,
                 UIConstants.FontCaption, UIHelper.InkMutedText, TextAnchor.MiddleRight);
             var countLE = countLabel.gameObject.AddComponent<LayoutElement>();
@@ -317,29 +316,25 @@ namespace Sporefront.Visual
 
             // Terrain
             string terrainName = scenarioConfig.enemyTerrain.ToString();
-            AddInfoLabel(string.Format("Terrain: {0}", terrainName));
+            AddInfoLabel($"Terrain: {terrainName}");
 
             // Entrenchment
             if (scenarioConfig.enemyEntrenched)
                 AddInfoLabel("Entrenchment: +10% def");
 
             // Player Commander
-            string playerCmdr = string.Format("Player Cmdr: {0} Lv{1}",
-                scenarioConfig.playerCommanderSpecialty.ToString(),
-                scenarioConfig.playerCommanderLevel);
+            string playerCmdr = $"Player Cmdr: {scenarioConfig.playerCommanderSpecialty.ToString()} Lv{scenarioConfig.playerCommanderLevel}";
             AddInfoLabel(playerCmdr);
 
             // Enemy Commander
-            string enemyCmdr = string.Format("Enemy Cmdr: {0} Lv{1}",
-                scenarioConfig.enemyCommanderSpecialty.ToString(),
-                scenarioConfig.enemyCommanderLevel);
+            string enemyCmdr = $"Enemy Cmdr: {scenarioConfig.enemyCommanderSpecialty.ToString()} Lv{scenarioConfig.enemyCommanderLevel}";
             AddInfoLabel(enemyCmdr);
 
             // Enemy unit tiers
             if (scenarioConfig.enemyUnitTiers != null && scenarioConfig.enemyUnitTiers.Count > 0)
             {
                 var tierParts = scenarioConfig.enemyUnitTiers
-                    .Select(kvp => string.Format("{0}:T{1}", kvp.Key, kvp.Value));
+                    .Select(kvp => $"{kvp.Key}:T{kvp.Value}");
                 AddInfoLabel("Enemy Tiers: " + string.Join(", ", tierParts));
             }
 
@@ -347,24 +342,23 @@ namespace Sporefront.Visual
             if (scenarioConfig.playerUnitTiers != null && scenarioConfig.playerUnitTiers.Count > 0)
             {
                 var tierParts = scenarioConfig.playerUnitTiers
-                    .Select(kvp => string.Format("{0}:T{1}", kvp.Key, kvp.Value));
+                    .Select(kvp => $"{kvp.Key}:T{kvp.Value}");
                 AddInfoLabel("Player Tiers: " + string.Join(", ", tierParts));
             }
 
             // Building
             if (scenarioConfig.enemyBuilding.HasValue)
-                AddInfoLabel(string.Format("Building: {0}", scenarioConfig.enemyBuilding.Value));
+                AddInfoLabel($"Building: {scenarioConfig.enemyBuilding.Value}");
 
             // Garrison
             if (scenarioConfig.garrisonArchers > 0)
-                AddInfoLabel(string.Format("Garrison: {0} archers", scenarioConfig.garrisonArchers));
+                AddInfoLabel($"Garrison: {scenarioConfig.garrisonArchers} archers");
 
             // Stacking
             if (Math.Abs(scenarioConfig.enemyArmyCount) >= 2)
             {
                 string stackType = scenarioConfig.enemyArmyCount > 0 ? "Same tile" : "Adjacent";
-                AddInfoLabel(string.Format("Stacking: {0} ({1} armies)",
-                    stackType, Math.Abs(scenarioConfig.enemyArmyCount)));
+                AddInfoLabel($"Stacking: {stackType} ({Math.Abs(scenarioConfig.enemyArmyCount)} armies)");
             }
         }
 

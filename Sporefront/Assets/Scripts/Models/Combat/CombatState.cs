@@ -719,8 +719,7 @@ namespace Sporefront.Models.Combat
                 MergeIntoSideState(defenderState, armyData);
             }
 
-            DebugLog.Log(string.Format("Reinforcements arrived: {0} joined {1} side at time {2:F1}s",
-                armyData.name, isAttacker ? "attacker" : "defender", elapsedTime));
+            DebugLog.Log($"Reinforcements arrived: {armyData.name} joined {(isAttacker ? "attacker" : "defender")} side at time {elapsedTime:F1}s");
         }
 
         /// Merges an ArmyData's units into an aggregated side state

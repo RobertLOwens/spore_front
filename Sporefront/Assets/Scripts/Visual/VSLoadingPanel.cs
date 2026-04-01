@@ -14,7 +14,7 @@ using Sporefront.Models;
 
 namespace Sporefront.Visual
 {
-    public class VSLoadingPanel : MonoBehaviour
+    public class VSLoadingPanel : SporefrontPanel
     {
         // ================================================================
         // Config
@@ -33,7 +33,7 @@ namespace Sporefront.Visual
         private UITendrilRenderer tendrilRenderer;
         private CanvasGroup panelCanvasGroup;
         private CanvasGroup contentGroup;
-        private RectTransform panelRT;
+        private new RectTransform panelRT;
         private Action onComplete;
 
         private readonly List<BranchTiming> branchTimings = new List<BranchTiming>();

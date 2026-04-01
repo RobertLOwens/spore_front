@@ -148,6 +148,9 @@ namespace Sporefront.Visual
         // Idle villager cycling
         private int idleVillagerCycleIndex;
 
+        // Registry of all SporefrontPanel instances for batch operations
+        private readonly List<SporefrontPanel> allPanels = new List<SporefrontPanel>();
+
         // Thread-safe queue for callbacks from background threads (e.g., ArenaSimulator)
         private readonly ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
 
@@ -405,7 +408,10 @@ namespace Sporefront.Visual
         {
             var go = new GameObject(name + "Manager");
             go.transform.SetParent(transform, false);
-            return go.AddComponent<T>();
+            var component = go.AddComponent<T>();
+            if (component is SporefrontPanel sp)
+                allPanels.Add(sp);
+            return component;
         }
 
         // ================================================================
@@ -1236,30 +1242,12 @@ namespace Sporefront.Visual
                 factionBanner.UpdateFaction(player.faction);
             factionBanner.ShowBanner();
 
-            // 3. Propagate localPlayerID to all panels that cached it during Initialize
+            // 3. Propagate localPlayerID to all registered panels
+            foreach (var panel in allPanels)
+                panel.UpdateLocalPlayerID(localPlayerID);
+            // Non-SporefrontPanel components with their own UpdateLocalPlayerID
             tileInfoPopup.UpdateLocalPlayerID(localPlayerID);
-            buildingDetail.UpdateLocalPlayerID(localPlayerID);
-            armyDetail.UpdateLocalPlayerID(localPlayerID);
             actionPanel.UpdateLocalPlayerID(localPlayerID);
-            buildingsOverview.UpdateLocalPlayerID(localPlayerID);
-            entitiesOverview.UpdateLocalPlayerID(localPlayerID);
-            militaryOverview.UpdateLocalPlayerID(localPlayerID);
-            resourceOverview.UpdateLocalPlayerID(localPlayerID);
-            trainingOverview.UpdateLocalPlayerID(localPlayerID);
-            commander.UpdateLocalPlayerID(localPlayerID);
-            researchTree.UpdateLocalPlayerID(localPlayerID);
-            liveCombat.UpdateLocalPlayerID(localPlayerID);
-            combatHistory.UpdateLocalPlayerID(localPlayerID);
-            combatDetail.UpdateLocalPlayerID(localPlayerID);
-            gatherPanel.UpdateLocalPlayerID(localPlayerID);
-            reinforcePanel.UpdateLocalPlayerID(localPlayerID);
-            villagerDeploy.UpdateLocalPlayerID(localPlayerID);
-            buildVillagerSelect.UpdateLocalPlayerID(localPlayerID);
-            upgradeVillagerSelect.UpdateLocalPlayerID(localPlayerID);
-            settings.UpdateLocalPlayerID(localPlayerID);
-            inGameMenu.UpdateLocalPlayerID(localPlayerID);
-            notificationInbox.UpdateLocalPlayerID(localPlayerID);
-            selectedEntitiesPanel.UpdateLocalPlayerID(localPlayerID);
             miniMap.UpdateLocalPlayerID(localPlayerID);
 
             // Build and show mini map
@@ -1365,7 +1353,7 @@ namespace Sporefront.Visual
             var result = GameEngine.Instance.ExecuteCommand(command);
             if (!result.Succeeded)
             {
-                var uiManager = UnityEngine.Object.FindObjectOfType<UIManager>();
+                var uiManager = UnityEngine.Object.FindAnyObjectByType<UIManager>();
                 uiManager?.ShowCommandFailure(result.FailureReason ?? "Command failed");
             }
         }

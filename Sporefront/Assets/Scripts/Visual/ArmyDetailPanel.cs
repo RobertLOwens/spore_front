@@ -14,7 +14,7 @@ using Sporefront.Commands;
 
 namespace Sporefront.Visual
 {
-    public class ArmyDetailPanel : MonoBehaviour
+    public class ArmyDetailPanel : SporefrontPanel
     {
         // ================================================================
         // Events
@@ -28,14 +28,7 @@ namespace Sporefront.Visual
         // ================================================================
 
         private GameObject panel;
-        private GameObject backdrop;
-        private RectTransform contentRT;
         private Guid? currentArmyID;
-        private Guid localPlayerID;
-
-        // Fade animation
-        private CanvasGroup backdropCG;
-        private Coroutine fadeCoroutine;
 
         // Cached references for incremental updates
         private Image staminaFillImage;
@@ -96,11 +89,6 @@ namespace Sporefront.Visual
             backdrop.SetActive(false);
         }
 
-        public void UpdateLocalPlayerID(Guid playerID)
-        {
-            localPlayerID = playerID;
-        }
-
         // ================================================================
         // Public API
         // ================================================================
@@ -109,16 +97,14 @@ namespace Sporefront.Visual
         {
             currentArmyID = armyID;
             Rebuild(gameState);
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
             backdrop.SetActive(true);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeIn(backdropCG));
+            FadeIn();
         }
 
         public void Close()
         {
             currentArmyID = null;
-            if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-            fadeCoroutine = StartCoroutine(UIHelper.FadeOut(backdropCG));
+            FadeOut();
         }
 
         public void Refresh(GameState gameState)
@@ -135,8 +121,6 @@ namespace Sporefront.Visual
             }
             Rebuild(gameState);
         }
-
-        public bool IsVisible => backdrop != null && backdrop.activeSelf;
 
         // ================================================================
         // Fingerprint & Incremental Update

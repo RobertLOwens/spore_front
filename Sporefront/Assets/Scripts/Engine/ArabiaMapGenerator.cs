@@ -127,7 +127,6 @@ namespace Sporefront.Engine
 
         private readonly int startPadding;
         private readonly int startingResourceRadius = 7;
-        private readonly int neutralResourceExclusionRadius = 10;
 
         private SeededRandom rng;
         public ArabiaMapConfig config;

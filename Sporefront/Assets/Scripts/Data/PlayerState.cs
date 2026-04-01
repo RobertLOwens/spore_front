@@ -67,6 +67,8 @@ namespace Sporefront.Data
         public string activeResearchType;
         public double? activeResearchStartTime;
         private Dictionary<string, double> cachedResearchBonuses = new Dictionary<string, double>();
+        [System.NonSerialized]
+        private Dictionary<ResearchBonusType, double> cachedResearchBonusesByEnum = new Dictionary<ResearchBonusType, double>();
 
         // Unit Upgrade Tracking
         public HashSet<string> completedUnitUpgrades = new HashSet<string>();
@@ -138,6 +140,12 @@ namespace Sporefront.Data
                 if (!HasResource(kvp.Key, kvp.Value)) return false;
             }
             return true;
+        }
+
+        public void DeductCost(Dictionary<ResourceType, int> costs, int multiplier = 1)
+        {
+            foreach (var kvp in costs)
+                RemoveResource(kvp.Key, kvp.Value * multiplier);
         }
 
         // Food Consumption
@@ -271,14 +279,26 @@ namespace Sporefront.Data
             return cachedResearchBonuses.ContainsKey(bonusTypeRawValue) ? cachedResearchBonuses[bonusTypeRawValue] : 0.0;
         }
 
+        public double GetResearchBonus(ResearchBonusType bonusType)
+        {
+            double val;
+            return cachedResearchBonusesByEnum.TryGetValue(bonusType, out val) ? val : 0.0;
+        }
+
         public double GetResearchBonusMultiplier(string bonusTypeRawValue)
         {
             return 1.0 + GetResearchBonus(bonusTypeRawValue);
         }
 
+        public double GetResearchBonusMultiplier(ResearchBonusType bonusType)
+        {
+            return 1.0 + GetResearchBonus(bonusType);
+        }
+
         public void RecalculateResearchBonuses()
         {
             cachedResearchBonuses.Clear();
+            cachedResearchBonusesByEnum.Clear();
             foreach (string researchRawValue in completedResearch)
             {
                 ResearchType researchType;
@@ -291,6 +311,11 @@ namespace Sporefront.Data
                             cachedResearchBonuses[key] += bonus.Value;
                         else
                             cachedResearchBonuses[key] = bonus.Value;
+
+                        if (cachedResearchBonusesByEnum.ContainsKey(bonus.Type))
+                            cachedResearchBonusesByEnum[bonus.Type] += bonus.Value;
+                        else
+                            cachedResearchBonusesByEnum[bonus.Type] = bonus.Value;
                     }
                 }
             }

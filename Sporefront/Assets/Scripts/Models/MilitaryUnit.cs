@@ -159,231 +159,149 @@ namespace Sporefront.Models
     [System.Serializable]
     public class VillagerTrainable : TrainableUnitType
     {
+        private static readonly Dictionary<ResourceType, int> CachedCost =
+            new Dictionary<ResourceType, int> { { ResourceType.Food, 50 } };
+
         public override string DisplayName => "Villager";
         public override string Icon => "villager";
-        public override Dictionary<ResourceType, int> TrainingCost => new Dictionary<ResourceType, int> { { ResourceType.Food, 50 } };
+        public override Dictionary<ResourceType, int> TrainingCost => CachedCost;
         public override double TrainingTime => 15.0;
         public override string Description => "Gathers resources and constructs buildings";
         public override int PopSpace => 1;
     }
 
+    // ================================================================
+    // Data record for MilitaryUnitType lookup table
+    // ================================================================
+
+    public class MilitaryUnitTypeData
+    {
+        public string DisplayName;
+        public string Icon;
+        public double MoveSpeed;
+        public double AttackSpeed;
+        public double HP;
+        public double TrainingTime;
+        public Dictionary<ResourceType, int> TrainingCost;
+        public BuildingType TrainingBuilding;
+        public UnitCategory Category;
+        public int PopSpace;
+        public string Description;
+        public UnitCombatStats CombatStats;
+
+        public MilitaryUnitTypeData(
+            string displayName, string icon,
+            double moveSpeed, double attackSpeed, double hp,
+            double trainingTime, Dictionary<ResourceType, int> trainingCost,
+            BuildingType trainingBuilding, UnitCategory category,
+            string description, UnitCombatStats combatStats,
+            int popSpace = 1)
+        {
+            DisplayName = displayName;
+            Icon = icon;
+            MoveSpeed = moveSpeed;
+            AttackSpeed = attackSpeed;
+            HP = hp;
+            TrainingTime = trainingTime;
+            TrainingCost = trainingCost;
+            TrainingBuilding = trainingBuilding;
+            Category = category;
+            PopSpace = popSpace;
+            Description = description;
+            CombatStats = combatStats;
+        }
+    }
+
+    // ================================================================
+    // Extension methods — data-driven via static lookup table
+    // ================================================================
+
     public static class MilitaryUnitTypeExtensions
     {
-        public static string DisplayName(this MilitaryUnitType type)
+        private static readonly Dictionary<MilitaryUnitType, MilitaryUnitTypeData> Data =
+            new Dictionary<MilitaryUnitType, MilitaryUnitTypeData>
         {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return "Swordsman";
-                case MilitaryUnitType.Archer: return "Archer";
-                case MilitaryUnitType.Crossbow: return "Crossbow";
-                case MilitaryUnitType.Pikeman: return "Pikeman";
-                case MilitaryUnitType.Scout: return "Scout";
-                case MilitaryUnitType.Knight: return "Knight";
-                case MilitaryUnitType.HeavyCavalry: return "Heavy Cavalry";
-                case MilitaryUnitType.Mangonel: return "Mangonel";
-                case MilitaryUnitType.Trebuchet: return "Trebuchet";
-                default: return type.ToString();
-            }
-        }
+            { MilitaryUnitType.Swordsman, new MilitaryUnitTypeData(
+                "Swordsman", "swordsman", 1.40, 1.0, 50, 15,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 50 }, { ResourceType.Ore, 25 } },
+                BuildingType.Barracks, UnitCategory.Infantry,
+                "Balanced melee infantry unit with good armor",
+                new UnitCombatStats(meleeDamage: 2, meleeArmor: 2, pierceArmor: 1)) },
 
-        public static string Icon(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return "swordsman";
-                case MilitaryUnitType.Pikeman: return "pikeman";
-                case MilitaryUnitType.Archer: return "archer";
-                case MilitaryUnitType.Crossbow: return "crossbow";
-                case MilitaryUnitType.Scout: return "scout";
-                case MilitaryUnitType.Knight: return "knight";
-                case MilitaryUnitType.HeavyCavalry: return "heavy_cavalry";
-                case MilitaryUnitType.Mangonel: return "mangonel";
-                case MilitaryUnitType.Trebuchet: return "trebuchet";
-                default: return "";
-            }
-        }
+            { MilitaryUnitType.Archer, new MilitaryUnitTypeData(
+                "Archer", "archer", 1.40, 1.0, 30, 12,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 40 }, { ResourceType.Wood, 30 } },
+                BuildingType.ArcheryRange, UnitCategory.Ranged,
+                "Ranged unit with pierce damage",
+                new UnitCombatStats(pierceDamage: 2, pierceArmor: 1)) },
 
-        public static double MoveSpeed(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return 1.40;
-                case MilitaryUnitType.Pikeman: return 1.60;
-                case MilitaryUnitType.Archer: return 1.40;
-                case MilitaryUnitType.Crossbow: return 1.52;
-                case MilitaryUnitType.Scout: return 0.88;
-                case MilitaryUnitType.Knight: return 1.00;
-                case MilitaryUnitType.HeavyCavalry: return 1.12;
-                case MilitaryUnitType.Mangonel: return 2.00;
-                case MilitaryUnitType.Trebuchet: return 2.40;
-                default: return 1.40;
-            }
-        }
+            { MilitaryUnitType.Crossbow, new MilitaryUnitTypeData(
+                "Crossbow", "crossbow", 1.52, 1.5, 40, 18,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 50 }, { ResourceType.Wood, 40 }, { ResourceType.Ore, 20 } },
+                BuildingType.ArcheryRange, UnitCategory.Ranged,
+                "Heavy ranged unit with high pierce damage and armor",
+                new UnitCombatStats(pierceDamage: 2, meleeArmor: 1, pierceArmor: 2)) },
 
-        public static double AttackSpeed(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return 1.0;
-                case MilitaryUnitType.Pikeman: return 1.2;
-                case MilitaryUnitType.Archer: return 1.0;
-                case MilitaryUnitType.Crossbow: return 1.5;
-                case MilitaryUnitType.Scout: return 0.7;
-                case MilitaryUnitType.Knight: return 1.1;
-                case MilitaryUnitType.HeavyCavalry: return 1.2;
-                case MilitaryUnitType.Mangonel: return 2.5;
-                case MilitaryUnitType.Trebuchet: return 4.0;
-                default: return 1.0;
-            }
-        }
+            { MilitaryUnitType.Pikeman, new MilitaryUnitTypeData(
+                "Pikeman", "pikeman", 1.60, 1.2, 35, 14,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 45 }, { ResourceType.Wood, 20 }, { ResourceType.Ore, 15 } },
+                BuildingType.Barracks, UnitCategory.Infantry,
+                "Anti-cavalry infantry with bonus damage vs mounted units",
+                new UnitCombatStats(meleeDamage: 1, meleeArmor: 1, pierceArmor: 1, bludgeonArmor: 3, bonusVsCavalry: 8)) },
 
-        public static double HP(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return 50;
-                case MilitaryUnitType.Archer: return 30;
-                case MilitaryUnitType.Crossbow: return 40;
-                case MilitaryUnitType.Pikeman: return 35;
-                case MilitaryUnitType.Scout: return 30;
-                case MilitaryUnitType.Knight: return 60;
-                case MilitaryUnitType.HeavyCavalry: return 80;
-                case MilitaryUnitType.Mangonel: return 70;
-                case MilitaryUnitType.Trebuchet: return 120;
-                default: return 50;
-            }
-        }
+            { MilitaryUnitType.Scout, new MilitaryUnitTypeData(
+                "Scout", "scout", 0.88, 0.7, 30, 18,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 60 }, { ResourceType.Ore, 20 } },
+                BuildingType.Stable, UnitCategory.Cavalry,
+                "Fast light cavalry for reconnaissance",
+                new UnitCombatStats(meleeDamage: 2, meleeArmor: 1, bonusVsRanged: 1)) },
 
-        public static double TrainingTime(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return 15;
-                case MilitaryUnitType.Archer: return 12;
-                case MilitaryUnitType.Crossbow: return 18;
-                case MilitaryUnitType.Pikeman: return 14;
-                case MilitaryUnitType.Scout: return 18;
-                case MilitaryUnitType.Knight: return 25;
-                case MilitaryUnitType.HeavyCavalry: return 35;
-                case MilitaryUnitType.Mangonel: return 45;
-                case MilitaryUnitType.Trebuchet: return 60;
-                default: return 15;
-            }
-        }
+            { MilitaryUnitType.Knight, new MilitaryUnitTypeData(
+                "Knight", "knight", 1.00, 1.1, 60, 25,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 80 }, { ResourceType.Ore, 60 } },
+                BuildingType.Stable, UnitCategory.Cavalry,
+                "Powerful mounted unit with high melee damage",
+                new UnitCombatStats(meleeDamage: 4, meleeArmor: 2, pierceArmor: 2, bludgeonArmor: 1, bonusVsRanged: 1)) },
 
-        public static Dictionary<ResourceType, int> TrainingCost(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return new Dictionary<ResourceType, int> { { ResourceType.Food, 50 }, { ResourceType.Ore, 25 } };
-                case MilitaryUnitType.Archer: return new Dictionary<ResourceType, int> { { ResourceType.Food, 40 }, { ResourceType.Wood, 30 } };
-                case MilitaryUnitType.Crossbow: return new Dictionary<ResourceType, int> { { ResourceType.Food, 50 }, { ResourceType.Wood, 40 }, { ResourceType.Ore, 20 } };
-                case MilitaryUnitType.Pikeman: return new Dictionary<ResourceType, int> { { ResourceType.Food, 45 }, { ResourceType.Wood, 20 }, { ResourceType.Ore, 15 } };
-                case MilitaryUnitType.Scout: return new Dictionary<ResourceType, int> { { ResourceType.Food, 60 }, { ResourceType.Ore, 20 } };
-                case MilitaryUnitType.Knight: return new Dictionary<ResourceType, int> { { ResourceType.Food, 80 }, { ResourceType.Ore, 60 } };
-                case MilitaryUnitType.HeavyCavalry: return new Dictionary<ResourceType, int> { { ResourceType.Food, 100 }, { ResourceType.Ore, 80 } };
-                case MilitaryUnitType.Mangonel: return new Dictionary<ResourceType, int> { { ResourceType.Food, 60 }, { ResourceType.Wood, 100 }, { ResourceType.Ore, 40 } };
-                case MilitaryUnitType.Trebuchet: return new Dictionary<ResourceType, int> { { ResourceType.Food, 80 }, { ResourceType.Wood, 150 }, { ResourceType.Ore, 60 } };
-                default: return new Dictionary<ResourceType, int>();
-            }
-        }
+            { MilitaryUnitType.HeavyCavalry, new MilitaryUnitTypeData(
+                "Heavy Cavalry", "heavy_cavalry", 1.12, 1.2, 80, 35,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 100 }, { ResourceType.Ore, 80 } },
+                BuildingType.Stable, UnitCategory.Cavalry,
+                "Very heavy mounted unit with devastating charge",
+                new UnitCombatStats(meleeDamage: 5, meleeArmor: 3, pierceArmor: 3, bludgeonArmor: 1, bonusVsRanged: 1)) },
 
-        public static BuildingType TrainingBuilding(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman:
-                case MilitaryUnitType.Pikeman:
-                    return BuildingType.Barracks;
-                case MilitaryUnitType.Archer:
-                case MilitaryUnitType.Crossbow:
-                    return BuildingType.ArcheryRange;
-                case MilitaryUnitType.Scout:
-                case MilitaryUnitType.Knight:
-                case MilitaryUnitType.HeavyCavalry:
-                    return BuildingType.Stable;
-                case MilitaryUnitType.Mangonel:
-                case MilitaryUnitType.Trebuchet:
-                    return BuildingType.SiegeWorkshop;
-                default:
-                    return BuildingType.Barracks;
-            }
-        }
+            { MilitaryUnitType.Mangonel, new MilitaryUnitTypeData(
+                "Mangonel", "mangonel", 2.00, 2.5, 70, 45,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 60 }, { ResourceType.Wood, 100 }, { ResourceType.Ore, 40 } },
+                BuildingType.SiegeWorkshop, UnitCategory.Siege,
+                "Siege weapon with bludgeon damage, effective vs buildings",
+                new UnitCombatStats(bludgeonDamage: 8, meleeArmor: 2, pierceArmor: 10, bludgeonArmor: 3, bonusVsBuildings: 20),
+                popSpace: 3) },
 
-        public static UnitCategory Category(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman:
-                case MilitaryUnitType.Pikeman:
-                    return UnitCategory.Infantry;
-                case MilitaryUnitType.Archer:
-                case MilitaryUnitType.Crossbow:
-                    return UnitCategory.Ranged;
-                case MilitaryUnitType.Scout:
-                case MilitaryUnitType.Knight:
-                case MilitaryUnitType.HeavyCavalry:
-                    return UnitCategory.Cavalry;
-                case MilitaryUnitType.Mangonel:
-                case MilitaryUnitType.Trebuchet:
-                    return UnitCategory.Siege;
-                default:
-                    return UnitCategory.Infantry;
-            }
-        }
+            { MilitaryUnitType.Trebuchet, new MilitaryUnitTypeData(
+                "Trebuchet", "trebuchet", 2.40, 4.0, 120, 60,
+                new Dictionary<ResourceType, int> { { ResourceType.Food, 80 }, { ResourceType.Wood, 150 }, { ResourceType.Ore, 60 } },
+                BuildingType.SiegeWorkshop, UnitCategory.Siege,
+                "Long-range siege weapon, devastating vs buildings",
+                new UnitCombatStats(bludgeonDamage: 12, meleeArmor: 2, pierceArmor: 15, bludgeonArmor: 4, bonusVsBuildings: 30),
+                popSpace: 5) },
+        };
 
-        public static int PopSpace(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Mangonel: return 3;
-                case MilitaryUnitType.Trebuchet: return 5;
-                default: return 1;
-            }
-        }
+        // ================================================================
+        // One-liner data lookups
+        // ================================================================
 
-        public static string Description(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman: return "Balanced melee infantry unit with good armor";
-                case MilitaryUnitType.Pikeman: return "Anti-cavalry infantry with bonus damage vs mounted units";
-                case MilitaryUnitType.Archer: return "Ranged unit with pierce damage";
-                case MilitaryUnitType.Crossbow: return "Heavy ranged unit with high pierce damage and armor";
-                case MilitaryUnitType.Scout: return "Fast light cavalry for reconnaissance";
-                case MilitaryUnitType.Knight: return "Powerful mounted unit with high melee damage";
-                case MilitaryUnitType.HeavyCavalry: return "Very heavy mounted unit with devastating charge";
-                case MilitaryUnitType.Mangonel: return "Siege weapon with bludgeon damage, effective vs buildings";
-                case MilitaryUnitType.Trebuchet: return "Long-range siege weapon, devastating vs buildings";
-                default: return "";
-            }
-        }
-
-        public static UnitCombatStats CombatStats(this MilitaryUnitType type)
-        {
-            switch (type)
-            {
-                case MilitaryUnitType.Swordsman:
-                    return new UnitCombatStats(meleeDamage: 2, meleeArmor: 2, pierceArmor: 1);
-                case MilitaryUnitType.Archer:
-                    return new UnitCombatStats(pierceDamage: 2, pierceArmor: 1);
-                case MilitaryUnitType.Crossbow:
-                    return new UnitCombatStats(pierceDamage: 2, meleeArmor: 1, pierceArmor: 2);
-                case MilitaryUnitType.Pikeman:
-                    return new UnitCombatStats(meleeDamage: 1, meleeArmor: 1, pierceArmor: 1, bludgeonArmor: 3, bonusVsCavalry: 8);
-                case MilitaryUnitType.Scout:
-                    return new UnitCombatStats(meleeDamage: 2, meleeArmor: 1, bonusVsRanged: 1);
-                case MilitaryUnitType.Knight:
-                    return new UnitCombatStats(meleeDamage: 4, meleeArmor: 2, pierceArmor: 2, bludgeonArmor: 1, bonusVsRanged: 1);
-                case MilitaryUnitType.HeavyCavalry:
-                    return new UnitCombatStats(meleeDamage: 5, meleeArmor: 3, pierceArmor: 3, bludgeonArmor: 1, bonusVsRanged: 1);
-                case MilitaryUnitType.Mangonel:
-                    return new UnitCombatStats(bludgeonDamage: 8, meleeArmor: 2, pierceArmor: 10, bludgeonArmor: 3, bonusVsBuildings: 20);
-                case MilitaryUnitType.Trebuchet:
-                    return new UnitCombatStats(bludgeonDamage: 12, meleeArmor: 2, pierceArmor: 15, bludgeonArmor: 4, bonusVsBuildings: 30);
-                default:
-                    return new UnitCombatStats();
-            }
-        }
+        public static string DisplayName(this MilitaryUnitType type) => Data[type].DisplayName;
+        public static string Icon(this MilitaryUnitType type) => Data[type].Icon;
+        public static double MoveSpeed(this MilitaryUnitType type) => Data[type].MoveSpeed;
+        public static double AttackSpeed(this MilitaryUnitType type) => Data[type].AttackSpeed;
+        public static double HP(this MilitaryUnitType type) => Data[type].HP;
+        public static double TrainingTime(this MilitaryUnitType type) => Data[type].TrainingTime;
+        public static Dictionary<ResourceType, int> TrainingCost(this MilitaryUnitType type) => Data[type].TrainingCost;
+        public static BuildingType TrainingBuilding(this MilitaryUnitType type) => Data[type].TrainingBuilding;
+        public static UnitCategory Category(this MilitaryUnitType type) => Data[type].Category;
+        public static int PopSpace(this MilitaryUnitType type) => Data[type].PopSpace;
+        public static string Description(this MilitaryUnitType type) => Data[type].Description;
+        public static UnitCombatStats CombatStats(this MilitaryUnitType type) => Data[type].CombatStats;
     }
 }
